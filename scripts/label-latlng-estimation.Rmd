@@ -1,0 +1,432 @@
+---
+title: "Label Lat/Lng Estimation for Project Sidewalk"
+author: "Mikey Saugstad"
+date: "1/1/2021"
+output:
+  html_document: 
+    toc: yes
+    keep_md: yes
+    df_print: kable
+editor_options: 
+  chunk_output_type: console
+---
+
+### Overview
+
+We attempt to estimate the latitude and longitude of labels placed in Project Sidewalk using Google Street View (GSV). We use information like x and y pixels of the point clicked in the GSV image, the lat/lng of the camera, zoom level, etc. For ground truth, we use a large data set of lat/lng estimates using 3D LiDAR depth data that used to be provided by Google. The motivation for this analysis is that the API that used to provide this depth data was taken down by Google, and we need a semi-accurate alternative estimate to be used in Project Sidewalk. See Github issue [#2374](https://github.com/ProjectSidewalk/SidewalkWebpage/issues/2374).
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+
+# devtools::install_github("tidyverse/multidplyr")
+library(tidyverse)
+library(NISTunits)
+library(geosphere)
+library(multidplyr)
+library(car)
+library(modelr)
+library(lme4)
+
+# Helpful functions.
+'%not-in%' <- function(x,y)!('%in%'(x,y))
+format_num <- function(n, unit = '', sep = ' ') {
+  formatted_num <- format(round(n, digits = 2), big.mark = ',')
+  if (unit == '') formatted_num else paste(formatted_num, unit, sep = sep)
+  }
+
+# Constants.
+MAX_LABELS_PER_PANO <- 20
+MAX_DIST_FROM_PANO <- 50
+TRAINING_FRAC <- 0.8
+DEGREE_SYM <- '\u00b0'
+
+set.seed(666)
+```
+
+```{r reading_data, include=FALSE, cache=TRUE}
+col_types <-
+  cols(label_id = col_integer(),
+       label_type = col_factor(),
+       lat = col_double(),
+       lng = col_double(),
+       panorama_lat = col_double(),
+       panorama_lng = col_double(),
+       canvas_x = col_integer(),
+       canvas_y = col_integer(),
+       canvas_width = col_integer(),
+       canvas_height = col_integer(),
+       heading = col_double(),
+       pitch = col_double(),
+       zoom = col_integer(),
+       photographer_heading = col_double(),
+       photographer_pitch = col_double(),
+       sv_image_x = col_integer(),
+       sv_image_y = col_integer(),
+       gsv_panorama_id = col_factor(),
+       street_edge_id = col_integer(),
+       deleted = col_logical(),
+       tutorial = col_logical(),
+       computation_method = col_factor()
+  )
+
+# Here is the SQL query to get that data set in every city (except for DC).
+# SELECT label.label_id, label_type.label_type, lat, lng, panorama_lat, panorama_lng, canvas_x, canvas_y, canvas_width,
+# 	   canvas_height, heading, pitch, zoom, photographer_heading, photographer_pitch, sv_image_x, sv_image_y,
+# 	   gsv_panorama_id, street_edge_id, deleted, tutorial, computation_method
+# FROM label_point
+# INNER JOIN label ON label_point.label_id = label.label_id
+# INNER JOIN label_type ON label.label_type_id = label_type.label_type_id;
+
+# And here is a modified version of that query to work with our old DC database.
+# SELECT label.label_id, label_type.label_type, lat, lng, panorama_lat, panorama_lng, canvas_x, canvas_y, canvas_width,
+# 	   canvas_height, heading, pitch, zoom, photographer_heading, photographer_pitch, sv_image_x, sv_image_y,
+# 	   gsv_panorama_id, street_edge_id, deleted,
+# 	   gsv_panorama_id IN (SELECT gsv_panorama_id FROM sidewalk.gsv_onboarding_pano) AS tutorial,
+# 	   'depth' AS computation_method
+# FROM sidewalk.label_point
+# INNER JOIN sidewalk.label ON label_point.label_id = label.label_id
+# INNER JOIN sidewalk.label_type ON label.label_type_id = label_type.label_type_id
+# INNER JOIN sidewalk.audit_task ON label.audit_task_id = audit_task.audit_task_id
+# WHERE lat IS NOT NULL AND lng IS NOT NULL;
+
+data_dc <- read_csv('../data/labels-dc-latlng.csv', col_types = col_types) %>% mutate(city = 'dc')
+data_seattle <- read_csv('../data/labels-seattle-latlng.csv', col_types = col_types) %>% mutate(city = 'seattle')
+data_newberg <- read_csv('../data/labels-newberg-latlng.csv', col_types = col_types) %>% mutate(city = 'newberg')
+data_columbus <- read_csv('../data/labels-columbus-latlng.csv', col_types = col_types) %>% mutate(city = 'columbus')
+data_spgg <- read_csv('../data/labels-spgg-latlng.csv', col_types = col_types) %>% mutate(city = 'spgg')
+data_cdmx <- read_csv('../data/labels-cdmx-latlng.csv', col_types = col_types) %>% mutate(city = 'cdmx')
+data_pgh <- read_csv('../data/labels-pittsburgh-latlng.csv', col_types = col_types) %>% mutate(city = 'pittsburgh')
+```
+
+```{r filtering_data, include=FALSE, cache=TRUE}
+# Combine the cities. Filter out out of bounds lat/lng, lat/lng that weren't computed using depth data, tutorial labels,
+# and deleted labels. Remove labels from panos that have 20 or more labels on the pano. Finally, remove columns we don't
+# end up needing. We initially tried some regressions with those variables as predictors, but they were not useful.
+data_filtered <-
+  bind_rows(data_dc, data_seattle, data_newberg, data_columbus, data_spgg, data_cdmx, data_pgh) %>%
+  rename(pano_lat = panorama_lat, pano_lng = panorama_lng, pano_id = gsv_panorama_id) %>%
+  filter(lat >= -90, lat <= 90, lng >= -180, lng <= 180, canvas_x > 0, canvas_y > 0,
+         computation_method == 'depth',tutorial == FALSE, deleted == FALSE) %>%
+  group_by(pano_id) %>%
+  mutate(n = n()) %>%
+  ungroup() %>%
+  filter(n < MAX_LABELS_PER_PANO) %>%
+  select(-n) %>%
+  select(-canvas_width, -canvas_height, -photographer_heading, -photographer_pitch, -pitch, -sv_image_x, -pano_id,
+         -deleted, -street_edge_id, -tutorial, -computation_method)
+
+# Add an extra variable or two that we will need later. Remove labels that are very far from the pano (> 50 meters) so
+# that the outliers don't mess with the linear regression.
+data_filtered_with_dist <-
+  data_filtered %>%
+  mutate(pano_dist = distHaversine(cbind(lng, lat), cbind(pano_lng, pano_lat))) %>%
+  filter(pano_dist < MAX_DIST_FROM_PANO)
+# max_dist_from_pano <- max(data_filtered_with_dist$pano_dist)
+
+data_train <- data_filtered_with_dist %>% sample_frac(TRAINING_FRAC)
+data_test <- anti_join(data_filtered_with_dist, data_train, by = c('label_id', 'city'))
+
+rm(data_filtered)
+```
+
+```{r estimate1, include=FALSE, cache=TRUE}
+# Estimate 1: 10 meters in front of you.
+data_test_est1 <-
+  data_test %>%
+  mutate(pano_dist_est1 = 10,
+         heading_diff_est1 = 0,
+         lat_est1 = pano_lat + (pano_dist_est1 * cos(NISTdegTOradian(heading)) / 111111),
+         lng_est1 = pano_lng + (pano_dist_est1 * sin(NISTdegTOradian(heading)) / (111111 * cos(NISTdegTOradian(pano_lat)))),
+         error_est1 = distHaversine(cbind(lng, lat), cbind(lng_est1, lat_est1)))
+
+rm(data_test)
+```
+
+```{r estimate2, include=FALSE, cache=TRUE}
+# Estimate 2: Distance in front of you determined from median distance in training set.
+median_dist <- data_train %>% summarise(med_pano_dist = median(pano_dist)) %>% deframe()
+
+data_test_est2 <-
+  data_test_est1 %>%
+  mutate(pano_dist_est2 = median_dist,
+         heading_diff_est2 = 0,
+         lat_est2 = pano_lat + (pano_dist_est2 * cos(NISTdegTOradian(heading)) / 111111),
+         lng_est2 = pano_lng + (pano_dist_est2 * sin(NISTdegTOradian(heading)) / (111111 * cos(NISTdegTOradian(pano_lat)))),
+         error_est2 = distHaversine(cbind(lng, lat), cbind(lng_est2, lat_est2)))
+
+rm(data_test_est1)
+```
+
+```{r estimate3, include=FALSE, cache=TRUE}
+# Estimate 3: Distance in front of you by label type. Get distance from training set.
+dist_by_lab_type <-
+  data_train %>%
+  group_by(label_type) %>%
+  summarise(med_pano_dist = median(pano_dist), .groups = 'drop') %>%
+  deframe()
+
+data_test_est3 <-
+  data_test_est2 %>%
+  mutate(pano_dist_est3 = dist_by_lab_type[label_type],
+         heading_diff_est3 = 0,
+         lat_est3 = pano_lat + (pano_dist_est3 * cos(NISTdegTOradian(heading)) / 111111),
+         lng_est3 = pano_lng + (pano_dist_est3 * sin(NISTdegTOradian(heading)) / (111111 * cos(NISTdegTOradian(pano_lat)))),
+         error_est3 = distHaversine(cbind(lng, lat), cbind(lng_est3, lat_est3)))
+
+rm(data_test_est2)
+```
+
+```{r estimate4, include=FALSE, cache=TRUE}
+# Estimate 4: Use a multivariate linear regression to predict heading angle and distance from the pano.
+cluster <- new_cluster(3)
+cluster_library(cluster, 'geosphere')
+data_train_heading_diff <-
+  data_train %>%
+  rowwise() %>%
+  partition(cluster) %>%
+  mutate(label_heading = bearing(c(pano_lng, pano_lat), c(lng, lat)) %% 360) %>%
+  collect() %>%
+  mutate(heading_diff = case_when(
+    label_heading - heading > 180  ~ label_heading - heading - 360,
+    label_heading - heading < -180 ~ label_heading - heading + 360,
+    TRUE                           ~ label_heading - heading
+    ))
+
+mlm <- lm(cbind(heading_diff, pano_dist) ~ canvas_y + sv_image_y, data = data_train_heading_diff)
+# Anova(mlm)
+
+pred_mlm <- predict(mlm, data_test_est3)
+
+data_test_est4 <-
+  data_test_est3 %>%
+  add_column(pred_mlm_heading_diff = pred_mlm[,'heading_diff'],
+             pred_mlm_pano_dist = pmax(0, pred_mlm[,'pano_dist'])) %>%
+  rowwise() %>%
+  partition(cluster) %>%
+  mutate(lng_est4 = destPoint(c(pano_lng, pano_lat), heading + pred_mlm_heading_diff, pred_mlm_pano_dist)[1],
+         lat_est4 = destPoint(c(pano_lng, pano_lat), heading + pred_mlm_heading_diff, pred_mlm_pano_dist)[2]) %>%
+  collect() %>%
+  mutate(error_est4 = distHaversine(cbind(lng, lat), cbind(lng_est4, lat_est4)))
+
+rm(data_test_est3, mlm, pred_mlm)
+```
+
+```{r estimate5, include=FALSE, cache=TRUE}
+# Estimate 5: Separate linear models for heading and distance.
+lm_dist <- lm(pano_dist ~ sv_image_y + canvas_y + zoom, data = data_train_heading_diff)
+pred_dist <- predict(lm_dist, data_test_est4)
+
+lm_heading <- lm(heading_diff ~ canvas_x + zoom, data = data_train_heading_diff)
+pred_heading <- predict(lm_heading, data_test_est4)
+
+data_test_est5 <-
+  data_test_est4 %>%
+  add_column(pred_heading_est5 = pred_heading,
+             pred_pano_dist_est5 = pmax(0, pred_dist)) %>%
+  mutate(dist_error_est1 = abs(pano_dist - pano_dist_est1),
+         dist_error_est2 = abs(pano_dist - pano_dist_est2),
+         dist_error_est3 = abs(pano_dist - pano_dist_est3),
+         dist_error_est4 = abs(pano_dist - pred_mlm_pano_dist),
+         dist_error_est5 = abs(pano_dist - pred_pano_dist_est5)) %>%
+  rowwise() %>%
+  partition(cluster) %>%
+  mutate(lng_est5 = destPoint(c(pano_lng, pano_lat), heading + pred_heading_est5, pred_pano_dist_est5)[1],
+         lat_est5 = destPoint(c(pano_lng, pano_lat), heading + pred_heading_est5, pred_pano_dist_est5)[2],
+         label_heading = bearing(c(pano_lng, pano_lat), c(lng, lat)) %% 360) %>%
+  collect() %>%
+  mutate(error_est5 = distHaversine(cbind(lng, lat), cbind(lng_est5, lat_est5)),
+         heading_diff = case_when(
+           label_heading - heading > 180  ~ label_heading - heading - 360,
+           label_heading - heading < -180 ~ label_heading - heading + 360,
+           TRUE                           ~ label_heading - heading
+         ),
+         heading_error_est1 = abs(heading_diff - heading_diff_est1),
+         heading_error_est2 = abs(heading_diff - heading_diff_est2),
+         heading_error_est3 = abs(heading_diff - heading_diff_est3),
+         heading_error_est4 = abs(heading_diff - pred_mlm_heading_diff),
+         heading_error_est5 = abs(heading_diff - pred_heading_est5))
+
+rm(data_test_est4, lm_dist, pred_dist, lm_heading, pred_heading)
+```
+
+```{r estimate6, include=FALSE, cache=TRUE}
+# Estimate 6: Linear mixed effects model
+# fixed effects: canvas_x for heading; canvas_y and sv_image_y for distance.
+# random effects: label type, zoom (but they say that you should probably have >=5 levels, so we should make it fixed).
+lme_heading <- lmer(heading_diff ~ canvas_x + (1 | zoom), data = data_train_heading_diff)
+# lme_heading1_results <- drop1(lme_heading1, test = 'Chisq')
+pred_lme_heading <- predict(lme_heading, data_test_est5)
+
+lme_dist <- lmer(pano_dist ~ canvas_y + sv_image_y + (1 | zoom), data = data_train_heading_diff)
+# lme_dist1_results <- drop1(lme_dist1, test = 'Chisq')
+pred_lme_dist <- predict(lme_dist, data_test_est5)
+
+data_test_est6 <-
+  data_test_est5 %>%
+  add_column(pred_heading_est6 = pred_lme_heading,
+             pred_pano_dist_est6 = pmax(0, pred_lme_dist)) %>%
+  mutate(heading_error_est6 = abs(heading_diff - pred_heading_est6),
+         dist_error_est6 = abs(pano_dist - pred_pano_dist_est6)) %>%
+  rowwise() %>%
+  partition(cluster) %>%
+  mutate(lng_est6 = destPoint(c(pano_lng, pano_lat), heading + pred_heading_est6, pred_pano_dist_est6)[1],
+         lat_est6 = destPoint(c(pano_lng, pano_lat), heading + pred_heading_est6, pred_pano_dist_est6)[2]) %>%
+  collect() %>%
+  mutate(error_est6 = distHaversine(cbind(lng, lat), cbind(lng_est6, lat_est6)))
+
+rm(data_test_est5, lme_heading, pred_lme_heading, lme_dist, pred_lme_dist)
+```
+
+```{r estimate7, include=FALSE, cache=TRUE}
+# Estimate 7: A different linear model for each zoom level (just for heading?).
+data_test_est6_zoom1 <- data_test_est6 %>% filter(zoom == 1)
+data_test_est6_zoom2 <- data_test_est6 %>% filter(zoom == 2)
+data_test_est6_zoom3 <- data_test_est6 %>% filter(zoom == 3)
+
+lm_est7_dist1 <- lm(pano_dist ~ sv_image_y + canvas_y, data = filter(data_train_heading_diff, zoom == 1))
+lm_est7_dist2 <- lm(pano_dist ~ sv_image_y + canvas_y, data = filter(data_train_heading_diff, zoom == 2))
+lm_est7_dist3 <- lm(pano_dist ~ sv_image_y + canvas_y, data = filter(data_train_heading_diff, zoom == 3))
+pred_est7_dist1 <- predict(lm_est7_dist1, data_test_est6_zoom1)
+pred_est7_dist2 <- predict(lm_est7_dist2, data_test_est6_zoom2)
+pred_est7_dist3 <- predict(lm_est7_dist3, data_test_est6_zoom3)
+
+lm_est7_heading1 <- lm(heading_diff ~ canvas_x, data = filter(data_train_heading_diff, zoom == 1))
+lm_est7_heading2 <- lm(heading_diff ~ canvas_x, data = filter(data_train_heading_diff, zoom == 2))
+lm_est7_heading3 <- lm(heading_diff ~ canvas_x, data = filter(data_train_heading_diff, zoom == 3))
+pred_est7_heading1 <- predict(lm_est7_heading1, data_test_est6_zoom1)
+pred_est7_heading2 <- predict(lm_est7_heading2, data_test_est6_zoom2)
+pred_est7_heading3 <- predict(lm_est7_heading3, data_test_est6_zoom3)
+
+# Add the predictions for each zoom level.
+data_test_est6_zoom1_pred <-
+  data_test_est6_zoom1 %>%
+  add_column(pred_est7_dist = pmax(0, pred_est7_dist1), pred_est7_heading = pred_est7_heading1)
+data_test_est6_zoom2_pred <-
+  data_test_est6_zoom2 %>%
+  add_column(pred_est7_dist = pmax(0, pred_est7_dist2), pred_est7_heading = pred_est7_heading2)
+data_test_est6_zoom3_pred <-
+  data_test_est6_zoom3 %>%
+  add_column(pred_est7_dist = pmax(0, pred_est7_dist3), pred_est7_heading = pred_est7_heading3)
+
+data_test_est7 <-
+  bind_rows(data_test_est6_zoom1_pred, data_test_est6_zoom2_pred, data_test_est6_zoom3_pred) %>%
+  mutate(heading_error_est7 = abs(heading_diff - pred_est7_heading),
+         dist_error_est7 = abs(pano_dist - pred_est7_dist)) %>%
+  rowwise() %>%
+  partition(cluster) %>%
+  mutate(lng_est7 = destPoint(c(pano_lng, pano_lat), heading + pred_est7_heading, pred_est7_dist)[1],
+         lat_est7 = destPoint(c(pano_lng, pano_lat), heading + pred_est7_heading, pred_est7_dist)[2]) %>%
+  collect() %>%
+  mutate(error_est7 = distHaversine(cbind(lng, lat), cbind(lng_est7, lat_est7)))
+
+rm(cluster, data_train_heading_diff, data_test_est6, data_test_est6_zoom1, data_test_est6_zoom2, data_test_est6_zoom3,
+   data_test_est6_zoom1_pred, data_test_est6_zoom2_pred, data_test_est6_zoom3_pred)
+```
+
+```{r summary_stats, include=FALSE, cache=TRUE}
+# Get some summary stats.
+summary_stats <-
+  data_test_est7 %>%
+  summarise(across(starts_with('error'),
+                   list(mean_error = mean, median_error = median, min_error = min, max_error = max, sd_error = sd),
+                   .names = '{.col}_stat_{.fn}')) %>%
+  pivot_longer(cols = everything(),
+               names_to = c('estimate', 'stat'),
+               names_sep = '_stat_') %>%
+  pivot_wider(names_from = stat) %>%
+  arrange(median_error) %>%
+  mutate(across(.cols = !estimate, .fns = function(n) { format_num(n, unit = 'm') }))
+
+# compare heading errors
+heading_error_stats <- data_test_est7 %>%
+  select(starts_with('heading_error')) %>%
+  summarise_all(median) %>%
+  pivot_longer(cols = everything(), names_to = 'estimate', values_to = 'heading_error') %>%
+  arrange(heading_error) %>%
+  mutate(across(.cols = heading_error, .fns = function(n) { format_num(n, unit = DEGREE_SYM, sep = '') }))
+
+# compare distance errors
+dist_error_stats <- data_test_est7 %>%
+  select(starts_with('dist_error')) %>%
+  summarise_all(median) %>%
+  pivot_longer(cols = everything(), names_to = 'estimate', values_to = 'distance_error') %>%
+  arrange(distance_error) %>%
+  mutate(across(.cols = distance_error, .fns = function(n) { format_num(n, unit = 'm') }))
+```
+
+```{r stats_for_text, include=FALSE}
+zoom1_dist_intercept <- coef(lm_est7_dist1)[1]
+zoom1_dist_sv_image_y_coef <- coef(lm_est7_dist1)[2]
+zoom1_dist_canvas_y_coef <- coef(lm_est7_dist1)[3]
+zoom2_dist_intercept <- coef(lm_est7_dist2)[1]
+zoom2_dist_sv_image_y_coef <- coef(lm_est7_dist2)[2]
+zoom2_dist_canvas_y_coef <- coef(lm_est7_dist2)[3]
+zoom3_dist_intercept <- coef(lm_est7_dist3)[1]
+zoom3_dist_sv_image_y_coef <- coef(lm_est7_dist3)[2]
+zoom3_dist_canvas_y_coef <- coef(lm_est7_dist3)[3]
+
+zoom1_heading_intercept <- coef(lm_est7_heading1)[1]
+zoom1_heading_canvas_x_coef <- coef(lm_est7_heading1)[2]
+zoom2_heading_intercept <- coef(lm_est7_heading2)[1]
+zoom2_heading_canvas_x_coef <- coef(lm_est7_heading2)[2]
+zoom3_heading_intercept <- coef(lm_est7_heading3)[1]
+zoom3_heading_canvas_x_coef <- coef(lm_est7_heading3)[2]
+
+total_rows <- nrow(bind_rows(data_dc, data_seattle, data_newberg, data_columbus, data_spgg, data_cdmx, data_pgh))
+filtered_rows <- nrow(data_filtered_with_dist)
+training_rows <- nrow(data_train)
+test_rows <- nrow(data_test_est7)
+
+rm(data_filtered_with_dist, data_train, data_dc, data_seattle, data_newberg, data_columbus, data_spgg, data_cdmx, data_pgh)
+```
+
+### Methods
+
+Determining latitude and longitude requires estimating the distance from the panorama and the heading angle (the regressions are predicting offset from the heading of the current view in GSV). Using those and the lat/lng of the camera that took the picture, we can estimate the lat/lng of the point that was clicked. We do this by finding traveling along the shortest path on an ellipsoid (using the `destPoint` function in the `geosphere` library). This will give very close results to the `destination` function in the `turf` library in JavaScript that we use in Project Sidewalk.
+
+We used various estimation methods and compared the performance. We split the data into a training set with `r 100 * TRAINING_FRAC`% of the labels (`r format_num(training_rows)` labels) and test set with `r 100 * (1 - TRAINING_FRAC)`% of the labels (`r format_num(test_rows)` labels). Here is a quick summary of each method of estimation:
+
+1. Distance is 10 meters, heading difference is 0 (just use the camera's heading). Median error of `r summary_stats %>% filter(estimate == 'error_est1') %>% select(median_error) %>% deframe()`.
+1. Distance is determined by median distance in training set, heading difference is 0.  Median error of `r summary_stats %>% filter(estimate == 'error_est2') %>% select(median_error) %>% deframe()`.
+1. Distance is determined by median distance in training set _by label type_. Median error of `r summary_stats %>% filter(estimate == 'error_est3') %>% select(median_error) %>% deframe()`.
+1. Use a multivariate linear regression to predict heading angle and distance from the pano. We found the best performance using only `canvas_y` and `sv_image_y` as predictors. Median error of `r summary_stats %>% filter(estimate == 'error_est4') %>% select(median_error) %>% deframe()`.
+1. Use separate linear regressions for heading and distance instead of a multivariate. We found the best performance using `sv_image_y`, `canvas_y`, and `zoom` as predictors for distance, with `canvas_x` and `zoom` as predictors for heading. Median error of `r summary_stats %>% filter(estimate == 'error_est5') %>% select(median_error) %>% deframe()`.
+1. Use linear mixed effects models for both heading and distance. Similar to the linear regressions used in the previous estimate, but with `zoom` as a _random effect_ for both models, with the remaining variables as _fixed effects_. Median error of `r summary_stats %>% filter(estimate == 'error_est6') %>% select(median_error) %>% deframe()`.
+1. Use separate linear regressions for each zoom level. We found the best performance using `sv_image_y` and `canvas_y` as predictors for distance, and `canvas_x` as a predictor for heading. Median error of `r summary_stats %>% filter(estimate == 'error_est7') %>% select(median_error) %>% deframe()`.
+
+Here is a brief summary of the data cleaning. In total, we removed `r format_num(total_rows - filtered_rows)` labels (`r format_num(round(100*(total_rows-filtered_rows)/total_rows))`%), ending up with `r format_num(filtered_rows)` labels:
+
+1. When creating linear regressions, we removed cases where the distance from the pano was greater than 50 meters so that the outliers didn't throw off results.
+1. Removed labels from panos with 20 or more labels so that a few panos didn't have an outsized impact on the results.
+1. Removed any labels with invalid lat/lng or canvas values.
+1. Removed any labels that users marked as "deleted", since I sort of expect those to be less representative of a typical label. It shouldn't make a difference for the regressions, but for the estimates that use average distance, deleted labels could throw something off.
+1. Removed any labels that did not have an estimate that used depth data, which happened if they were added after the removal of the depth data API endpoint.
+
+### Results
+
+The final verdict is that our final estimate (#7) was most accurate. This method involved making 6 linear regressions, 3 for heading and 3 for distance from the panorama. There are 3 linear regressions for each because we have a separate regression made for each of the 3 zoom levels. Using the coefficients from the regressions, distance and heading angle can be computed according to the formulas below.
+
+The formula when zoom is 1:
+
+* <code>distance from pano = `r zoom1_dist_intercept` + `r zoom1_dist_sv_image_y_coef` * sv_image_y + `r zoom1_dist_canvas_y_coef` * canvas_y</code>
+* <code>difference in heading = `r zoom1_heading_intercept` + `r zoom1_heading_canvas_x_coef` * canvas_x</code>
+
+The formula when zoom is 2:
+
+* <code>distance from pano = `r zoom2_dist_intercept` + `r zoom2_dist_sv_image_y_coef` * sv_image_y + `r zoom2_dist_canvas_y_coef` * canvas_y</code>
+* <code>difference in heading = `r zoom2_heading_intercept` + `r zoom2_heading_canvas_x_coef` * canvas_x</code>
+
+The formula when zoom is 3:
+
+* <code>distance from pano = `r zoom3_dist_intercept` + `r zoom3_dist_sv_image_y_coef` * sv_image_y + `r zoom3_dist_canvas_y_coef` * canvas_y</code>
+* <code>difference in heading = `r zoom3_heading_intercept` + `r zoom3_heading_canvas_x_coef` * canvas_x</code>
+
+
+You can see that the biggest improvements came from moving from no regression to using some sort of regression (`r summary_stats %>% filter(estimate == 'error_est3') %>% select(median_error) %>% deframe()` to `r summary_stats %>% filter(estimate == 'error_est4') %>% select(median_error) %>% deframe()`) and creating separate regressions for heading and distance from the pano (`r summary_stats %>% filter(estimate == 'error_est4') %>% select(median_error) %>% deframe()` to `r summary_stats %>% filter(estimate == 'error_est5') %>% select(median_error) %>% deframe()`). And the final improvement of separating out regressions for each zoom level is sizable as well (`r summary_stats %>% filter(estimate == 'error_est6') %>% select(median_error) %>% deframe()` to `r summary_stats %>% filter(estimate == 'error_est7') %>% select(median_error) %>% deframe()`)
+
+Here are the results of each, all tables sorted by median error:
+```{r display_results}
+summary_stats %>% relocate(estimate, median_error, sd_error)
+heading_error_stats
+dist_error_stats
+```
