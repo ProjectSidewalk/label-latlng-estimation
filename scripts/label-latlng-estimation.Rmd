@@ -57,7 +57,7 @@ col_types <-
        canvas_height = col_integer(),
        heading = col_double(),
        pitch = col_double(),
-       zoom = col_integer(),
+       zoom = col_factor(),
        photographer_heading = col_double(),
        photographer_pitch = col_double(),
        sv_image_x = col_integer(),
@@ -254,11 +254,11 @@ rm(data_test_est4, lm_dist, pred_dist, lm_heading, pred_heading)
 # fixed effects: canvas_x for heading; canvas_y and sv_image_y for distance.
 # random effects: label type, zoom (but they say that you should probably have >=5 levels, so we should make it fixed).
 lme_heading <- lmer(heading_diff ~ canvas_x + (1 | zoom), data = data_train_heading_diff)
-# lme_heading1_results <- drop1(lme_heading1, test = 'Chisq')
+# lme_heading1_results <- drop1(lme_heading, test = 'Chisq')
 pred_lme_heading <- predict(lme_heading, data_test_est5)
 
 lme_dist <- lmer(pano_dist ~ canvas_y + sv_image_y + (1 | zoom), data = data_train_heading_diff)
-# lme_dist1_results <- drop1(lme_dist1, test = 'Chisq')
+# lme_dist1_results <- drop1(lme_dist, test = 'Chisq')
 pred_lme_dist <- predict(lme_dist, data_test_est5)
 
 data_test_est6 <-

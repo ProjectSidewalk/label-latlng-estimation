@@ -49,7 +49,7 @@ We used various estimation methods and compared the performance. We split the da
 1. Distance is determined by median distance in training set, heading difference is 0.  Median error of 4.64 m.
 1. Distance is determined by median distance in training set _by label type_. Median error of 4.63 m.
 1. Use a multivariate linear regression to predict heading angle and distance from the pano. We found the best performance using only `canvas_y` and `sv_image_y` as predictors. Median error of 3.42 m.
-1. Use separate linear regressions for heading and distance instead of a multivariate. We found the best performance using `sv_image_y`, `canvas_y`, and `zoom` as predictors for distance, with `canvas_x` and `zoom` as predictors for heading. Median error of 1.80 m.
+1. Use separate linear regressions for heading and distance instead of a multivariate. We found the best performance using `sv_image_y`, `canvas_y`, and `zoom` as predictors for distance, with `canvas_x` and `zoom` as predictors for heading. Median error of 1.79 m.
 1. Use linear mixed effects models for both heading and distance. Similar to the linear regressions used in the previous estimate, but with `zoom` as a _random effect_ for both models, with the remaining variables as _fixed effects_. Median error of 1.79 m.
 1. Use separate linear regressions for each zoom level. We found the best performance using `sv_image_y` and `canvas_y` as predictors for distance, and `canvas_x` as a predictor for heading. Median error of 1.47 m.
 
@@ -81,7 +81,7 @@ The formula when zoom is 3:
 * <code>difference in heading = -13.5675945 + 0.0396061 * canvas_x</code>
 
 
-You can see that the biggest improvements came from moving from no regression to using some sort of regression (4.63 m to 3.42 m) and creating separate regressions for heading and distance from the pano (3.42 m to 1.80 m). And the final improvement of separating out regressions for each zoom level is sizable as well (1.79 m to 1.47 m)
+You can see that the biggest improvements came from moving from no regression to using some sort of regression (4.63 m to 3.42 m) and creating separate regressions for heading and distance from the pano (3.42 m to 1.79 m). And the final improvement of separating out regressions for each zoom level is sizable as well (1.79 m to 1.47 m)
 
 Here are the results of each, all tables sorted by median error:
 
@@ -94,8 +94,8 @@ summary_stats %>% relocate(estimate, median_error, sd_error)
 |estimate   |median_error |sd_error |mean_error |min_error |max_error |
 |:----------|:------------|:--------|:----------|:---------|:---------|
 |error_est7 |1.47 m       |3.07 m   |2.39 m     |0.00 m    |34.76 m   |
+|error_est5 |1.79 m       |3.15 m   |2.69 m     |0.01 m    |34.85 m   |
 |error_est6 |1.79 m       |3.15 m   |2.69 m     |0.01 m    |34.85 m   |
-|error_est5 |1.80 m       |3.15 m   |2.70 m     |0.01 m    |34.89 m   |
 |error_est4 |3.42 m       |3.44 m   |4.31 m     |0.01 m    |37.25 m   |
 |error_est3 |4.63 m       |4.33 m   |5.47 m     |0.04 m    |42.32 m   |
 |error_est2 |4.64 m       |4.37 m   |5.49 m     |0.01 m    |42.58 m   |
@@ -112,8 +112,8 @@ heading_error_stats
 |estimate           |heading_error |
 |:------------------|:-------------|
 |heading_error_est7 |1.32°         |
-|heading_error_est5 |3.19°         |
 |heading_error_est6 |3.19°         |
+|heading_error_est5 |3.19°         |
 |heading_error_est4 |14.29°        |
 |heading_error_est1 |14.29°        |
 |heading_error_est2 |14.29°        |
@@ -131,8 +131,8 @@ dist_error_stats
 |:---------------|:--------------|
 |dist_error_est7 |1.40 m         |
 |dist_error_est4 |1.49 m         |
+|dist_error_est5 |1.49 m         |
 |dist_error_est6 |1.49 m         |
-|dist_error_est5 |1.50 m         |
 |dist_error_est3 |2.92 m         |
 |dist_error_est2 |2.94 m         |
 |dist_error_est1 |3.12 m         |
