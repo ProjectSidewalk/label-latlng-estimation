@@ -430,3 +430,13 @@ summary_stats %>% relocate(estimate, median_error, sd_error)
 heading_error_stats
 dist_error_stats
 ```
+
+It may be important to note that the range of estimated values is relatively narrow. Therefore, one should expect a much larger error for objects that are far from the camera. This can be seen in the plot below (only plotting 10% of the data for the sake of performance).
+```{r distance_plot, echo=FALSE}
+ggplot(mapping = aes(x = pano_dist, y = error_est7), data = sample_frac(data_test_est7, 0.1)) +
+  geom_point() +
+  geom_smooth(formula = y ~ x, method = 'loess', se=FALSE) +
+  xlab('Actual Distance from Pano (m)') +
+  ylab('Error in Estimate (m)') +
+  theme_bw()
+```

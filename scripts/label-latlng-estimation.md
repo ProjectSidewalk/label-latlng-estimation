@@ -138,3 +138,6 @@ dist_error_stats
 |dist_error_est1 |3.12 m         |
 
 </div>
+
+It may be important to note that the range of estimated values is relatively narrow. Therefore, one should expect a much larger error for objects that are far from the camera. This can be seen in the plot below (only plotting 10% of the data for the sake of performance).
+![](label-latlng-estimation_files/figure-html/distance_plot-1.png)<!-- -->
