@@ -3,3 +3,4 @@ pandas>=2.1
 pyproj>=3.6
 statsmodels>=0.14
 pytest>=8
+matplotlib>=3.8   # python/make_figures.py only
