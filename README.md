@@ -1,0 +1,47 @@
+# label-latlng-estimation
+
+How Project Sidewalk estimates the latitude/longitude of a label from where it was placed in the
+GSV viewport. The six per-zoom OLS fits published here (January 2021, Mikey Saugstad) run on
+every label placement in every Project Sidewalk city; they replaced Google's depth-data API
+after it was withdrawn ([SidewalkWebpage#2374](https://github.com/ProjectSidewalk/SidewalkWebpage/issues/2374)).
+
+## What's here
+
+| path | what it is |
+|---|---|
+| `scripts/label-latlng-estimation.Rmd` (+ `.md`/`.html`) | **The frozen 2021 analysis** — methods record and published coefficients. Kept unmodified. |
+| `data/labels-*-latlng.csv.gz` | The dataset: depth-derived ground-truth label positions for 7 cities, **reconstructed from production 2026-08-05** ([#1](https://github.com/ProjectSidewalk/label-latlng-estimation/issues/1)). See `data/MANIFEST.md` — the reconstruction reproduces the published row counts and findings exactly. |
+| `scripts/extraction/` | The SQL + runner that regenerate the dataset from the production databases. |
+| `python/` | **The authoritative implementation going forward** ([#2](https://github.com/ProjectSidewalk/label-latlng-estimation/issues/2)): full port of the analysis (all seven candidate estimators). |
+| `scripts/rerun-analysis.R` | The Rmd's pipeline as a plain R script; regenerates the R baseline fixtures the tests compare the port against. |
+| `tests/` | Data contract, R↔Python equivalence (~1e-8), and findings-vs-published reproduction tests. |
+
+## Running it
+
+```bash
+pip install -r python/requirements.txt
+python python/run_analysis.py   # seven-estimator comparison + coefficients vs published 2021
+pytest                          # 102 tests: data contract, R↔Python equivalence, findings
+```
+
+The R side needs R ≥ 4.x with readr/dplyr/tidyr/tibble/purrr/geosphere/lme4/jsonlite:
+`Rscript scripts/rerun-analysis.R` (regenerates `tests/fixtures/r-baseline/`).
+
+## The published estimator (unchanged since 2021)
+
+For zoom z ∈ {1,2,3}: `distance = a_z + b_z·sv_image_y + c_z·canvas_y`,
+`heading offset = d_z + e_z·canvas_x`; median test error 1.47 m. Coefficients: see the
+Results section of `scripts/label-latlng-estimation.md`.
+
+A geodesy footnote uncovered during the port: the R analysis measured distances on a sphere
+(`distHaversine`) but computed bearings and destination points on the WGS84 ellipsoid
+(`geosphere::bearing`/`destPoint`), while production applies the coefficients with turf's
+spherical `destination`. Centimeter-scale, but a refit should pick one model deliberately —
+see the notes in `python/label_latlng_estimation.py`.
+
+## Provenance & reproducibility
+
+The 2021 input CSVs were gitignored and lost; the committed data is a **reconstruction** from
+the production databases (the depth-label population turned out to be frozen since 2021, so it
+is effectively a reproduction: identical cleaned counts 395,147 / 316,118 / 79,029 and matching
+findings). Full provenance, caveats, and regeneration instructions: `data/MANIFEST.md`.

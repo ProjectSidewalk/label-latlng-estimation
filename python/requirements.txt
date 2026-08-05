@@ -1,0 +1,5 @@
+numpy>=1.26
+pandas>=2.1
+pyproj>=3.6
+statsmodels>=0.14
+pytest>=8
