@@ -118,6 +118,11 @@ Mapillary falsification). Alongside it:
   regression with exact POV inversion (zero fitted parameters)
 - [#6](https://github.com/ProjectSidewalk/label-latlng-estimation/issues/6) — gradient-boosted
   benchmark as the accuracy ceiling for #3's closed forms
+- [#7](https://github.com/ProjectSidewalk/label-latlng-estimation/issues/7) — bearing-only
+  triangulation (estimator for multiply-observed labels; resolution-independent ground truth
+  with no unofficial-API dependency)
+- [#8](https://github.com/ProjectSidewalk/label-latlng-estimation/issues/8) — ray ∩ street-edge
+  map prior for curb-adjacent label types (server-side, conditional on label type)
 
 ## Reproducing this report
 
