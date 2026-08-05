@@ -9,6 +9,7 @@ after it was withdrawn ([SidewalkWebpage#2374](https://github.com/ProjectSidewal
 
 | path | what it is |
 |---|---|
+| `reports/` | **Dated analysis reports.** Start with [2026-08-05 — recovery & verification](reports/2026-08-05-recovery-and-verification.md): what was recovered, the proof it's right, and the figure evidence behind the refit issues. |
 | `scripts/label-latlng-estimation.Rmd` (+ `.md`/`.html`) | **The frozen 2021 analysis** — methods record and published coefficients. Kept unmodified. |
 | `data/labels-*-latlng.csv.gz` | The dataset: depth-derived ground-truth label positions for 7 cities, **reconstructed from production 2026-08-05** ([#1](https://github.com/ProjectSidewalk/label-latlng-estimation/issues/1)). See `data/MANIFEST.md` — the reconstruction reproduces the published row counts and findings exactly. |
 | `scripts/extraction/` | The SQL + runner that regenerate the dataset from the production databases. |
