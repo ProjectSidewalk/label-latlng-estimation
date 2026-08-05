@@ -9,11 +9,12 @@ after it was withdrawn ([SidewalkWebpage#2374](https://github.com/ProjectSidewal
 
 | path | what it is |
 |---|---|
-| `reports/` | **Dated analysis reports.** Start with [2026-08-05 — recovery & verification](reports/2026-08-05-recovery-and-verification.md): what was recovered, the proof it's right, and the figure evidence behind the refit issues. |
+| `reports/` | **Dated analysis reports.** Start with [2026-08-05 — recovery & verification](reports/2026-08-05-recovery-and-verification.md): what was recovered, the proof it's right, and the figure evidence behind the refit issues. Then [2026-08-05 — depth pilot](reports/2026-08-05-depth-pilot.md): fresh GSV depth via streetlevel validates the recovered ground truth to the storage floor ([#4](https://github.com/ProjectSidewalk/label-latlng-estimation/issues/4)). |
 | `scripts/label-latlng-estimation.Rmd` (+ `.md`/`.html`) | **The frozen 2021 analysis** — methods record and published coefficients. Kept unmodified. |
 | `data/labels-*-latlng.csv.gz` | The dataset: depth-derived ground-truth label positions for 7 cities, **reconstructed from production 2026-08-05** ([#1](https://github.com/ProjectSidewalk/label-latlng-estimation/issues/1)). See `data/MANIFEST.md` — the reconstruction reproduces the published row counts and findings exactly. |
 | `scripts/extraction/` | The SQL + runner that regenerate the dataset from the production databases. |
-| `python/` | **The authoritative implementation going forward** ([#2](https://github.com/ProjectSidewalk/label-latlng-estimation/issues/2)): full port of the analysis (all seven candidate estimators). |
+| `python/` | **The authoritative implementation going forward** ([#2](https://github.com/ProjectSidewalk/label-latlng-estimation/issues/2)): full port of the analysis (all seven candidate estimators). `gsv_depth.py` + `run_depth_pilot.py` add the issue #4 depth pilot: fetching fresh GSV depth and replicating the 2020 depth→latlng pipeline bit-exactly. |
+| `data/depth-pilot-*` | The depth pilot's committed evidence ([#4](https://github.com/ProjectSidewalk/label-latlng-estimation/issues/4)): raw depth payloads for 409 panos, the per-label cross-check, per-pano camera heights. See `data/MANIFEST.md`. |
 | `scripts/rerun-analysis.R` | The Rmd's pipeline as a plain R script; regenerates the R baseline fixtures the tests compare the port against. |
 | `tests/` | Data contract, R↔Python equivalence (~1e-8), and findings-vs-published reproduction tests. |
 
@@ -22,7 +23,7 @@ after it was withdrawn ([SidewalkWebpage#2374](https://github.com/ProjectSidewal
 ```bash
 pip install -r python/requirements.txt
 python python/run_analysis.py   # seven-estimator comparison + coefficients vs published 2021
-pytest                          # 102 tests: data contract, R↔Python equivalence, findings
+pytest                          # 160 tests: data contract, R↔Python equivalence, findings, depth pilot
 ```
 
 The R side needs R ≥ 4.x with readr/dplyr/tidyr/tibble/purrr/geosphere/lme4/jsonlite:

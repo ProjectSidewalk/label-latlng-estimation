@@ -611,7 +611,9 @@ def cmd_build(args):
     )
 
     summary = summarize(panos, labels_df)
-    with open(os.path.join(out, "depth-pilot-summary.json"), "w", encoding="utf-8") as f:
+    with open(
+        os.path.join(out, "depth-pilot-summary.json"), "w", encoding="utf-8", newline="\n"
+    ) as f:
         json.dump(summary, f, indent=2, sort_keys=True)
         f.write("\n")
 
