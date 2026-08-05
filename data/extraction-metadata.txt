@@ -1,0 +1,100 @@
+Extraction date: 2026-08-05T18:34:10Z
+Host: makelab1.cs.washington.edu
+Database: sidewalk_prod port 5434, role jonf
+Server: PostgreSQL 16.14 on x86_64-pc-linux-gnu, compiled by gcc (GCC) 11.5.0 20240719 (Red Hat 11.5.0-14), 64-bit
+Query: extract-depth-labels-modern.sql (six cities) + DC from sidewalk_dc:5434
+
+-- seattle (sidewalk_prod/sidewalk_seattle) --
+csv rows: 120094
+ depth_rows | missing_old_label_metadata | null_pano_width |        first_label         |        last_label         
+------------+----------------------------+-----------------+----------------------------+---------------------------
+     120094 |                          0 |            2017 | 2019-03-04 11:59:59.576-08 | 2021-08-02 22:28:47.28-07
+(1 row)
+
+ zoom | count 
+------+-------
+    1 | 81107
+    2 | 28803
+    3 | 10184
+(3 rows)
+
+
+-- newberg (sidewalk_prod/sidewalk_newberg) --
+csv rows: 17725
+ depth_rows | missing_old_label_metadata | null_pano_width |        first_label         |         last_label         
+------------+----------------------------+-----------------+----------------------------+----------------------------
+      17725 |                          0 |             116 | 2019-01-30 11:31:14.679-08 | 2021-05-31 13:10:01.663-07
+(1 row)
+
+ zoom | count 
+------+-------
+    1 | 11675
+    2 |  4102
+    3 |  1948
+(3 rows)
+
+
+-- columbus (sidewalk_prod/sidewalk_columbus) --
+csv rows: 20526
+ depth_rows | missing_old_label_metadata | null_pano_width |        first_label         |         last_label         
+------------+----------------------------+-----------------+----------------------------+----------------------------
+      20526 |                          0 |              61 | 2019-11-12 14:14:46.596-08 | 2021-07-19 06:36:45.551-07
+(1 row)
+
+ zoom | count 
+------+-------
+    1 | 11693
+    2 |  6113
+    3 |  2720
+(3 rows)
+
+
+-- spgg (sidewalk_prod/sidewalk_spgg) --
+csv rows: 31498
+ depth_rows | missing_old_label_metadata | null_pano_width |        first_label         |         last_label         
+------------+----------------------------+-----------------+----------------------------+----------------------------
+      31498 |                          0 |               7 | 2020-05-26 14:37:19.703-07 | 2021-07-30 08:16:38.823-07
+(1 row)
+
+ zoom | count 
+------+-------
+    1 | 22534
+    2 |  6645
+    3 |  2319
+(3 rows)
+
+
+-- cdmx (sidewalk_prod/sidewalk_cdmx) --
+csv rows: 6772
+ depth_rows | missing_old_label_metadata | null_pano_width |        first_label         |         last_label         
+------------+----------------------------+-----------------+----------------------------+----------------------------
+       6772 |                          0 |               4 | 2019-11-23 13:46:38.604-08 | 2021-07-29 15:14:32.078-07
+(1 row)
+
+ zoom | count 
+------+-------
+    1 |  4418
+    2 |  2082
+    3 |   272
+(3 rows)
+
+
+-- pittsburgh (sidewalk_prod/sidewalk_pittsburgh) --
+csv rows: 1148
+ depth_rows | missing_old_label_metadata | null_pano_width |        first_label         |        last_label        
+------------+----------------------------+-----------------+----------------------------+--------------------------
+       1148 |                          0 |               2 | 2020-07-28 21:47:53.039-07 | 2021-06-04 11:35:22.2-07
+(1 row)
+
+ zoom | count 
+------+-------
+    1 |   876
+    2 |   248
+    3 |    24
+(3 rows)
+
+
+DC: legacy (pre-179) schema detected; using legacy query
+-- dc (sidewalk_dc/sidewalk) --
+csv rows: 270845
+

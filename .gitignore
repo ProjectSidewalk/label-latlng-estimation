@@ -3,6 +3,11 @@
 .RData
 .Ruserdata
 
+# Raw (unzipped) CSVs stay ignored so a working gunzip never lands a 60+ MB diff by accident.
+# The dataset itself IS committed, as data/labels-*-latlng.csv.gz — a reconstruction from
+# production; see data/MANIFEST.md and issue #1. (This pattern does not match *.csv.gz.)
 data/*.csv
 scripts/*_cache/
 
+__pycache__/
+.pytest_cache/

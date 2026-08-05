@@ -89,6 +89,13 @@ col_types <-
 # INNER JOIN sidewalk.audit_task ON label.audit_task_id = audit_task.audit_task_id
 # WHERE lat IS NOT NULL AND lng IS NOT NULL;
 
+# NOTE (2026-08-05): the data/*.csv files this Rmd read were never committed and the originals
+# are lost. The repo now carries data/labels-*-latlng.csv.gz — a RECONSTRUCTION extracted from
+# production (see data/MANIFEST.md and issue #1) — which reproduces this analysis' published row
+# counts (395,147 cleaned) and findings exactly (see tests/ and scripts/rerun-analysis.R). To
+# knit this Rmd against it, gunzip those files first (or append .gz to the paths below; readr
+# reads gzip transparently). This Rmd is otherwise unchanged as the frozen 2021 record; the
+# Python port in python/ is the authoritative implementation going forward (issue #2).
 data_dc <- read_csv('../data/labels-dc-latlng.csv', col_types = col_types) %>% mutate(city = 'dc')
 data_seattle <- read_csv('../data/labels-seattle-latlng.csv', col_types = col_types) %>% mutate(city = 'seattle')
 data_newberg <- read_csv('../data/labels-newberg-latlng.csv', col_types = col_types) %>% mutate(city = 'newberg')
