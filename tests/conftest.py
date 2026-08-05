@@ -13,6 +13,23 @@ DATA_DIR = os.path.join(ROOT, "data")
 FIXTURES_DIR = os.path.join(ROOT, "tests", "fixtures", "r-baseline")
 
 
+def pytest_configure(config):
+    config.addinivalue_line(
+        "markers",
+        "network: hits the live (unofficial) Google endpoint; deselected by default "
+        "-- run with `pytest -m network` to include",
+    )
+
+
+def pytest_collection_modifyitems(config, items):
+    if config.option.markexpr:
+        return  # an explicit -m expression takes over
+    skip_network = pytest.mark.skip(reason="network test; run with -m network")
+    for item in items:
+        if "network" in item.keywords:
+            item.add_marker(skip_network)
+
+
 @pytest.fixture(scope="session")
 def repo_root():
     return ROOT

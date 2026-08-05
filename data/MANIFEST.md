@@ -79,3 +79,33 @@ Columns 23–27 are extras that did not exist in the 2021 CSVs, appended so both
 Run `scripts/extraction/extract-depth-labels.sh --dc-db sidewalk_dc` on the database host (see
 script header), replace the `.csv.gz` files here, then re-run `scripts/rerun-analysis.R`
 (refreshes `tests/fixtures/r-baseline/`), update the counts above, and run `pytest`.
+
+---
+
+# Depth-pilot artifacts (issue #4)
+
+The `depth-pilot-*` files are the committed evidence of the 2026-08-05 streetlevel depth pilot
+([issue #4](https://github.com/ProjectSidewalk/label-latlng-estimation/issues/4), report:
+`reports/2026-08-05-depth-pilot.md`). They were fetched from Google's **unofficial, keyless
+photometa endpoint** via [sk-zk/streetlevel](https://github.com/sk-zk/streetlevel) 0.12.10 on
+2026-08-05 (UTC) and are committed precisely because that endpoint can vanish — the raw payloads
+make the pilot's entire analysis reproducible offline forever.
+
+- `depth-pilot-payloads.jsonl.gz` — one line per panorama that served depth (409 unique): pano id,
+  fetch timestamp, capture date, advertised image sizes, and the **verbatim base64 depth payload**
+  (Google's plane-fit synthetic depth, 512×256; not imagery). Decode with
+  `python/gsv_depth.py::decode_depth_payload`.
+- `depth-pilot-panos.csv.gz` — one row per sampled panorama: Part A (606 ids drawn seed-666 from
+  the recovered dataset; resolve/`gone` status, payload-vintage class, re-registration deltas) and
+  Part B (200 current panos at recovered-label locations in seattle/cdmx); per-pano camera-height
+  QC from the payload's plane list.
+- `depth-pilot-labels.csv.gz` — one row per label on every Part A pano that served depth: the
+  stored 2017–2020 depth-derived position vs the position recomputed from today's payload with the
+  bit-exact 2020 client algorithm, deltas in float32 ulps and meters, and the edge-case flags
+  (no-plane, seam-wrap, stored-absurd).
+- `depth-pilot-summary.json` — the headline numbers, asserted by `tests/test_depth_pilot_findings.py`.
+
+**Regenerate by intent only**: `python python/run_depth_pilot.py fetch` then `build` (then update
+the findings tests and the report — a refetch observes a *different* GSV state, so drift in the
+numbers is expected, not an error). `build` alone is deterministic: re-running it against the
+gitignored `data/depth-pilot-cache/` reproduces these files byte-for-byte.

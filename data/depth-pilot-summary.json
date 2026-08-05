@@ -1,0 +1,61 @@
+{
+  "camera_height": {
+    "ground_d_exactly_2p5_frac": 0.477,
+    "median_height_excl_2p5": 2.366,
+    "n_heights_excl_2p5": 214,
+    "panos_with_depth": 409,
+    "structural_default_frac": 0.0
+  },
+  "part_a": {
+    "absurd_reproduced": 2,
+    "absurd_rows_checked": 8,
+    "attempted": 576,
+    "consistent_frac_at_1p5_ulp": 0.3948,
+    "consistent_frac_at_2_ulp": 0.5174,
+    "consistent_frac_at_3_ulp": 0.6787,
+    "depth_rate_among_resolved": 1.0,
+    "label_median_disagreement_m": 0.981,
+    "label_median_disagreement_m_unchanged_panos": 0.3403,
+    "label_p90_disagreement_m": 3.302,
+    "labels_compared": 775,
+    "lost_plane_labels": 1,
+    "median_pano_shift_m": 0.767,
+    "pano_class_counts": {
+      "changed": 123,
+      "mostly_unchanged": 27,
+      "no_comparable_labels": 1,
+      "unchanged": 45
+    },
+    "resolve_rate": 0.3403,
+    "resolve_rate_by_city": {
+      "cdmx": 0.348,
+      "columbus": 0.276,
+      "dc": 0.351,
+      "newberg": 0.434,
+      "pittsburgh": 0.433,
+      "seattle": 0.207,
+      "spgg": 0.461
+    },
+    "stored_on_f32_grid_frac": 0.6465
+  },
+  "part_b": {
+    "capture_years": {
+      "2011": 4,
+      "2012": 1,
+      "2015": 1,
+      "2016": 1,
+      "2018": 3,
+      "2019": 10,
+      "2021": 6,
+      "2022": 28,
+      "2023": 1,
+      "2024": 37,
+      "2025": 108
+    },
+    "depth_served": 200,
+    "found_current_pano": 200,
+    "locations": 200,
+    "max_resolution_16384_frac": 0.965,
+    "unique_panos": 200
+  }
+}

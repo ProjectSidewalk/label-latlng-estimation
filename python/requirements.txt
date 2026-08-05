@@ -4,3 +4,4 @@ pyproj>=3.6
 statsmodels>=0.14
 pytest>=8
 matplotlib>=3.8   # python/make_figures.py only
+streetlevel==0.12.10   # python/run_depth_pilot.py only (issue #4); 0.12.4 is broken against Google's current metadata endpoint

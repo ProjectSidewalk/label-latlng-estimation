@@ -7,6 +7,7 @@
 # The dataset itself IS committed, as data/labels-*-latlng.csv.gz — a reconstruction from
 # production; see data/MANIFEST.md and issue #1. (This pattern does not match *.csv.gz.)
 data/*.csv
+data/depth-pilot-cache/
 scripts/*_cache/
 
 __pycache__/
