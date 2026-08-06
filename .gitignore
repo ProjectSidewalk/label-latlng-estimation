@@ -12,3 +12,12 @@ scripts/*_cache/
 
 __pycache__/
 .pytest_cache/
+
+# The depth-validation fetch cache (raw tiles + photometa). The committed
+# data/depth-validation-tiles.jsonl.gz holds the same tile bytes verbatim, so `build`
+# and every downstream stage replay offline without it.
+data/depth-validation-cache/
+
+# The overlay gallery is generated from the committed tiles by `run_depth_validation.py
+# gallery`; 8 MB of regenerable HTML does not belong in history.
+figures/depth-overlay-gallery.html

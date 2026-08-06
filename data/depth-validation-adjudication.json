@@ -1,0 +1,266 @@
+{
+  "_about": "Hand adjudication of whether a stored Sidewalk label's pixel sits on, or behind, an object the GSV depth model does not contain. Occlusion cannot be detected geometrically: an unmodelled car or hedge occupies the ray, the ray passes through it, and the payload returns the ground behind -- which is exactly the flat-earth prediction for that depression angle. Only imagery separates the two, so these verdicts were made by eye against the committed adjudication imagery.",
+  "_method": "Sample: cleaned labels on panoramas that have adjudication-zoom imagery and a known yaw, shuffled with pandas random_state=7, first 36 taken. Each viewed as a 360 px crop centred on depth_validation.label_pixel_in_image, which applies the heading-centred raster rotation.",
+  "_reviewer": "Claude Opus 5 (claude-opus-5[1m]), 2026-08-06, against data/depth-validation-tiles.jsonl.gz",
+  "_correction": "An earlier pass over the same 36 labels reported 6 occlusions. It was wrong: it placed markers with the north-referenced sv_image_x against a heading-centred raster, so the crops were centred up to half a panorama away from the label and hit parked cars at roughly the rate cars appear in the scene. Superseded by this pass; see reports/2026-08-06-depth-coordinate-conventions.md.",
+  "sample_size": 36,
+  "occluded": 2,
+  "panoramas_in_sample": 16,
+  "panoramas_with_an_occlusion": 2,
+  "verdicts": [
+    {
+      "label_id": 496,
+      "pano_id": "l-yqyjciw8fdpD4sGHic7A",
+      "label_type": "Obstacle",
+      "depth_horizontal_m": 10.25,
+      "occluded": false
+    },
+    {
+      "label_id": 53848,
+      "pano_id": "Lhg0hITG6kVMUJsg1tu6lg",
+      "label_type": "NoCurbRamp",
+      "depth_horizontal_m": 6.51,
+      "occluded": false
+    },
+    {
+      "label_id": 7111,
+      "pano_id": "MUOw7ho0eTNj1MEpZ9LuLQ",
+      "label_type": "CurbRamp",
+      "depth_horizontal_m": 4.46,
+      "occluded": false
+    },
+    {
+      "label_id": 15220,
+      "pano_id": "MUOw7ho0eTNj1MEpZ9LuLQ",
+      "label_type": "CurbRamp",
+      "depth_horizontal_m": 7.87,
+      "occluded": false
+    },
+    {
+      "label_id": 329,
+      "pano_id": "QZfKOBv3XyZdqqMs4MTHjw",
+      "label_type": "CurbRamp",
+      "depth_horizontal_m": 16.17,
+      "occluded": true,
+      "note": "a white car crossing the intersection stands between the camera and the ramp"
+    },
+    {
+      "label_id": 6204,
+      "pano_id": "3tM8hs7UlGecme0qXcAzWg",
+      "label_type": "CurbRamp",
+      "depth_horizontal_m": 6.09,
+      "occluded": false
+    },
+    {
+      "label_id": 2051,
+      "pano_id": "Vkurc5TfWOHj0uJZRPD6lg",
+      "label_type": "Obstacle",
+      "depth_horizontal_m": 4.89,
+      "occluded": false
+    },
+    {
+      "label_id": 1744,
+      "pano_id": "-IBSpaJNVynPMobXkiY4PA",
+      "label_type": "Obstacle",
+      "depth_horizontal_m": 9.25,
+      "occluded": false
+    },
+    {
+      "label_id": 11525,
+      "pano_id": "WEnRnLD3Ek4Ssp-Vn_D-Hw",
+      "label_type": "CurbRamp",
+      "depth_horizontal_m": 4.17,
+      "occluded": false
+    },
+    {
+      "label_id": 3368,
+      "pano_id": "GiluVHlY7wv1N62MTH3_YQ",
+      "label_type": "SurfaceProblem",
+      "depth_horizontal_m": 2.96,
+      "occluded": false
+    },
+    {
+      "label_id": 497,
+      "pano_id": "l-yqyjciw8fdpD4sGHic7A",
+      "label_type": "CurbRamp",
+      "depth_horizontal_m": 10.82,
+      "occluded": false
+    },
+    {
+      "label_id": 26282,
+      "pano_id": "JynNI4VF2V_CxUT3hx8JmA",
+      "label_type": "CurbRamp",
+      "depth_horizontal_m": 10.25,
+      "occluded": false
+    },
+    {
+      "label_id": 127492,
+      "pano_id": "GWcdm21pnUYyQx3PcEbNGA",
+      "label_type": "Obstacle",
+      "depth_horizontal_m": 8.06,
+      "occluded": false
+    },
+    {
+      "label_id": 326,
+      "pano_id": "QZfKOBv3XyZdqqMs4MTHjw",
+      "label_type": "CurbRamp",
+      "depth_horizontal_m": 8.82,
+      "occluded": false
+    },
+    {
+      "label_id": 1067,
+      "pano_id": "8dlA6lTKwCzxpHn014oNxA",
+      "label_type": "CurbRamp",
+      "depth_horizontal_m": 15.11,
+      "occluded": false
+    },
+    {
+      "label_id": 26286,
+      "pano_id": "JynNI4VF2V_CxUT3hx8JmA",
+      "label_type": "CurbRamp",
+      "depth_horizontal_m": 9.25,
+      "occluded": false
+    },
+    {
+      "label_id": 25889,
+      "pano_id": "Vkurc5TfWOHj0uJZRPD6lg",
+      "label_type": "Obstacle",
+      "depth_horizontal_m": 5.2,
+      "occluded": false
+    },
+    {
+      "label_id": 127496,
+      "pano_id": "GWcdm21pnUYyQx3PcEbNGA",
+      "label_type": "Obstacle",
+      "depth_horizontal_m": 12.98,
+      "occluded": false
+    },
+    {
+      "label_id": 7113,
+      "pano_id": "MUOw7ho0eTNj1MEpZ9LuLQ",
+      "label_type": "NoCurbRamp",
+      "depth_horizontal_m": 4.78,
+      "occluded": false
+    },
+    {
+      "label_id": 127497,
+      "pano_id": "GWcdm21pnUYyQx3PcEbNGA",
+      "label_type": "CurbRamp",
+      "depth_horizontal_m": 13.9,
+      "occluded": false
+    },
+    {
+      "label_id": 27076,
+      "pano_id": "8t4iLIsgG5N4j3gN3wvKSg",
+      "label_type": "CurbRamp",
+      "depth_horizontal_m": 16.17,
+      "occluded": false
+    },
+    {
+      "label_id": 6219,
+      "pano_id": "3tM8hs7UlGecme0qXcAzWg",
+      "label_type": "CurbRamp",
+      "depth_horizontal_m": 14.75,
+      "occluded": false
+    },
+    {
+      "label_id": 7115,
+      "pano_id": "MUOw7ho0eTNj1MEpZ9LuLQ",
+      "label_type": "CurbRamp",
+      "depth_horizontal_m": 7.87,
+      "occluded": false
+    },
+    {
+      "label_id": 6238,
+      "pano_id": "3tM8hs7UlGecme0qXcAzWg",
+      "label_type": "CurbRamp",
+      "depth_horizontal_m": 16.17,
+      "occluded": false
+    },
+    {
+      "label_id": 18476,
+      "pano_id": "rWfAyzcpmtVc_twgv_SJLg",
+      "label_type": "NoCurbRamp",
+      "depth_horizontal_m": 8.06,
+      "occluded": false
+    },
+    {
+      "label_id": 494,
+      "pano_id": "l-yqyjciw8fdpD4sGHic7A",
+      "label_type": "Other",
+      "depth_horizontal_m": 4.23,
+      "occluded": false
+    },
+    {
+      "label_id": 25555,
+      "pano_id": "JynNI4VF2V_CxUT3hx8JmA",
+      "label_type": "CurbRamp",
+      "depth_horizontal_m": 9.73,
+      "occluded": false
+    },
+    {
+      "label_id": 25554,
+      "pano_id": "JynNI4VF2V_CxUT3hx8JmA",
+      "label_type": "CurbRamp",
+      "depth_horizontal_m": 6.85,
+      "occluded": false
+    },
+    {
+      "label_id": 127491,
+      "pano_id": "GWcdm21pnUYyQx3PcEbNGA",
+      "label_type": "CurbRamp",
+      "depth_horizontal_m": 7.73,
+      "occluded": false
+    },
+    {
+      "label_id": 127494,
+      "pano_id": "GWcdm21pnUYyQx3PcEbNGA",
+      "label_type": "CurbRamp",
+      "depth_horizontal_m": 12.18,
+      "occluded": false
+    },
+    {
+      "label_id": 7118,
+      "pano_id": "MUOw7ho0eTNj1MEpZ9LuLQ",
+      "label_type": "Obstacle",
+      "depth_horizontal_m": 11.46,
+      "occluded": true,
+      "note": "the labelled obstacle is a hedge; vegetation is absent from the model, so the ray returns the ground behind it"
+    },
+    {
+      "label_id": 11526,
+      "pano_id": "WEnRnLD3Ek4Ssp-Vn_D-Hw",
+      "label_type": "CurbRamp",
+      "depth_horizontal_m": 9.14,
+      "occluded": false
+    },
+    {
+      "label_id": 6203,
+      "pano_id": "3tM8hs7UlGecme0qXcAzWg",
+      "label_type": "CurbRamp",
+      "depth_horizontal_m": 5.55,
+      "occluded": false
+    },
+    {
+      "label_id": 23243,
+      "pano_id": "LfIdNuEZB7PahlQrKcujyg",
+      "label_type": "CurbRamp",
+      "depth_horizontal_m": 5.2,
+      "occluded": false
+    },
+    {
+      "label_id": 196587,
+      "pano_id": "1FASi4zjOTXNI3I60VC81A",
+      "label_type": "NoCurbRamp",
+      "depth_horizontal_m": 17.6,
+      "occluded": false
+    },
+    {
+      "label_id": 15218,
+      "pano_id": "MUOw7ho0eTNj1MEpZ9LuLQ",
+      "label_type": "CurbRamp",
+      "depth_horizontal_m": 4.32,
+      "occluded": false
+    }
+  ]
+}
