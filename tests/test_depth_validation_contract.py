@@ -52,21 +52,24 @@ def test_tiles_artifact_is_self_describing(tiles):
 
 
 def test_committed_tiles_are_real_jpegs_that_stitch(tiles):
-    """The bytes must actually decode -- a truncated artifact would fail silently later."""
+    """Every committed byte must decode -- a truncated artifact would fail silently later."""
     from PIL import Image
 
     import depth_validation as dv
 
-    rec = tiles[0]
-    decoded = [
-        {"x": t["x"], "y": t["y"], "bytes": base64.b64decode(t["b64"])}
-        for t in rec["tiles"]
-    ]
-    for tile in decoded:
-        with Image.open(io.BytesIO(tile["bytes"])) as img:
-            assert img.format == "JPEG"
-    rgb = dv.stitch_tiles(decoded, rec["width"], rec["height"])
-    assert rgb.shape == (rec["height"], rec["width"], 3)
+    for rec in tiles:
+        decoded = [
+            {"x": t["x"], "y": t["y"], "bytes": base64.b64decode(t["b64"])}
+            for t in rec["tiles"]
+        ]
+        for tile in decoded:
+            with Image.open(io.BytesIO(tile["bytes"])) as img:
+                assert img.format == "JPEG"
+                img.load()  # full decode: a truncated stream fails here, not on open
+        rgb = dv.stitch_tiles(
+            decoded, rec["width"], rec["height"], rec["tile_width"], rec["tile_height"]
+        )
+        assert rgb.shape == (rec["height"], rec["width"], 3)
 
 
 def test_every_scored_panorama_has_committed_imagery(tiles, panos):
@@ -104,8 +107,27 @@ def test_adjudication_records_its_own_correction():
         adj = json.load(f)
     assert adj["sample_size"] == len(adj["verdicts"])
     assert adj["occluded"] == sum(v["occluded"] for v in adj["verdicts"])
+    assert adj["panoramas_in_sample"] == len({v["pano_id"] for v in adj["verdicts"]})
+    assert adj["panoramas_with_an_occlusion"] == len(
+        {v["pano_id"] for v in adj["verdicts"] if v["occluded"]}
+    )
     assert "_correction" in adj and adj["_correction"]
     assert "_reviewer" in adj, "a human judgement needs an attributable reviewer"
+
+
+def test_summary_mirrors_the_adjudication_file():
+    """The summary's occlusion block is the adjudication file, field for field."""
+    with open(os.path.join(DATA, "depth-validation-adjudication.json"), encoding="utf-8") as f:
+        adj = json.load(f)
+    with open(os.path.join(DATA, "depth-validation-summary.json"), encoding="utf-8") as f:
+        summary = json.load(f)
+    block = summary["t3_label_hits"]["occlusion_adjudication"]
+    assert block == {
+        "sample_size": adj["sample_size"],
+        "occluded": adj["occluded"],
+        "panoramas_in_sample": adj["panoramas_in_sample"],
+        "panoramas_with_an_occlusion": adj["panoramas_with_an_occlusion"],
+    }
 
 
 def test_label_pixel_mapping_requires_the_yaw():

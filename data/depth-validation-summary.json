@@ -43,7 +43,7 @@
       "mean_violation_at_0": 0.04905,
       "mean_violation_at_minus_64": 0.06808,
       "mean_violation_at_plus_64": 0.07014,
-      "n_panos": 55
+      "n_panos": 53
     },
     "structure_threshold": 0.02
   },
@@ -56,11 +56,11 @@
     "flat_earth_frac_within_1m": 0.913,
     "flat_earth_frac_within_2m": 0.9605,
     "flat_earth_median_residual_m": -0.0,
-    "median_planes_per_pano": 117,
+    "median_planes_per_pano": 116,
     "median_px_share_horizontal": 0.874,
     "median_px_share_vertical": 0.107,
     "payloads": 409,
-    "tilt_pixel_share_horizontal_le10deg": 0.8454,
+    "tilt_pixel_share_horizontal_lt10deg": 0.8454,
     "tilt_pixel_share_oblique_15to75deg": 0.00847,
     "tilt_pixel_share_vertical_ge80deg": 0.1373
   },

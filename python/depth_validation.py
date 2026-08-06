@@ -259,6 +259,27 @@ def flat_earth_comparison(
 # ---------- T3: what a stored label's pixel actually lands on
 
 @dataclass
+class PayloadGeometry:
+    """Per-payload state ``classify_label_hit`` needs, computed once for many labels."""
+
+    cloud: np.ndarray  # flat float32 point cloud, as compute_point_cloud returns it
+    depth_t: np.ndarray  # (h, w) euclidean ray distances, NaN where no plane
+    plane_tilt: np.ndarray  # per-plane tilt in degrees
+    ground_idx: int
+    depression: np.ndarray  # per-row depression angles, radians
+
+
+def payload_geometry(payload: gd.DepthPayload) -> PayloadGeometry:
+    return PayloadGeometry(
+        cloud=gd.compute_point_cloud(payload),
+        depth_t=gd.compute_depth_t(payload),
+        plane_tilt=plane_tilt_deg(payload),
+        ground_idx=ground_plane_index(payload),
+        depression=depression_angles(payload),
+    )
+
+
+@dataclass
 class LabelHit:
     plane_idx: int
     hit_class: str  # ground | terrain | facade | oblique | sky | out_of_bounds
@@ -275,16 +296,21 @@ def classify_label_hit(
     sv_image_x: float,
     sv_image_y: float,
     camera_height: float,
+    geometry: PayloadGeometry | None = None,
 ) -> LabelHit:
     """Classify the depth hit for one stored label, using the v6 pixel lookup.
 
     The pixel is chosen exactly as ``gsv_depth.v6_to_latlng`` chooses it (the same
     ``ceil`` and the same seam-wrap behaviour), so this describes the pixel that
     actually produced the stored coordinate.
+
+    The point cloud, tilt table and ground plane are properties of the payload, not the
+    label; pass ``payload_geometry(payload)`` when classifying many labels on one
+    panorama so they are computed once.
     """
     h, w = payload.height, payload.width
-    cloud = gd.compute_point_cloud(payload)
-    out = gd.v6_to_latlng(sv_image_x, sv_image_y, 0.0, 0.0, cloud)
+    geom = geometry if geometry is not None else payload_geometry(payload)
+    out = gd.v6_to_latlng(sv_image_x, sv_image_y, 0.0, 0.0, geom.cloud)
     nan = float("nan")
 
     if out.out_of_bounds:
@@ -298,8 +324,8 @@ def classify_label_hit(
     rng = math.sqrt(out.dx ** 2 + out.dy ** 2 + out.dz ** 2)
     horiz = math.hypot(out.dx, out.dy)
 
-    tilt = float(plane_tilt_deg(payload)[plane_idx])
-    ground_idx = ground_plane_index(payload)
+    tilt = float(geom.plane_tilt[plane_idx])
+    ground_idx = geom.ground_idx
     if plane_idx == ground_idx:
         hit_class = "ground"
     elif tilt <= HORIZONTAL_TILT_DEG:
@@ -310,13 +336,13 @@ def classify_label_hit(
         hit_class = "oblique"
 
     # The flat-earth counterfactual for this exact ray.
-    depr = float(depression_angles(payload)[min(out.ceil_py, h - 1)])
+    depr = float(geom.depression[min(out.ceil_py, h - 1)])
     if depr > math.radians(1.0) and math.isfinite(camera_height):
         flat = camera_height / math.tan(depr)
     else:
         flat = nan
 
-    t = gd.compute_depth_t(payload)
+    t = geom.depth_t
     y0, y1 = max(out.ceil_py - 1, 0), min(out.ceil_py + 2, h)
     x0, x1 = max(out.ceil_px - 1, 0), min(out.ceil_px + 2, w)
     window = t[y0:y1, x0:x1]
@@ -542,20 +568,31 @@ def column_offset_sweep(
 
 # ---------- imagery: verbatim tiles in, equirect array out
 
-def stitch_tiles(tiles: list[dict], width: int, height: int) -> np.ndarray:
+def stitch_tiles(
+    tiles: list[dict],
+    width: int,
+    height: int,
+    tile_width: int | None = None,
+    tile_height: int | None = None,
+) -> np.ndarray:
     """Assemble verbatim tile JPEGs into one equirectangular RGB array.
 
     ``tiles`` carries the bytes exactly as Google served them (see
     ``data/depth-validation-tiles.jsonl.gz``), so this is the only step between the
     committed artifact and every image-based number in the report -- and it is
     deterministic, which is what makes the whole analysis replayable offline.
+
+    Placement uses the recorded tile grid when given; each tile's own decoded size is
+    only the fallback, so a hypothetically cropped edge tile could not shift the mosaic.
     """
     from PIL import Image
 
     canvas = Image.new("RGB", (width, height))
     for tile in sorted(tiles, key=lambda t: (t["y"], t["x"])):
         img = Image.open(io.BytesIO(tile["bytes"]))
-        canvas.paste(img, (tile["x"] * img.width, tile["y"] * img.height))
+        tw = tile_width if tile_width is not None else img.width
+        th = tile_height if tile_height is not None else img.height
+        canvas.paste(img, (tile["x"] * tw, tile["y"] * th))
     return np.asarray(canvas)
 
 
@@ -573,7 +610,7 @@ def label_pixel_in_image(
 
     - ``sv_image_x`` is **north-referenced**: ``sv_image_x / 13312 * 360`` is the
       label's true compass bearing. Verified over all 395,147 cleaned labels against
-      the independently recorded POV ``heading`` (centred on 0, 100% within 60 deg;
+      the independently recorded POV ``heading`` (centred on 0, 99.99% within 60 deg;
       the heading-shifted alternative keeps only 32%).
     - The **panorama raster is heading-centred**: column 0 is bearing
       ``pano_yaw - 180``, so the vehicle's forward direction sits at image centre.

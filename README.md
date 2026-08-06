@@ -25,8 +25,10 @@ after it was withdrawn ([SidewalkWebpage#2374](https://github.com/ProjectSidewal
 ```bash
 pip install -r python/requirements.txt
 python python/run_analysis.py   # seven-estimator comparison + coefficients vs published 2021
-pytest                          # 186 tests: data contract, R↔Python equivalence, findings,
+pytest                          # 188 tests: data contract, R↔Python equivalence, findings,
                                 #            depth pilot, depth validation, coordinate conventions
+                                #            (RUN_SLOW=1 unlocks a full re-derivation of the
+                                #             conventions evidence from committed bytes)
 ```
 
 The R side needs R ≥ 4.x with readr/dplyr/tidyr/tibble/purrr/geosphere/lme4/jsonlite:

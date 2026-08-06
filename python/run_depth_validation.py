@@ -4,7 +4,7 @@ Four subcommands, run from the repo root:
 
     python python/run_depth_validation.py fetch     # network: imagery tiles + partner payloads
     python python/run_depth_validation.py build     # offline: committed bytes -> artifacts
-    python python/run_depth_validation.py figures   # offline: artifacts -> figures/fig9,10,11
+    python python/run_depth_validation.py figures   # offline: artifacts -> figures/fig9-12
     python python/run_depth_validation.py gallery   # offline: artifacts -> the overlay gallery
 
 The #4 pilot compared fresh depth against stored label positions and got ~1 m -- but both
@@ -33,13 +33,11 @@ from __future__ import annotations
 import argparse
 import base64
 import gzip
-import io
 import json
 import math
 import os
 import sys
 import time
-from datetime import datetime, timezone
 
 import numpy as np
 import pandas as pd
@@ -48,8 +46,8 @@ sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
 import depth_validation as dv  # noqa: E402
 import gsv_depth as gd  # noqa: E402
-from label_latlng_estimation import clean_data, haversine_m, load_data  # noqa: E402
-from run_depth_pilot import Throttle, now_utc, write_csv_gz, write_gz_bytes  # noqa: E402
+from label_latlng_estimation import haversine_m  # noqa: E402
+from run_depth_pilot import Throttle, write_csv_gz, write_gz_bytes  # noqa: E402
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 SEED = 666  # the repo's sampling seed everywhere
@@ -60,6 +58,7 @@ SEED = 666  # the repo's sampling seed everywhere
 SCORING_N_A = 40  # 2017-2020 panos from the #4 Part A sample; these carry the labels
 SCORING_N_B = 20  # modern panos from Part B; check nothing changed at 16384x8192
 ADJUDICATION_N = 24  # subset re-fetched larger, for the gallery and occlusion verdicts
+ADJUDICATION_FROM_B = 6  # of those, modern Part B panos, so the gallery shows both eras
 CROSS_VINTAGE_N = 30  # scoring panos to pair with a historical capture of the same spot
 
 # Zoom INDEX into pano.image_sizes, not a pixel size: the same index means 1024x512 on a
@@ -221,8 +220,8 @@ def choose_samples(data_dir):
     # about labels, so the larger imagery should go where the labels are.
     counts = labels[labels["pano_id"].isin(scoring_a)].groupby("pano_id").size()
     ranked = counts.sort_values(ascending=False, kind="mergesort")
-    adjudication = sorted(ranked.index[: ADJUDICATION_N - 6].tolist())
-    adjudication += sorted(scoring_b[:6])
+    adjudication = sorted(ranked.index[: ADJUDICATION_N - ADJUDICATION_FROM_B].tolist())
+    adjudication += sorted(scoring_b[:ADJUDICATION_FROM_B])
 
     cross = sorted(scoring_a)[:CROSS_VINTAGE_N]
     return {
@@ -253,10 +252,18 @@ def cmd_fetch(args):
         (sample["adjudication"], ADJUDICATION_ZOOM, "adjudication"),
     ):
         for pid in sorted(pano_ids):
-            resp = load_photometa(pid, args.cache_dir, args.data_dir)
-            pano = parse_meta(resp) if resp else None
+            # Prefer the pilot's cached photometa (fetch_photometa_cached reads it
+            # first), but fall back to the network so a fresh clone can refetch too.
+            try:
+                resp, _ = fetch_photometa_cached(
+                    pid, args.cache_dir, args.data_dir, throttle, session
+                )
+            except RuntimeError as e:
+                print(f"  [{name}] {pid}: {e}, skipped")
+                continue
+            pano = parse_meta(resp)
             if pano is None or not pano.image_sizes:
-                print(f"  [{name}] {pid}: no metadata, skipped")
+                print(f"  [{name}] {pid}: no usable metadata, skipped")
                 continue
             _, _, cols, rows, _, _ = tile_grid(pano, zoom)
             for x in range(cols):
@@ -272,8 +279,13 @@ def cmd_fetch(args):
     # the year gap allows. Only its photometa is needed -- depth, not imagery.
     partners = {}
     for pid in sample["cross_vintage"]:
-        resp = load_photometa(pid, args.cache_dir, args.data_dir)
-        pano = parse_meta(resp) if resp else None
+        try:
+            resp, _ = fetch_photometa_cached(
+                pid, args.cache_dir, args.data_dir, throttle, session
+            )
+        except RuntimeError:
+            continue
+        pano = parse_meta(resp)
         if pano is None or not pano.historical:
             continue
         year = pano.date.year if pano.date else None
@@ -299,6 +311,30 @@ def cmd_fetch(args):
 
 
 # ---------------------------------------------------------------------------- artifacts
+
+def _guard_artifact_shrink(path, new_count, count_existing):
+    """Refuse to overwrite a committed artifact with fewer records.
+
+    A shrink here almost always means a partial fetch cache (an interrupted `fetch`),
+    and silently rewriting the committed bytes from it would destroy the replication
+    artifact. If the smaller set is genuinely intended -- Google retired a panorama --
+    delete the committed file first and rebuild.
+    """
+    if not os.path.exists(path):
+        return
+    old_count = count_existing(path)
+    if new_count < old_count:
+        raise RuntimeError(
+            f"refusing to shrink {os.path.basename(path)}: {old_count} committed "
+            f"records but only {new_count} rebuilt -- the fetch cache looks partial. "
+            f"Delete the committed file first if the shrink is intended."
+        )
+
+
+def _count_jsonl_gz(path):
+    with gzip.open(path, "rt", encoding="utf-8") as f:
+        return sum(1 for _ in f)
+
 
 def write_tiles_artifact(sample, cache_dir, data_dir, out_dir):
     """Verbatim tile bytes -> data/depth-validation-tiles.jsonl.gz.
@@ -344,8 +380,10 @@ def write_tiles_artifact(sample, cache_dir, data_dir, out_dir):
                 "tiles": tiles,
             })
     lines.sort(key=lambda r: (r["set"], r["pano_id"]))
+    out_path = os.path.join(out_dir, "depth-validation-tiles.jsonl.gz")
+    _guard_artifact_shrink(out_path, len(lines), _count_jsonl_gz)
     write_gz_bytes(
-        os.path.join(out_dir, "depth-validation-tiles.jsonl.gz"),
+        out_path,
         "".join(json.dumps(r) + "\n" for r in lines).encode("utf-8"),
     )
     return len(lines)
@@ -385,7 +423,9 @@ def write_panometa_artifact(sample, cache_dir, data_dir, out_dir):
             "link_bearings_deg": links,
         })
     df = pd.DataFrame(rows).sort_values("pano_id").reset_index(drop=True)
-    write_csv_gz(df, os.path.join(out_dir, "depth-validation-panometa.csv.gz"))
+    out_path = os.path.join(out_dir, "depth-validation-panometa.csv.gz")
+    _guard_artifact_shrink(out_path, len(df), lambda p: len(pd.read_csv(p)))
+    write_csv_gz(df, out_path)
     return len(df)
 
 
@@ -409,8 +449,10 @@ def write_partners_artifact(partners, cache_dir, data_dir, out_dir):
             "depth_b64": b64,
         })
     lines.sort(key=lambda r: (r["partner_of"], r["pano_id"]))
+    out_path = os.path.join(out_dir, "depth-validation-partners.jsonl.gz")
+    _guard_artifact_shrink(out_path, len(lines), _count_jsonl_gz)
     write_gz_bytes(
-        os.path.join(out_dir, "depth-validation-partners.jsonl.gz"),
+        out_path,
         "".join(json.dumps(r) + "\n" for r in lines).encode("utf-8"),
     )
     return len(lines)
@@ -435,7 +477,10 @@ def rgb_from_record(record):
         {"x": t["x"], "y": t["y"], "bytes": base64.b64decode(t["b64"])}
         for t in record["tiles"]
     ]
-    return dv.stitch_tiles(tiles, record["width"], record["height"])
+    return dv.stitch_tiles(
+        tiles, record["width"], record["height"],
+        record.get("tile_width"), record.get("tile_height"),
+    )
 
 
 def load_payloads(data_dir):
@@ -699,10 +744,12 @@ def cmd_build(args):
         if rows.empty:
             continue
         payload = gd.decode_depth_payload(payload_b64[pid])
+        geom = dv.payload_geometry(payload)  # shared by every label on this panorama
         height = heights.get(pid, float("nan"))
         for _, r in rows.iterrows():
             hit = dv.classify_label_hit(
-                payload, int(r["sv_image_x"]), int(r["sv_image_y"]), height
+                payload, int(r["sv_image_x"]), int(r["sv_image_y"]), height,
+                geometry=geom,
             )
             label_records.append({
                 "pano_id": pid, "label_id": int(r["label_id"]), "city": r["city"],
@@ -828,7 +875,12 @@ def summarize(panos, labels, cross, data_dir, sweeps=None):
     # sits at zero offset.
     pooled = None
     if sweeps:
-        ids = [p for p in cohort["pano_id"] if p in sweeps]
+        # Only panoramas whose sweep produced any finite score: an empty sky mask
+        # yields an all-NaN curve, which would inflate n while pooling nothing.
+        ids = [
+            p for p in cohort["pano_id"]
+            if p in sweeps and any(v is not None for v in sweeps[p][1])
+        ]
         if ids:
             shifts = np.array(sweeps[ids[0]][0], dtype=float)
             stack = np.array([
@@ -917,10 +969,13 @@ def summarize(panos, labels, cross, data_dir, sweeps=None):
         },
         "t2_what_it_is": {
             "payloads": int(len(inv)),
-            "tilt_pixel_share_horizontal_le10deg": round(float(tilt[:10].sum()), 4),
+            # The histogram's 1-degree bins make this tilt < 10 deg exactly, hence lt.
+            "tilt_pixel_share_horizontal_lt10deg": round(float(tilt[:10].sum()), 4),
             "tilt_pixel_share_vertical_ge80deg": round(float(tilt[80:].sum()), 4),
             "tilt_pixel_share_oblique_15to75deg": round(float(tilt[15:75].sum()), 5),
-            "median_planes_per_pano": int(inv["n_planes"].median()),
+            # n_planes counts the header's plane list, whose entry 0 is the no-plane
+            # marker; subtract it so this counts actual modelled planes.
+            "median_planes_per_pano": int((inv["n_planes"] - 1).median()),
             "median_px_share_horizontal": round(float(inv["px_share_horizontal"].median()), 3),
             "median_px_share_vertical": round(float(inv["px_share_vertical"].median()), 3),
             "flat_earth_frac_within_1m": round(float(fe["frac_within_1m"].median()), 4),

@@ -7,6 +7,7 @@ companion to [the depth validation report](2026-08-06-depth-validation.md)
 > ```bash
 > python python/verify_depth_conventions.py --json   # -> data/depth-conventions-evidence.json
 > pytest tests/test_depth_conventions.py             # the conclusions, locked
+> RUN_SLOW=1 pytest tests/test_depth_conventions.py  # ...and re-derived in-process
 > ```
 > Seven checks, labelled A–G below and in the script's output. No network; the only
 > decode path is the v6 replica in `python/gsv_depth.py`.
@@ -21,7 +22,7 @@ nothing raises.
 
 | thing | frame | how to know |
 |---|---|---|
-| `sv_image_x` (pre-evolution-179, drives the depth lookup) | **north-referenced**: `sv_image_x / 13312 × 360` is the label's true compass bearing | over all 395,147 cleaned labels, this minus the independently recorded POV `heading` is centred on −0.3° with 100% inside ±60°; the heading-shifted alternative keeps only 32% (std 105°) |
+| `sv_image_x` (pre-evolution-179, drives the depth lookup) | **north-referenced**: `sv_image_x / 13312 × 360` is the label's true compass bearing | over all 395,147 cleaned labels, this minus the independently recorded POV `heading` is centred on −0.3° with 99.99% inside ±60°; the heading-shifted alternative keeps only 32% (std 105°) |
 | `pano_x` / `current_pano_x` (post-evolution-179, drives cropping) | **heading-centred** | differs from `sv_image_x/13312` by exactly `(180 − pano_yaw)/360`, r = 0.954 over 195,556 rows |
 | the panorama raster, and the depth payload | **heading-centred**: column 0 is bearing `pano_yaw − 180`, so the vehicle's forward direction sits at image centre | Project Sidewalk's own 2017 `GSVImage.py`: `heading = 360·(x/width) + (pano_yaw_deg − 180)`. Independently: road links land on road (0.94 vs 0.87 road-likeness on 85 discriminating links) and depth sightlines run long down the street (84% vs 66% of 655 links) |
 
@@ -45,8 +46,9 @@ image row `height/2`.
 **Open item (check G).** The 2017–2020 client indexed the depth payload with `ceil(sv_image_x/26)` — a
 north-referenced coordinate against a heading-centred map. If the frames are as established above,
 the stored *bearing* is right (the client derived it from the same coordinate) but the stored
-*distance* was sampled from a column `(180 − pano_yaw)/360 × 512` away. Re-reading every label at
-the heading-centred column moves the median distance by **0.00 m** and 85% by under 1 m — because
+*distance* was sampled from a column `(180 − pano_yaw)/360 × 512` away. Re-reading every label
+(the 837 pilot labels that survive cleaning) at the heading-centred column moves the median
+distance by **0.00 m** and 85% by under 1 m — because
 the model is nearly flat earth, so range is set by the depression angle and barely by azimuth — but
 **6.6% move by more than 3 m** (p95 = 4.1 m). This wants a second reviewer before it is treated as
 settled; it bears directly on the ground truth behind
@@ -95,10 +97,11 @@ more.
 
 ## §4 · What the product is, in one paragraph
 
-Not a measurement. It is a constructed model of terrain plus extruded building footprints: 99.15%
-of pixels sit on surfaces that are either flat (≤10°) or vertical (≥80°), with only **0.85%**
-anywhere between 15° and 75° — no car roofs, no tree canopy, no pitched roofs, no driveway ramps.
-Under a Sidewalk label, 91% of ground-band pixels fall within 1 m of naive `h/tan(depression)`.
+Not a measurement. It is a constructed model of terrain plus extruded building footprints: 84.5%
+of pixels sit on near-flat surfaces (within 10° of horizontal) and 13.7% on near-vertical ones
+(within 10° of a wall), with only **0.85%** anywhere between 15° and 75° — no car roofs, no tree
+canopy, no pitched roofs, no driveway ramps. Under a Sidewalk label, the median panorama has 91%
+of its ground-band pixels within 1 m of naive `h/tan(depression)`.
 Consequences for anything consuming it: vehicles, people and vegetation are absent, so a ray aimed
 at one passes through and returns the ground behind (a distance *overestimate*, undetectable
 geometrically); a curb ramp sits ~0.15 m above the modelled road, so rays overshoot by ~0.5 m at

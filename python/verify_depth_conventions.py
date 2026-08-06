@@ -338,12 +338,13 @@ def check_frame_impact(payloads, panometa, labels):
 
 # ---------------------------------------------------------------- driver
 
-def main():
-    parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
-    parser.add_argument("--json", action="store_true",
-                        help="write data/depth-conventions-evidence.json")
-    args = parser.parse_args()
+def run_checks():
+    """Run all seven checks from the committed artifacts; return the results dict.
 
+    Split from ``main`` so the suite can re-derive the committed evidence in-process:
+    ``RUN_SLOW=1 pytest tests/test_depth_conventions.py`` compares this function's
+    return value against ``data/depth-conventions-evidence.json`` directly.
+    """
     from run_depth_validation import load_tiles_artifact, rgb_from_record
 
     payloads = load_payloads()
@@ -362,7 +363,7 @@ def main():
             cache[pid] = rgb_from_record(rec) if rec else None
         return cache[pid]
 
-    results = {
+    return {
         "A_decoder_orientation": check_decoder_orientation(payloads),
         "B_sv_image_x_frame": check_sv_image_x_frame(cleaned),
         "C_pano_x_vs_sv_image_x": check_pano_x_vs_sv_image_x(raw),
@@ -372,6 +373,15 @@ def main():
             os.path.join(DATA, "depth-validation-panos.csv.gz")),
         "G_frame_impact": check_frame_impact(payloads, panometa, pilot_labels),
     }
+
+
+def main():
+    parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
+    parser.add_argument("--json", action="store_true",
+                        help="write data/depth-conventions-evidence.json")
+    args = parser.parse_args()
+
+    results = run_checks()
 
     print(json.dumps(results, indent=2, sort_keys=True))
     print("\n" + "=" * 78)

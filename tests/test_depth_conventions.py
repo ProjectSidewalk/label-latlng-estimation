@@ -1,8 +1,12 @@
 """Layer 3 for issue #9's coordinate-convention findings: the conclusions, locked.
 
 Convention (mirrors test_depth_pilot_findings.py): these assert what
-``python/verify_depth_conventions.py`` measures against the committed artifacts, so a
-regression in the decoder, the frame helpers, or the artifacts turns the suite red.
+``python/verify_depth_conventions.py`` measured against the committed artifacts. The
+fast tests read the committed evidence JSON only, so on their own they turn red when a
+*regenerated* artifact changes a conclusion; a regression in the decoder or the frame
+helpers reaches them after rerunning the verify script -- or in-process through the
+RUN_SLOW=1 re-derivation test at the bottom of this file, which recomputes every check
+from committed bytes and compares dicts.
 
 The findings, and why each matters:
 
@@ -121,3 +125,25 @@ def test_frame_mismatch_is_small_at_the_median_but_has_a_tail(evidence):
     assert g["frac_within_1m"] > 0.75
     # ...but not always, and the tail is the part that matters for a refit.
     assert 0.02 < g["frac_beyond_3m"] < 0.20
+
+
+# ---------------------------------------------------------------- the evidence itself
+
+@pytest.mark.skipif(
+    os.environ.get("RUN_SLOW") != "1",
+    reason="re-derives every check from committed bytes (minutes); set RUN_SLOW=1",
+)
+def test_run_checks_reproduces_the_committed_evidence(evidence):
+    """The committed evidence JSON is exactly what the verify script computes today.
+
+    The bridge the fast locks above deliberately do not provide: they assert the
+    committed numbers, and this recomputes those numbers from the committed bytes, so
+    a silent regression in the decoder or the frame helpers cannot hide behind a stale
+    artifact.
+    """
+    import sys
+
+    sys.path.insert(0, os.path.join(ROOT, "python"))
+    from verify_depth_conventions import run_checks
+
+    assert run_checks() == evidence

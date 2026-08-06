@@ -1,10 +1,11 @@
 """Layer 3 for the issue #9 depth validation: the observed findings, locked.
 
 Convention (mirrors test_depth_pilot_findings.py): these assert what the 2026-08-06 run
-actually measured against the committed artifacts, so a regression in the decoder, the
-frame helpers, or the artifact build that changes a conclusion turns the suite red. They
-are statements about THIS committed fetch; a deliberate refetch updates them alongside
-the reports.
+actually measured against the committed artifacts. They read the committed summary
+only, so a regression in the decoder, the frame helpers, or the artifact build reaches
+them once `run_depth_validation.py build` regenerates the summary -- the build is
+offline and deterministic, so that rerun is always available. They are statements about
+THIS committed fetch; a deliberate refetch updates them alongside the reports.
 
 Headline findings (reports/2026-08-06-depth-validation.md):
 
@@ -80,7 +81,7 @@ def test_the_plane_set_is_a_manhattan_world(summary):
     t2 = summary["t2_what_it_is"]
     assert t2["payloads"] >= 400
     assert t2["tilt_pixel_share_oblique_15to75deg"] < 0.02
-    assert t2["tilt_pixel_share_horizontal_le10deg"] > 0.75
+    assert t2["tilt_pixel_share_horizontal_lt10deg"] > 0.75
     assert t2["tilt_pixel_share_vertical_ge80deg"] > 0.05
 
 

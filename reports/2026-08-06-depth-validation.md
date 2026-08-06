@@ -17,7 +17,7 @@ imagery, which arrives from a **different Google host** than the depth payload d
 |---|---|
 | **yes, authentic** | the model's skyline and walls land on the buildings in the imagery. The true frame beats the mirrored one on 41 of 53 panoramas, beats both vertical flips 52–1, and the pooled alignment sweep bottoms out at exactly zero offset. **No frame error in the 2020 client.** |
 | **0.85%** | of depth pixels sit on a surface tilted between 15° and 75°. There are no car roofs, no tree canopy, no pitched roofs, no driveway ramps. This is a **constructed model, not a measurement** |
-| **91%** | of ground-band pixels are within 1 m of naive `h/tan(depression)`. Under a Sidewalk label, the depth payload is very nearly flat earth |
+| **91%** | of the median panorama's ground-band pixels are within 1 m of naive `h/tan(depression)`. Under a Sidewalk label, the depth payload is very nearly flat earth |
 | **2 of 36** | adjudicated labels sit on or behind something the model does not contain — a moving car, a hedge — so the payload returns the ground *behind* it |
 | **2.7 m** | median disagreement between two captures of the same street about where a building wall is — against 0.12 m for the ground |
 
@@ -67,9 +67,11 @@ The **pooled column-offset sweep** minimises at exactly 0 columns. Individually 
 (15 of 53 panoramas put their own minimum precisely at zero), which is why the pooled curve is the
 statistic worth reading.
 
-Where this test has no power, it is reported as such rather than as a failure: 5 of the 60
-panoramas model nothing above the horizon, and on a bare suburban street every frame convention
-reproduces "ground below, empty above" equally well.
+Two exclusions, both reported rather than hidden. Where the test has no power it is not a failure:
+5 of the 60 panoramas model essentially nothing above the horizon (below the 2% structure
+threshold; one is exactly zero), and on a bare suburban street every frame convention reproduces
+"ground below, empty above" equally well. And on 2 of the remaining 55 the sky segmenter finds no
+certain-sky pixels in the imagery at all, which is why every paired statistic above runs on 53.
 
 **Conclusion: the payload really is this panorama's scene, and it sits in the raster's frame with
 no mirror, no flip and no rotation offset.** That closes a question the #4 pilot structurally could
@@ -79,16 +81,16 @@ One thing this does *not* close is how the client **indexes** that payload — a
 because `sv_image_x` turns out to live in a different frame from the raster. That is the subject of
 [the conventions note](2026-08-06-depth-coordinate-conventions.md), written alongside this report:
 `sv_image_x` is north-referenced while the raster and the payload are heading-centred, so anything
-placing a label on imagery must apply the panorama's yaw. Re-reading every label at the
-heading-centred column moves the median distance by 0.00 m and 85% by under 1 m — the flat-earth
-result in §3 explains why — but 6.6% move by more than 3 m. That open item wants a second reviewer
+placing a label on imagery must apply the panorama's yaw. Re-reading every label (the 837 pilot
+labels that survive cleaning) at the heading-centred column moves the median distance by 0.00 m
+and 85% by under 1 m — the flat-earth result in §3 explains why — but 6.6% move by more than 3 m. That open item wants a second reviewer
 before it is treated as settled, and it bears directly on #3.
 
 ## §3 · A model, not a measurement
 
 ![Fig 11 — what the product is](../figures/fig11-what-the-product-is.png)
 
-Across all 409 committed payloads (median 117 planes each), pixels sit on surfaces that are
+Across all 409 committed payloads (median 116 modelled planes each), pixels sit on surfaces that are
 horizontal (84.5% within 10° of flat) or vertical (13.7% within 10° of upright) and essentially
 nothing else: **0.85% fall in the whole 15°–75° band**. A photogrammetric reconstruction of a
 street cannot look like this. Car roofs, tree canopy, pitched roofs, driveway ramps and hillsides
@@ -99,9 +101,10 @@ Two corroborating structures:
 - **The sky mask has a physical edge at the horizon.** No-plane pixels run 100% at the zenith and
   fall below 1% within two rows of payload row 128 — exactly the horizon the frame convention
   predicts.
-- **The ground is nearly flat earth.** In the 6°–45° depression band, 91% of ground pixels lie
-  within 1 m of `h/tan(depression)`, at a median residual of 0.00 m. What departs from it is
-  mostly terrain relief (53% of the metre-plus deviations) and rays intercepting a facade (35%).
+- **The ground is nearly flat earth.** In the 6°–45° depression band, the median panorama has 91%
+  of its ground pixels within 1 m of `h/tan(depression)`, at a median residual of 0.00 m. What
+  departs from it is mostly terrain relief (a mean 53% of a panorama's metre-plus deviations) and
+  rays intercepting a facade (35%).
 
 This turns streetlevel's README note — *"appears to be a synthetic depth map created from
 elevation data and building footprints"* — from a plausible guess into a measurement. **John's
@@ -112,7 +115,7 @@ read of the data was right.**
 ![Fig 12 — label consequences](../figures/fig12-label-consequences.png)
 
 Of 166 labels on the sampled panoramas: 104 land on the dominant ground plane, 54 on another
-near-horizontal plane, 6 on a wall, 1 on sky. Median distance 7.7 m. And **85% are within 1 m of
+near-horizontal plane, 6 on a wall, 1 on an oblique surface, 1 on sky. Median distance 7.7 m. And **85% are within 1 m of
 what flat earth alone predicts** — so the 2021 estimator was largely fitting a relationship the
 payload had already reduced to trigonometry. That is the honest ceiling context for #3.
 
@@ -148,7 +151,7 @@ and 4.0 m away:
 
 | | agreement between captures |
 |---|---|
-| ground surface | median **0.12 m**, 90% of sampled points within 1 m |
+| ground surface | median **0.12 m**; the median pair has 90% of sampled points within 1 m |
 | building facades | median **2.7 m** apart, heavy-tailed |
 
 The ground number is close to free and should not be read as accuracy: an infinite flat plane is
@@ -204,6 +207,7 @@ python python/run_depth_validation.py build     # offline from committed bytes
 python python/run_depth_validation.py figures   # -> figures/fig9-12
 python python/run_depth_validation.py gallery   # -> figures/depth-overlay-gallery.html
 pytest                                          # contract + findings, locked to this run
+RUN_SLOW=1 pytest tests/test_depth_conventions.py   # re-derive the evidence in-process too
 ```
 
 `fetch` re-queries the live endpoints and is the only networked stage. With the cache deleted,

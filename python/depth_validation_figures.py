@@ -156,6 +156,10 @@ def cmd_figures(args):
     # ---- fig 10: the same claim, as statistics
     fig, axes = plt.subplots(1, 3, figsize=(13.4, 4.6))
 
+    # Two cohort panoramas have imagery in which the sky segmenter finds no certain
+    # sky at all; their violations are NaN, so every paired statistic runs on n_pairs.
+    n_pairs = int(cohort["viol_identity"].notna().sum())
+
     ax = axes[0]
     rivals = [("x_mirror", "mirrored in x"), ("rotate_180", "rotated 180°"),
               ("row_flip", "rows flipped")]
@@ -170,24 +174,45 @@ def cmd_figures(args):
     ax.set_yticks(range(len(rivals)), [label for _, label in rivals])
     ax.invert_yaxis()
     ax.set_xlabel("panoramas (blue = the true frame fits better)")
-    ax.set_title(f"paired against each wrong frame   n={len(cohort)}", loc="left")
+    ax.set_title(f"paired against each wrong frame   n={n_pairs}", loc="left")
     ax.grid(axis="y", visible=False)
 
     ax = axes[1]
     own = cohort["viol_identity"].dropna()
     null = cohort["viol_null_median"].dropna()
-    bins = np.linspace(0, max(float(null.quantile(0.95)), 0.05), 26)
-    ax.hist(own, bins=bins, color=C_TRUE, alpha=0.85, label="own panorama")
-    ax.hist(null, bins=bins, color=mf.MUTED, alpha=0.55, label="mismatched (median of 10)")
+    k = summary["t1_registration"]["permutation_null"]["k_per_pano"]
+    # Fold the tail into the last bin rather than dropping it: with explicit bin edges
+    # matplotlib silently discards out-of-range values, which would hide the worst
+    # own-panorama violations and overstate the separation from the null.
+    edge = max(float(null.quantile(0.95)), 0.05)
+    bins = np.linspace(0, edge, 26)
+    over_own = int((own > edge).sum())
+    over_null = int((null > edge).sum())
+    ax.hist(own.clip(upper=edge), bins=bins, color=C_TRUE, alpha=0.85, label="own panorama")
+    ax.hist(null.clip(upper=edge), bins=bins, color=mf.MUTED, alpha=0.55,
+            label=f"mismatched (median of ≤{k})")
     ax.axvline(float(own.median()), color=C_TRUE, lw=1.4)
     ax.axvline(float(null.median()), color=mf.MUTED, lw=1.4)
+    if over_own or over_null:
+        ax.text(
+            0.97, 0.58,
+            f"last bin folds in the tail:\n{over_own} own (max {own.max():.2f})\n"
+            f"and {over_null} mismatched\nbeyond the axis",
+            transform=ax.transAxes, ha="right", va="top", fontsize=7.8,
+            color=mf.SECONDARY,
+        )
     ax.set_xlabel("sky violation (model covering open sky)")
     ax.set_ylabel("panoramas")
     ax.legend(loc="upper right")
     ax.set_title("against a permutation null", loc="left")
 
     ax = axes[2]
-    ids = [p for p in cohort["pano_id"] if p in sweeps]
+    # Same exclusion as the pooled summary: an empty sky mask sweeps to an all-NaN
+    # curve, which contributes nothing to the mean but would inflate the label's n.
+    ids = [
+        p for p in cohort["pano_id"]
+        if p in sweeps and any(v is not None for v in sweeps[p][1])
+    ]
     shifts = np.array(sweeps[ids[0]][0], dtype=float)
     stack = np.array(
         [[np.nan if v is None else v for v in sweeps[p][1]] for p in ids], dtype=float
@@ -210,8 +235,9 @@ def cmd_figures(args):
         "Sky violation is the fraction of certainly-sky pixels the model covers with a surface — one-sided on purpose, "
         "because the model's no-plane region is a superset of the sky (it omits trees, poles and wires, so counting the "
         "reverse direction would penalise the correct frame for the model's blindness to foliage). Restricted to the "
-        f"{len(cohort)} panoramas whose model puts something above the horizon; on a bare suburban street every frame "
-        "convention reproduces 'ground below, nothing above' equally well and the test has no power.",
+        f"{len(cohort)} panoramas whose model covers at least 2% of the view above the horizon — on a bare suburban "
+        "street every frame convention reproduces 'ground below, nothing above' equally well and the test has no power. "
+        f"{len(cohort) - n_pairs} of those have imagery with no certain sky at all, leaving {n_pairs} scoreable pairs.",
         wrap=124,
     )
     fig.subplots_adjust(top=0.66, wspace=0.42)
@@ -220,6 +246,7 @@ def cmd_figures(args):
     # ---- fig 11: what the product actually is
     tilt = np.zeros(90)
     fe_rows = []
+    n_payloads = 0
     pilot = pd.read_csv(os.path.join(args.data_dir, "depth-pilot-panos.csv.gz"))
     heights = (
         pilot.dropna(subset=["ground_height_m"])
@@ -232,6 +259,7 @@ def cmd_figures(args):
             rec = json.loads(line)
             payload = gd.decode_depth_payload(rec["depth_b64"])
             tilt += dv.tilt_histogram(payload)
+            n_payloads += 1
             height = heights.get(rec["pano_id"], float("nan"))
             if np.isfinite(height):
                 fe_rows.append(dv.flat_earth_comparison(payload, height).__dict__)
@@ -255,7 +283,7 @@ def cmd_figures(args):
     )
     ax.set_xlabel("tilt of the surface a pixel sits on")
     ax.set_ylabel("share of pixels (log)")
-    ax.set_title("409 payloads: a Manhattan world", loc="left")
+    ax.set_title(f"{n_payloads} payloads: a Manhattan world", loc="left")
 
     ax = axes[1]
     d = np.sort(fe["frac_within_1m"].to_numpy())
@@ -275,8 +303,8 @@ def cmd_figures(args):
     mf._title(
         fig,
         "GSV depth is a constructed model, not a measurement — and under a Sidewalk label it is very nearly flat earth",
-        "Left: pixel-weighted distribution of the tilt of the plane each pixel belongs to, pooled over all 409 committed "
-        "payloads. Surfaces are horizontal or vertical and almost nothing in between, which no photogrammetric "
+        f"Left: pixel-weighted distribution of the tilt of the plane each pixel belongs to, pooled over all {n_payloads} "
+        "committed payloads. Surfaces are horizontal or vertical and almost nothing in between, which no photogrammetric "
         "reconstruction of a street produces — it corroborates streetlevel's note that the product is synthesised from "
         "elevation data and building footprints. Right: how much of each panorama's ground band the naive flat-earth "
         "formula already predicts to within a metre.",
@@ -308,9 +336,10 @@ def cmd_figures(args):
     ax.axvline(0, color=mf.BASELINE, lw=1.0)
     ax.set_xlabel("depth distance minus flat-earth distance (m)")
     ax.set_ylabel("labels")
-    ax.set_title(
-        f"{(excess.abs() < 1).mean() * 100:.0f}% of labels within 1 m of flat earth", loc="left"
-    )
+    # Denominator is every cleaned label, a NaN excess (a sky hit) counting as not
+    # within 1 m -- the same convention as the summary's frac_labels_within_1m.
+    frac_within = float((lab["flat_earth_excess_m"].abs() < 1).mean())
+    ax.set_title(f"{frac_within * 100:.0f}% of labels within 1 m of flat earth", loc="left")
 
     ax = axes[2]
     ground = cross["median_residual_m"].dropna()
@@ -518,37 +547,42 @@ def cmd_gallery(args):
         yaw = yaw_by_pano.get(pid)
         rows_here = by_pano.get(pid, pd.DataFrame()) if yaw is not None else pd.DataFrame()
         for _, row in rows_here.iterrows():
+            if not row["in_cleaned"]:
+                continue  # fig 12 and the report exclude these; the gallery matches
             x, y = dv.label_pixel_in_image(
                 row["sv_image_x"], row["sv_image_y"], width, height, yaw
             )
             dist = row["horizontal_m"]
+            dist_txt = f"{dist:.1f} m" if np.isfinite(dist) else "no surface"
             markers.append(
                 f'<g><circle cx="{x}" cy="{y}" r="9" fill="none" stroke="#111" '
                 f'stroke-width="4"/><circle cx="{x}" cy="{y}" r="9" fill="none" '
                 f'stroke="#ffd400" stroke-width="2"/>'
                 f'<text x="{x + 13}" y="{y + 4}" font-size="13" fill="#ffd400" '
                 f'stroke="#111" stroke-width="3.5" paint-order="stroke">'
-                f'{row["label_type"]} · {dist:.1f} m</text></g>'
+                f'{row["label_type"]} · {dist_txt}</text></g>'
             )
         marker_layer = f'<g class="labels">{"".join(markers)}</g>' if markers else ""
 
         # Compass strip. The projection is the one thing a reader cannot check by eye,
-        # so state it on the image: equirect column 0 is true bearing 0, and the ring
-        # for a label sits at its own compass bearing. Verified against 395,147 labels
-        # (depth-derived bearing tracks the recorded POV heading to a few degrees) and
-        # against 17 panoramas whose heading is more than 90 deg off 180, where a
-        # heading-centred convention would displace the depth by a third of the image.
+        # so state it on the image. The raster is heading-centred -- column 0 is true
+        # bearing yaw - 180, with the drive direction at image centre -- so a tick for
+        # compass bearing b lands at ((b - yaw + 180) / 360) x width, and a label's
+        # ring sits at its own compass bearing. Placing ticks north-referenced
+        # (b / 360 x width) would displace them by up to half a panorama; see
+        # depth_validation.label_pixel_in_image and the conventions report.
         ticks = []
-        for deg in range(0, 360, 45):
-            tx = (((deg - (yaw_by_pano.get(pid) or 180.0) + 180.0) % 360.0) / 360.0) * width
-            name = ["N", "NE", "E", "SE", "S", "SW", "W", "NW"][deg // 45]
-            ticks.append(
-                f'<line x1="{tx:.0f}" y1="0" x2="{tx:.0f}" y2="{height * 0.028:.0f}" '
-                f'stroke="#fff" stroke-width="2" stroke-opacity="0.85"/>'
-                f'<text x="{tx + 6:.0f}" y="{height * 0.032:.0f}" font-size="{height * 0.026:.0f}" '
-                f'fill="#fff" stroke="#111" stroke-width="2.5" paint-order="stroke">{name}</text>'
-            )
-        compass = f'<g class="compass">{"".join(ticks)}</g>'
+        if yaw is not None:
+            for deg in range(0, 360, 45):
+                tx = (((deg - yaw + 180.0) % 360.0) / 360.0) * width
+                name = ["N", "NE", "E", "SE", "S", "SW", "W", "NW"][deg // 45]
+                ticks.append(
+                    f'<line x1="{tx:.0f}" y1="0" x2="{tx:.0f}" y2="{height * 0.028:.0f}" '
+                    f'stroke="#fff" stroke-width="2" stroke-opacity="0.85"/>'
+                    f'<text x="{tx + 6:.0f}" y="{height * 0.032:.0f}" font-size="{height * 0.026:.0f}" '
+                    f'fill="#fff" stroke="#111" stroke-width="2.5" paint-order="stroke">{name}</text>'
+                )
+        compass = f'<g class="compass">{"".join(ticks)}</g>' if ticks else ""
 
         info = meta.loc[pid] if pid in meta.index else None
         city = (info["city"] if info is not None and pd.notna(info.get("city")) else "—")
@@ -570,6 +604,8 @@ def cmd_gallery(args):
 
     t1 = summary["t1_registration"]
     mirror_test = t1["paired_sign_test"]["x_mirror"]
+    n_pairs = (mirror_test["identity_better"] + mirror_test["rival_better"]
+               + mirror_test["ties"])
     body = f"""<div class="wrap">
 <h1>Does GSV depth describe the scene it claims to?</h1>
 <p class="lede">Every panorama below is Google's own imagery, from the Street View tile server.
@@ -587,7 +623,8 @@ Sidewalk labels, with the distance the depth payload returns for each.</p>
   <span><i class="swatch" style="background:#2a78d6"></i>where the model ends (its skyline)</span>
   <span><i class="swatch" style="background:#2a78d6;opacity:.35"></i>modelled wall</span>
   <span><i class="swatch ring"></i>Sidewalk label, with depth distance</span>
-  <span style="color:var(--muted)">column 0 is true north; a label sits at its own compass bearing</span>
+  <span style="color:var(--muted)">the raster is heading-centred (drive direction at image centre);
+  compass ticks and label rings sit at true bearings</span>
 </div>
 <div class="controls">
   <button data-k="skyline">Skyline</button>
@@ -596,8 +633,9 @@ Sidewalk labels, with the distance the depth payload returns for each.</p>
   <button data-k="compass">Compass</button>
   <button data-k="mirror">Mirror the depth map</button>
   <span class="note">{t1['panos_with_structure']} of {t1['panos_with_imagery']} panoramas model
-  enough above the horizon to test. The true frame fits better on {mirror_test['identity_better']}
-  of them, the mirror on {mirror_test['rival_better']}.</span>
+  enough above the horizon to test. Of the {n_pairs} whose imagery yields a sky mask, the true
+  frame fits better on {mirror_test['identity_better']}, the mirror on
+  {mirror_test['rival_better']}.</span>
 </div>
 {"".join(figures)}
 </div>
