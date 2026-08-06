@@ -1,0 +1,71 @@
+{
+  "A_decoder_orientation": {
+    "agree_after_mirroring_within_10cm": 409,
+    "agree_after_mirroring_within_1mm": 401,
+    "asis_median_max_diff_m": 74.961,
+    "asis_worst_max_diff_m": 881.976,
+    "mirrored_median_max_diff_m": 1.508e-05,
+    "mirrored_worst_max_diff_m": 0.05525,
+    "payloads": 409
+  },
+  "B_sv_image_x_frame": {
+    "A_sv_image_x_is_compass_bearing": {
+      "iqr": [
+        -14.74,
+        13.91
+      ],
+      "median": -0.32,
+      "std": 20.4,
+      "within_60deg_frac": 0.9999
+    },
+    "B_sv_image_x_is_heading_relative": {
+      "iqr": [
+        -88.34,
+        92.04
+      ],
+      "median": 1.11,
+      "std": 104.58,
+      "within_60deg_frac": 0.3175
+    },
+    "bearing_vs_sv_image_x_median_deg": 1.057,
+    "labels": 395147,
+    "verdict": "A"
+  },
+  "C_pano_x_vs_sv_image_x": {
+    "correlation_with_yaw_offset": 0.9543,
+    "median_residual_deg": -0.04,
+    "rows": 195556
+  },
+  "D_raster_frame": {
+    "A_better_on": 20,
+    "A_north_referenced_roadness": 0.8733,
+    "B_better_on": 49,
+    "B_heading_centred_roadness": 0.9435,
+    "links": 85,
+    "verdict": "B"
+  },
+  "E_payload_frame": {
+    "A_exceeds_pano_median": 433,
+    "A_median_range_m": 14.84,
+    "B_exceeds_pano_median": 550,
+    "B_median_range_m": 15.71,
+    "links": 655,
+    "pano_median_range_m": 13.54,
+    "verdict": "B"
+  },
+  "F_registration": {
+    "mirrored_better_on": 10,
+    "mirrored_median_violation": 0.0236,
+    "panoramas": 53,
+    "payload_order_better_on": 41,
+    "payload_order_median_violation": 0.0061
+  },
+  "G_frame_impact": {
+    "frac_beyond_3m": 0.0657,
+    "frac_within_1m": 0.853,
+    "labels": 837,
+    "median_shift_m": 0.0,
+    "p90_shift_m": 1.987,
+    "p95_shift_m": 4.107
+  }
+}

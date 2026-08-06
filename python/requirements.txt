@@ -1,7 +1,9 @@
 numpy>=1.26
 pandas>=2.1
 pyproj>=3.6
+scipy>=1.11   # sky masks in python/depth_validation.py (issue #9 build/figures/gallery)
 statsmodels>=0.14
 pytest>=8
-matplotlib>=3.8   # python/make_figures.py only
-streetlevel==0.12.10   # python/run_depth_pilot.py only (issue #4); 0.12.4 is broken against Google's current metadata endpoint
+matplotlib>=3.8   # figure scripts: python/make_figures.py, python/depth_validation_figures.py
+pillow>=10   # tile stitching and the overlay gallery (issue #9); also pulled in by matplotlib
+streetlevel==0.12.10   # depth fetch + photometa parsing (issues #4/#9); 0.12.4 is broken against Google's current metadata endpoint

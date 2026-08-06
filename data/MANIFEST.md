@@ -109,3 +109,46 @@ make the pilot's entire analysis reproducible offline forever.
 the findings tests and the report — a refetch observes a *different* GSV state, so drift in the
 numbers is expected, not an error). `build` alone is deterministic: re-running it against the
 gitignored `data/depth-pilot-cache/` reproduces these files byte-for-byte.
+
+---
+
+# Depth-validation artifacts (issue #9)
+
+The `depth-validation-*` files are the committed evidence of the 2026-08-06 depth validation
+([issue #9](https://github.com/ProjectSidewalk/label-latlng-estimation/issues/9); reports:
+`reports/2026-08-06-depth-validation.md` and `reports/2026-08-06-depth-coordinate-conventions.md`).
+They exist so the conclusions can be re-derived rather than trusted: `fetch` is the only networked
+stage, and `build` / `figures` / `gallery` / `verify_depth_conventions.py` all replay these bytes
+with the cache deleted and no network at all.
+
+- `depth-validation-tiles.jsonl.gz` — **the replication artifact.** One line per panorama-zoom
+  record: pano id, set (`scoring` 60 panos / `adjudication` 24), zoom index, pixel dimensions, tile
+  grid, and the **verbatim JPEG bytes of each tile as Google served them**, base64-encoded. Not a
+  re-encode, so a refetch can be diffed against it and the stitch is deterministic
+  (`depth_validation.stitch_tiles`). Same principle as `depth-pilot-payloads.jsonl.gz`: an overlay
+  result nobody can regenerate is not evidence.
+- `depth-validation-panometa.csv.gz` — per-panorama yaw, pitch, roll and road-link bearings for all
+  409 panoramas that served depth. Small but load-bearing: the yaw is required to place a label on
+  the raster at all, and the link bearings are the external reference that identifies which frame
+  the raster is in.
+- `depth-validation-panos.csv.gz` — per panorama: registration scores under each frame control, the
+  permutation-null summary, the column-sweep minimum, plane inventory, flat-earth comparison, and
+  the `structure_fraction` that says whether the panorama can testify about registration at all.
+- `depth-validation-labels.csv.gz` — per label: which surface its pixel lands on, range, height
+  above ground, the flat-earth counterfactual, and the curb-height bias estimate.
+- `depth-validation-crossvintage.csv.gz` — 29 panoramas paired with a historical capture of the
+  same location (median 11 years apart): ground-surface residuals and facade plane offsets.
+- `depth-validation-partners.jsonl.gz` — the historical partners' depth payloads, verbatim.
+- `depth-validation-sweeps.json.gz` — the per-panorama column-offset sweep curves.
+- `depth-validation-adjudication.json` — the hand occlusion verdicts. A recorded human judgement,
+  not a computation: occlusion is geometrically undetectable, because an unmodelled car returns
+  exactly the range flat earth predicts. Carries a `_correction` field; an earlier pass was wrong
+  for the coordinate-frame reason set out in the conventions report.
+- `depth-validation-summary.json` — the headline numbers, asserted by
+  `tests/test_depth_validation_findings.py`.
+- `depth-conventions-evidence.json` — output of `python/verify_depth_conventions.py`, asserted by
+  `tests/test_depth_conventions.py`.
+
+**Regenerate by intent only**: `python python/run_depth_validation.py fetch` then `build`. A refetch
+observes a different GSV state, so drift in the numbers is expected rather than an error; update the
+findings tests and the reports alongside it.
