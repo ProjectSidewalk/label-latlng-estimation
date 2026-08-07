@@ -573,6 +573,38 @@ def test_noise_sweep_is_deterministic_and_degrades_with_sigma(pipeline):
         assert abs(rung["2.0"]["delta_median_m"]) < 0.2, key  # 2 px is a centimetre effect
 
 
+def test_extra_predictors_cannot_move_the_existing_rungs(pipeline):
+    """#6's GBM benchmark is scored on these exact perturbed clicks by handing predictors to
+    this sweep instead of copying it (the copy had already drifted: hardcoded 720/480 where
+    this one takes CANVAS_W/H). That only buys anything if adding a predictor consumes the
+    rng identically — so the shared rungs must come back bit-identical, and the added row
+    must really be the caller's function evaluated on the perturbed frames."""
+    _, train, test, models = pipeline
+    small = test.iloc[:4000]
+    fits = {"anchor": dr.fit_anchor(), "C_l1": dr.fit_cotangent(train, "l1")}
+    kw = dict(keys=["anchor", "C_l1"], sigmas=(2.0, 20.0), n_draws=1)
+
+    plain = dr.noise_sweep(fits, models, train, small, **kw)
+    seen = []
+
+    def spy(frame):
+        seen.append(frame["canvas_y"].to_numpy(float).copy())
+        return dr.predict_dist(fits["C_l1"], frame)
+
+    with_extra = dr.noise_sweep(fits, models, train, small,
+                                extra_predictors={"clone": spy}, **kw)
+
+    assert with_extra["per_rung"]["anchor"] == plain["per_rung"]["anchor"]
+    assert with_extra["per_rung"]["C_l1"] == plain["per_rung"]["C_l1"]
+    assert with_extra["baseline_median_m"]["anchor"] == plain["baseline_median_m"]["anchor"]
+    # the extra predictor is a clone of C_l1, so its whole row must match C_l1's
+    assert with_extra["per_rung"]["clone"] == plain["per_rung"]["C_l1"]
+    assert with_extra["baseline_median_m"]["clone"] == plain["baseline_median_m"]["C_l1"]
+    # and it really was called on the perturbed frames, not on the unperturbed test rows
+    assert len(seen) == 1 + len(kw["sigmas"]) * kw["n_draws"]
+    assert not np.array_equal(seen[0], seen[1])
+
+
 def test_chosen_family_saturates_interior_on_the_real_split(pipeline):
     """On the real data — the claim the report actually makes — the D family's shape
     hyper-parameter is a genuine interior optimum, and the resulting form is bounded well

@@ -6,8 +6,9 @@ Usage (from the repo root):
 
 LightGBM on the published train split, scored on the published test split — identical rows,
 cleaning, scoring geometry (turf-style spherical destination), error definition, and
-click-noise-sweep design as python/run_distance_refit.py, all reused by import rather than
-copied. The GBM predicts DISTANCE only (that is what #6 bounds) and is paired with the same
+click-noise sweep as python/run_distance_refit.py, all reused by import rather than copied
+(the sweep included: distance_refit.noise_sweep takes the GBMs as extra predictors, so the
+A/D rows match the committed #3 summary structurally, not by hand-syncing two copies). The GBM predicts DISTANCE only (that is what #6 bounds) and is paired with the same
 heading half as every #3 rung (exact POV inversion + the one era constant), so its lat/lng
 numbers sit directly alongside the #3 Stage-2 matrix. The A_ols and D_blend_type_l1 baselines
 are refit in-process and asserted equal to data/distance-refit-summary.json, which locks the
@@ -37,6 +38,7 @@ import os
 import sys
 import time
 
+import lightgbm as lgb
 import numpy as np
 import pandas as pd
 
@@ -107,8 +109,6 @@ def fit_gbm(train: pd.DataFrame, cols: list[str], objective: str = "regression_l
     then refit on the full train split for exactly best_iteration rounds. The test split is
     never touched. objective regression_l1 aligns the fit with the published median metric
     (the ladder's l1 column); regression_l2 is the ols analogue."""
-    import lightgbm as lgb
-
     X = build_features(train, cols)
     y = train["pano_dist"].to_numpy(float)
     params = {**LGB_PARAMS, "objective": objective,
@@ -167,12 +167,15 @@ def score_models(gbms: dict, fits: dict, train: pd.DataFrame, test: pd.DataFrame
 
 
 def metrics(scored: pd.DataFrame, key: str) -> dict:
+    """distance_refit._metrics' convention, including its notna guard: n counts the rows that
+    actually scored, so a silent NaN cannot inflate the denominator while the median skips it."""
     err, derr = scored[f"error_{key}"], scored[f"dist_error_{key}"]
-    return {"n": int(len(err)),
-            "latlng_median_m": float(err.median()),
-            "latlng_p90_m": float(err.quantile(0.9)),
-            "dist_median_m": float(derr.median()),
-            "dist_p90_m": float(derr.quantile(0.9))}
+    ok = err.notna()
+    return {"n": int(ok.sum()),
+            "latlng_median_m": float(err[ok].median()),
+            "latlng_p90_m": float(err[ok].quantile(0.9)),
+            "dist_median_m": float(derr[ok].median()),
+            "dist_p90_m": float(derr[ok].quantile(0.9))}
 
 
 DIST_BIN_EDGES = [0.0, 2.0, 5.0, 10.0, 15.0, 20.0, 30.0, 50.0]
@@ -189,60 +192,23 @@ def error_vs_distance(scored: pd.DataFrame, keys: list[str]) -> list[dict]:
     return rows
 
 
-def noise_sweep(gbms: dict, fits: dict, train: pd.DataFrame, test: pd.DataFrame,
-                gbm_keys: list[str], fit_keys: list[str],
-                sigmas=(2.0, 5.0, 10.0), n_draws: int = 5, seed: int = SEED) -> dict:
-    """Byte-identical mirror of distance_refit.noise_sweep (same rng recipe: default_rng(666),
-    sigma-major, two normal draws per inner draw), extended to GBM predictors. Because the
-    perturbed clicks are the exact ones the #3 sweep scored, the recomputed A/D rows must
-    equal data/distance-refit-summary.json — asserted by the findings tests — and the GBM
-    rows are directly comparable. Perturbation re-derives every click-dependent feature:
-    canvas_x/y, depression via the exact projection, sv_image_y via the fixed-frame px/deg
-    scale (and sv_norm downstream of it). The heading half stays unperturbed, isolating the
-    distance half's noise response, exactly as in #3."""
-    keys = fit_keys + gbm_keys
-    heading_pred, _ = dr.heading_for_scoring(train, test)
-    rng = np.random.default_rng(seed)
-    n = len(test)
-    _, pitch0 = pov_if_centered(test["canvas_x"], test["canvas_y"],
-                                test["heading"], test["pitch"], test["zoom"])
+def noise_sweep(gbms: dict, fits: dict, models: dict, train: pd.DataFrame, test: pd.DataFrame,
+                gbm_keys: list[str], fit_keys: list[str], seed: int = SEED) -> dict:
+    """#3's sweep itself, with the GBMs handed in as extra predictors — not a copy of it.
 
-    def errors(frame: pd.DataFrame) -> dict:
-        res = {}
-        for k in keys:
-            d = (dr.predict_dist(fits[k], frame) if k in fits
-                 else predict_gbm(gbms[k], frame))
-            lng_e, lat_e = spherical_dest(frame["pano_lng"], frame["pano_lat"],
-                                          frame["heading"].to_numpy(float) + heading_pred, d)
-            e = haversine_m(frame["lng"], frame["lat"], lng_e, lat_e)
-            res[k] = (float(np.median(e)), float(np.quantile(e, 0.9)))
-        return res
-
-    base = errors(test)
-    out = {"sigmas_px": list(sigmas), "n_draws": n_draws, "seed": seed,
-           "baseline_median_m": {k: base[k][0] for k in keys},
-           "per_model": {k: {} for k in keys}}
-    for sigma in sigmas:
-        acc = {k: np.zeros(2) for k in keys}
-        for _ in range(n_draws):
-            frame = test.copy()
-            frame["canvas_x"] = np.clip(test["canvas_x"].to_numpy(float)
-                                        + rng.normal(0, sigma, n), 0, 720)
-            frame["canvas_y"] = np.clip(test["canvas_y"].to_numpy(float)
-                                        + rng.normal(0, sigma, n), 0, 480)
-            _, pitch_p = pov_if_centered(frame["canvas_x"], frame["canvas_y"],
-                                         frame["heading"], frame["pitch"], frame["zoom"])
-            frame["depression_deg"] = -pitch_p
-            frame["sv_image_y"] = (test["sv_image_y"].to_numpy(float)
-                                   + (pitch_p - pitch0) * dr.SV_PX_PER_DEG)
-            e = errors(frame)
-            for k in keys:
-                acc[k] += np.array(e[k])
-        for k in keys:
-            med, p90 = acc[k] / n_draws
-            out["per_model"][k][str(sigma)] = {"delta_median_m": med - base[k][0],
-                                               "delta_p90_m": p90 - base[k][1]}
-    return out
+    ``distance_refit.noise_sweep`` owns the perturbation design (Gaussian click noise on
+    canvas_x/y, every click-dependent input re-derived: depression via the exact projection,
+    sv_image_y via the fixed-frame px/deg scale, and sv_norm downstream of that; heading half
+    unperturbed) and the rng recipe. Calling it rather than mirroring it is what makes the
+    A/D rows equal data/distance-refit-summary.json *structurally* — a findings test still
+    checks the equality, but it can no longer be broken by the two implementations drifting.
+    Only the output is renamed (``per_rung`` -> ``per_model``) to match this summary's schema.
+    """
+    extra = {k: (lambda frame, m=gbms[k]: predict_gbm(m, frame)) for k in gbm_keys}
+    sweep = dr.noise_sweep(fits, models, train, test, keys=list(fit_keys),
+                           seed=seed, extra_predictors=extra)
+    return {"sigmas_px": sweep["sigmas_px"], "n_draws": sweep["n_draws"], "seed": seed,
+            "baseline_median_m": sweep["baseline_median_m"], "per_model": sweep["per_rung"]}
 
 
 # ------------------------------------------------------------------------------------ main
@@ -258,8 +224,6 @@ def main() -> None:
 
     def step(msg: str) -> None:
         print(f"[{time.time() - t0:6.1f}s] {msg}", flush=True)
-
-    import lightgbm as lgb
 
     step("loading and cleaning (the exact 2021 pipeline)...")
     cleaned, _ = clean_data(load_data(args.data_dir))
@@ -309,8 +273,8 @@ def main() -> None:
     evd_keys = ["A_ols", "D_blend_type_l1", "gbm_l1", "gbm_dep_l1"]
     evd = error_vs_distance(scored, evd_keys)
 
-    step("click-noise sweep (same draws as #3)...")
-    noise = noise_sweep(gbms, fits, train, test,
+    step("click-noise sweep (#3's own sweep, GBMs handed in as extra predictors)...")
+    noise = noise_sweep(gbms, fits, models, train, test,
                         gbm_keys=["gbm_l1", "gbm_dep_l1"],
                         fit_keys=["A_ols", "D_blend_type_l1"])
 
@@ -345,8 +309,13 @@ def main() -> None:
         "gbm_best_latlng_median_m": gbm_med,
         "d_over_gbm_gap_pct": 100.0 * (d_med / gbm_med - 1.0),
         "a_over_gbm_gap_pct": 100.0 * (matrix["A_ols"]["latlng_median_m"] / gbm_med - 1.0),
-        "note": "best-of-variants on test — an upper bound on the achievable ceiling, which "
-                "is the conservative direction for bounding the closed form's regret",
+        "note": "best-of-variants ON TEST, so the quoted ceiling is optimistic and D's regret "
+                "is an UPPER bound — the anti-conservative direction for this report's own "
+                "'the gap is large' conclusion, which is why it is stated rather than buried. "
+                "d_over_gbm_gap_pct_by_variant shows what the selection is worth: the answer "
+                "to #6 is the same under every variant, including the one that loses",
+        "d_over_gbm_gap_pct_by_variant": {
+            k: 100.0 * (d_med / matrix[k]["latlng_median_m"] - 1.0) for k in gbm_keys},
     }
 
     summary = {

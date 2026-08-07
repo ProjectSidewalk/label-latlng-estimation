@@ -72,9 +72,10 @@ The harness is `run_distance_refit.py`'s, reused by import, not copied:
 - **Comparability is asserted, not assumed**: the runner refits A (status quo) and blend D
   in-process and requires them to equal `data/distance-refit-summary.json` to float precision
   before anything is written; the findings tests re-check that from the committed artifacts.
-  The click-noise sweep replays the *same seeded draws* as #3's (same rng recipe), verified the
-  same way — the A/D deltas reproduce exactly, so the GBM rows are scored on the identical
-  perturbed clicks.
+  The click-noise sweep is not a mirror of #3's — it *is* #3's, called with the GBMs handed in
+  as extra predictors, so the A/D deltas reproduce exactly by construction rather than by two
+  implementations staying in step. (A findings test still checks the equality; it can now only
+  fail for a real reason.)
 
 ## §4 · The benchmark
 
@@ -90,10 +91,17 @@ median (0.538 vs 0.596), same story as the ladder's L1 column.
 Determinism and honesty: fixed seed 666 everywhere, `deterministic=true`,
 `force_row_wise=true`, no bagging or feature subsampling; early stopping uses a seeded 90/10
 carve of the **train** split only, then the booster is refit on the full train split for
-exactly the stopped round count — the test split is never consulted during fitting. The
-"ceiling" quoted is the best of the three main variants *on test*, which slightly overstates
-the ceiling — the conservative direction for bounding the closed form's regret (it can only
-make D look worse, and D still loses by 74%).
+exactly the stopped round count — the test split is never consulted during fitting.
+
+One caveat stated plainly rather than buried: the "ceiling" quoted is the best of the three
+main variants *on test*, so it is optimistic and D's 74% is an **upper** bound on its regret —
+the anti-conservative direction for this report's own "the gap is large" conclusion. It does
+not carry the result. `d_over_gbm_gap_pct_by_variant` publishes what the selection is worth:
+D is +74.1% over `gbm_dep_l1`, +73.6% over `gbm_l1` (they are 1.6 mm apart), and still **+56.5%
+over `gbm_l2`**, the variant that loses. The answer to #6 — "not within 10–15%" — is the same
+under every one. Note also that `drop_heading_pitch` scores 0.5346 on test, better than any of
+the three; that is exactly what selecting on test looks like, and why the ablation rows are
+reported as ablations and never as the ceiling.
 
 ## §5 · The matrix, and the answer to the ceiling question
 

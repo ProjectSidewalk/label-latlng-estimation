@@ -75,9 +75,9 @@ def test_baselines_lock_to_the_refit_summary(summary, refit):
 
 
 def test_noise_sweep_uses_the_same_draws_as_number_3(summary, refit):
-    """The sweep mirrors distance_refit.noise_sweep's rng recipe (seed 666, sigma-major,
-    two draws per repetition), so the recomputed A/D deltas must equal the committed #3
-    sweep exactly — which locks the GBM rows to the identical perturbed clicks."""
+    """The GBM runner calls distance_refit.noise_sweep rather than mirroring it, so the
+    recomputed A/D deltas must equal the committed #3 sweep exactly — which locks the GBM
+    rows to the identical perturbed clicks."""
     ns, ref = summary["noise_sweep"], refit["noise_sweep"]
     assert ns["sigmas_px"] == ref["sigmas_px"]
     assert ns["n_draws"] == ref["n_draws"]
@@ -85,6 +85,17 @@ def test_noise_sweep_uses_the_same_draws_as_number_3(summary, refit):
         for s in ("2.0", "5.0", "10.0"):
             assert ns["per_model"][key][s]["delta_median_m"] == pytest.approx(
                 ref["per_rung"][key][s]["delta_median_m"], rel=1e-12), (key, s)
+
+
+def test_the_gbm_rows_share_the_a_and_d_baselines(summary):
+    """One sweep, one set of perturbed clicks: the unperturbed baselines the GBM deltas are
+    measured against are the same objects the matrix reports, for every model in the sweep.
+    (The invariant that adding predictors cannot move the #3 rows is proved directly in
+    tests/test_distance_refit_contract.py.)"""
+    base = summary["noise_sweep"]["baseline_median_m"]
+    for key in ("A_ols", D, "gbm_l1", "gbm_dep_l1"):
+        assert base[key] == pytest.approx(
+            summary["matrix"][key]["latlng_median_m"], rel=1e-12), key
 
 
 def test_deterministic_benchmark_config(summary):
@@ -125,6 +136,18 @@ def test_the_ceiling_question_answered_no(summary):
     assert c["d_over_gbm_gap_pct"] == pytest.approx(74.1, abs=1.5)
     assert c["d_over_gbm_gap_pct"] > 15.0
     assert c["a_over_gbm_gap_pct"] == pytest.approx(169.2, abs=2.5)
+
+
+def test_the_answer_does_not_depend_on_selecting_the_ceiling_on_test(summary):
+    """The ceiling is best-of-variants on test, which flatters the gap. Every variant —
+    including gbm_l2, the one that loses — still leaves D far outside the 10-15% band, so
+    the selection is a caveat on the exact percentage, not on the answer."""
+    by_variant = summary["ceiling"]["d_over_gbm_gap_pct_by_variant"]
+    assert set(by_variant) == {"gbm_l1", "gbm_l2", "gbm_dep_l1"}
+    assert min(by_variant.values()) > 50.0, by_variant
+    assert by_variant["gbm_l2"] == pytest.approx(56.5, abs=1.5)
+    # and the two L1 variants are millimetres apart, so which one wins is immaterial
+    assert abs(by_variant["gbm_l1"] - by_variant["gbm_dep_l1"]) < 1.0
 
 
 def test_but_the_gap_is_not_one_dimensional(summary):

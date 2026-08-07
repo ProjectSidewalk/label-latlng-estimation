@@ -509,6 +509,11 @@
     "gbm_best_latlng_median_m": 0.5362405524856299,
     "d_over_gbm_gap_pct": 74.08538982549402,
     "a_over_gbm_gap_pct": 169.24417516351525,
-    "note": "best-of-variants on test \u2014 an upper bound on the achievable ceiling, which is the conservative direction for bounding the closed form's regret"
+    "note": "best-of-variants ON TEST, so the quoted ceiling is optimistic and D's regret is an UPPER bound \u2014 the anti-conservative direction for this report's own 'the gap is large' conclusion, which is why it is stated rather than buried. d_over_gbm_gap_pct_by_variant shows what the selection is worth: the answer to #6 is the same under every variant, including the one that loses",
+    "d_over_gbm_gap_pct_by_variant": {
+      "gbm_l1": 73.58809340033412,
+      "gbm_l2": 56.5298976273565,
+      "gbm_dep_l1": 74.08538982549402
+    }
   }
 }

@@ -26,7 +26,7 @@ after it was withdrawn ([SidewalkWebpage#2374](https://github.com/ProjectSidewal
 pip install -r python/requirements.txt
 python python/run_analysis.py        # seven-estimator comparison + coefficients vs published 2021
 python python/run_distance_refit.py  # the issue #3 candidate ladder vs the 2021 distance half
-pytest                               # 280 tests: data contract, R↔Python equivalence, findings,
+pytest                               # 296 tests: data contract, R↔Python equivalence, findings,
                                      #            depth pilot, depth validation, coordinate
                                      #            conventions, POV inversion, distance refit
                                      #            (findings + invariants)
