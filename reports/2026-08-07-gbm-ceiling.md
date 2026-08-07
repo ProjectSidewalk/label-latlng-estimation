@@ -13,10 +13,44 @@
 >
 > ```bash
 > python python/run_gbm_ceiling.py --write      # ~6 minutes, offline, deterministic
+> python python/gbm_ceiling_figures.py          # figure 19
 > pytest tests/test_gbm_ceiling_findings.py     # the findings, locked
 > ```
 
-## §1 · Data provenance and the harness (identical to #3 by construction)
+## §1 · Goal
+
+Issue #6 asks one calibration question of the #3 refit: is the shipped closed form within
+10–15% of what these inputs can support — "essentially free of regret" — or is there real
+headroom that a flexible learner can see? This report answers it with a deliberately
+unshippable benchmark: a LightGBM regressor given the same inputs, split, and scoring as
+every #3 rung, so any gap it opens (or fails to open) is attributable to modeling capacity
+alone. The GBM exists to calibrate ambition — to bound what any future refit could hope to
+gain, and to price what chasing that gain would cost.
+
+## §2 · Questions
+
+The report and its code (`python/run_gbm_ceiling.py`) were set up to answer six questions,
+each locked by the findings tests:
+
+- **Q1 — The ceiling.** Is blend D within 10–15% of what these inputs support? → **§5**:
+  no — D sits **+74%** above the GBM's 0.536 m test median.
+- **Q2 — 1-D regret.** Does the closed form leave anything on the table *as a 1-D curve*?
+  → **§5**: essentially nothing — a GBM given only `sv_image_y` lands on D
+  (0.930 ≈ 0.934 m); all the headroom is interaction/context structure.
+- **Q3 — The carriers.** Which features carry the headroom — is a nameable closed-form term
+  hiding in it? → **§6**: no single carrier — every drop-one except `sv_image_y` costs
+  < 5 mm; it is a redundant pool led by the resolution/era axis.
+- **Q4 — Where it lives.** Where in true distance does the gap sit? → **§7**: everywhere,
+  widening with distance — and the GBM holds the 10–15 m bin the blend's saturation trades
+  away.
+- **Q5 — The price.** Is the GBM's edge robust to click noise? → **§8**: no — it degrades
+  4–5× faster than blend D at σ = 2 px; the ceiling is fragile exactly where production
+  inputs are noisy.
+- **Q6 — The recommendation.** Does any of this change #3's shipping recommendation?
+  → **§9**: no — the closed form keeps interpretability, boundedness, and the better noise
+  response; the GBM must not ship.
+
+## §3 · Dataset and harness (identical to #3 by construction)
 
 Every number is computed from the committed `data/labels-*-latlng.csv.gz` — the 2026-08-05
 reconstruction of the 2017–2020 depth-derived label placements
@@ -42,7 +76,7 @@ The harness is `run_distance_refit.py`'s, reused by import, not copied:
   same way — the A/D deltas reproduce exactly, so the GBM rows are scored on the identical
   perturbed clicks.
 
-## §2 · The benchmark
+## §4 · The benchmark
 
 LightGBM 4.7 (`lightgbm` is in `requirements.txt` marked benchmark-only), features from the
 issue: raw `sv_image_y`, height-normalized `sv_norm = sv_image_y · 6656/pano_height`,
@@ -61,7 +95,7 @@ exactly the stopped round count — the test split is never consulted during fit
 the ceiling — the conservative direction for bounding the closed form's regret (it can only
 make D look worse, and D still loses by 74%).
 
-## §3 · The matrix, and the answer to the ceiling question
+## §5 · The matrix, and the answer to the ceiling question
 
 Test split n = 79,029; heading half identical everywhere; A and D reproduced from #3 exactly:
 
@@ -97,7 +131,7 @@ artifacts that the truth also saw. Some fraction of the GBM's edge is therefore
 truth-pipeline structure rather than scene geometry — unmeasurable from inside this dataset,
 and one more reason to read the ceiling as an upper bound.)
 
-## §4 · The ablation: what carries the headroom
+## §6 · The ablation: what carries the headroom
 
 Drop-one from the full L1 model (Δ test dist median, m; positive = worse without it):
 
@@ -122,7 +156,7 @@ each (`sv_image_y`: 80%). There is no closed-form candidate hiding in this table
 suggests a nameable term that would move blend D meaningfully — the headroom is diffuse,
 high-order, and partly pano-context-shaped.
 
-## §5 · Where the gap lives: error vs true distance
+## §7 · Where the gap lives: error vs true distance
 
 Median lat/lng error by true-distance bin (m):
 
@@ -136,6 +170,8 @@ Median lat/lng error by true-distance bin (m):
 | 20–30 | 4,290 | 6.52 | 3.81 | 2.39 |
 | 30–50 | 1,310 | 17.23 | 13.26 | 8.36 |
 
+![Figure 19 — left: median test error by true-distance bin (log scale); the GBM beats the blend in every bin, and holds the 10–15 m bin where the blend's saturation puts it behind even the status quo. Right: the seeded click-noise sweep of §8 — the GBM's degradation curve rises 4–5× faster than the blend's at small σ.](../figures/fig19-gbm-ceiling.png)
+
 The GBM wins everywhere, but the *relative* gap widens with distance: −29% at 2–5 m, −44% at
 5–15 m, −20/-37% at 15–30 m, −37% at 30–50 m — and the far field is exactly where the depth
 truth is weakest (#3 §6: item G's rotated depth columns, occlusion clusters, the terrain
@@ -145,9 +181,10 @@ are also where D's one systematic weakness shows: its 10–15 m row (1.16 m) is 
 That one bin is the largest identifiable share of the pooled gap, and it is conditional
 structure (which panos, which contexts run long), not a better 1-D curve, that buys it.
 
-## §6 · The noise sweep: the ceiling is fragile
+## §8 · The noise sweep: the ceiling is fragile
 
-Same perturbation design, same seeded draws as #3 (verified exact on the A/D rows): Gaussian
+Same perturbation design, same seeded draws as #3 (verified exact on the A/D rows; figure 19,
+right panel): Gaussian
 click noise on `canvas_x/y`, every click-dependent feature re-derived (`sv_image_y` via the
 fixed-frame px/deg scale, `sv_norm` and depression downstream), heading half unperturbed.
 Δ median lat/lng error vs unperturbed (m):
@@ -167,14 +204,14 @@ thing click noise destroys. (The ceiling conclusion itself survives: even fully 
 where the input is a single human click, not the exact pixel the truth was computed from —
 the closed form's flatter noise response is worth real accuracy back.
 
-## §7 · What this changes, and what it does not
+## §9 · What this changes, and what it does not
 
 - **The #6 question is answered: there is a large gap** (D +74% over the ceiling), so the #3
   closed form is *not* within modeling-regret noise of what these inputs support. But the gap
   has no closed-form shape on offer: it is not the 1-D geometry (zero regret there), not the
   exact projection (+2 mm), not any single feature (drop-one < 5 mm) — it is diffuse
   interaction structure, concentrated beyond 10 m, partly rig/era-confounded, plausibly
-  partly truth-pipeline artifact (§3's causal-path note), and twice as fragile under click
+  partly truth-pipeline artifact (§5's causal-path note), and twice as fragile under click
   noise.
 - **The #3 recommendation stands.** Blend D keeps its virtues — 8 physical parameters, a JS
   one-liner, bounded by construction, the better noise response — and the benchmark shows the
@@ -190,6 +227,7 @@ the closed form's flatter noise response is worth real accuracy back.
 ```bash
 pip install -r python/requirements.txt        # includes lightgbm (benchmark-only)
 python python/run_gbm_ceiling.py --write      # ~6 min, offline, deterministic
+python python/gbm_ceiling_figures.py          # figure 19 (renders the committed summary)
 pytest tests/test_gbm_ceiling_findings.py     # the findings, locked
 ```
 
