@@ -62,10 +62,10 @@
     },
     "D_blend_type_l1": {
       "n": 79029,
-      "latlng_median_m": 0.9335966266377749,
-      "latlng_p90_m": 4.478213654895102,
-      "dist_median_m": 0.8713664895112778,
-      "dist_p90_m": 4.455115891504748
+      "latlng_median_m": 0.9335164561969915,
+      "latlng_p90_m": 4.475521660802609,
+      "dist_median_m": 0.871320855847797,
+      "dist_p90_m": 4.453219311984649
     },
     "gbm_l1": {
       "n": 79029,
@@ -394,8 +394,8 @@
           "dist_median_m": 6.508008873313308
         },
         "D_blend_type_l1": {
-          "latlng_median_m": 3.8145628636094995,
-          "dist_median_m": 3.7873964538602642
+          "latlng_median_m": 3.808881424601644,
+          "dist_median_m": 3.7789448659480733
         },
         "gbm_l1": {
           "latlng_median_m": 2.3864785189159226,
@@ -416,8 +416,8 @@
           "dist_median_m": 17.22501315691775
         },
         "D_blend_type_l1": {
-          "latlng_median_m": 13.255673561536932,
-          "dist_median_m": 13.245154284139145
+          "latlng_median_m": 13.261912229317232,
+          "dist_median_m": 13.254391313651908
         },
         "gbm_l1": {
           "latlng_median_m": 8.36176606640537,
@@ -440,7 +440,7 @@
     "seed": 666,
     "baseline_median_m": {
       "A_ols": 1.443796452432211,
-      "D_blend_type_l1": 0.9335966266377749,
+      "D_blend_type_l1": 0.9335164561969915,
       "gbm_l1": 0.5377767782978569,
       "gbm_dep_l1": 0.5362405524856299
     },
@@ -461,16 +461,16 @@
       },
       "D_blend_type_l1": {
         "2.0": {
-          "delta_median_m": 0.005651511747833071,
-          "delta_p90_m": 0.017593762523893552
+          "delta_median_m": 0.005615183104417887,
+          "delta_p90_m": 0.018697280730623156
         },
         "5.0": {
-          "delta_median_m": 0.03970556657566826,
-          "delta_p90_m": 0.11085382932152843
+          "delta_median_m": 0.0396235985764436,
+          "delta_p90_m": 0.1114046766265373
         },
         "10.0": {
-          "delta_median_m": 0.14470779818562973,
-          "delta_p90_m": 0.4063835111778742
+          "delta_median_m": 0.14462668838072745,
+          "delta_p90_m": 0.4089511429772008
         }
       },
       "gbm_l1": {
@@ -504,10 +504,10 @@
     }
   },
   "ceiling": {
-    "blend_d_latlng_median_m": 0.9335966266377749,
+    "blend_d_latlng_median_m": 0.9335164561969915,
     "gbm_best_key": "gbm_dep_l1",
     "gbm_best_latlng_median_m": 0.5362405524856299,
-    "d_over_gbm_gap_pct": 74.10034028763488,
+    "d_over_gbm_gap_pct": 74.08538982549402,
     "a_over_gbm_gap_pct": 169.24417516351525,
     "note": "best-of-variants on test \u2014 an upper bound on the achievable ceiling, which is the conservative direction for bounding the closed form's regret"
   }

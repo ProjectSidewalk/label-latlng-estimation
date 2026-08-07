@@ -102,7 +102,7 @@ Test split n = 79,029; heading half identical everywhere; A and D reproduced fro
 | model | rounds | lat/lng med (m) | p90 | dist med (m) | p90 |
 |---|---:|---:|---:|---:|---:|
 | A ols (status quo form) | – | 1.4438 | 5.155 | 1.3955 | 5.139 |
-| **D blend per-type l1 (shipped, #3)** | – | **0.9336** | **4.478** | **0.8714** | **4.455** |
+| **D blend per-type l1 (shipped, #3)** | – | **0.9335** | **4.476** | **0.8713** | **4.453** |
 | GBM l2 | 621 | 0.5964 | 3.395 | 0.4893 | 3.371 |
 | GBM l1 | 1376 | 0.5378 | 3.291 | 0.4198 | 3.263 |
 | GBM l1 + exact depression | 1341 | **0.5362** | **3.286** | 0.4174 | 3.256 |
@@ -111,7 +111,7 @@ Test split n = 79,029; heading half identical everywhere; A and D reproduced fro
 | GBM, exact depression only | 122 | 0.9855 | 4.389 | 0.9278 | 4.368 |
 
 **The answer is no**: blend D does *not* sit within 10–15% of the GBM — it sits **74.1%**
-above it (0.9336 vs 0.5362 m; A_ols +169%). There is real conditional structure the geometry
+above it (0.9335 vs 0.5362 m; A_ols +169%). There is real conditional structure the geometry
 is not using, and the tail improves too (p90 4.48 → 3.29 m, −27%).
 
 **But the regret is not one-dimensional.** The two single-signal rows are the structural
