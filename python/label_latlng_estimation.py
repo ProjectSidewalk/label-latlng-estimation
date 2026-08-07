@@ -200,8 +200,11 @@ def _named(coefs: np.ndarray, terms: list[str]) -> dict:
     return {"(Intercept)": float(coefs[0]), **{t: float(c) for t, c in zip(terms, coefs[1:])}}
 
 
-def fit_models(train: pd.DataFrame) -> dict:
-    """Fit estimators 2-7 on a training set that already has heading_diff/pano_dist."""
+def fit_models(train: pd.DataFrame, include_est6: bool = True) -> dict:
+    """Fit estimators 2-7 on a training set that already has heading_diff/pano_dist.
+
+    include_est6=False skips the slow MixedLM fit (est6 becomes unavailable); callers that
+    only need the closed-form estimators (e.g. the #5 runner) use this."""
     models: dict = {"est1": {"dist": 10.0, "heading_diff": 0.0}}
     models["est2"] = {"median_dist": float(train["pano_dist"].median())}
     models["est3"] = {"median_dist_by_label_type":
@@ -219,7 +222,8 @@ def fit_models(train: pd.DataFrame) -> dict:
         "heading": _named(_ols(_design(train, t5h), train["heading_diff"].to_numpy(float)), t5h),
     }
 
-    models["est6"] = _fit_est6(train)
+    models["est6"] = _fit_est6(train) if include_est6 else {"available": False,
+                                                            "error": "skipped by caller"}
 
     t7d, t7h = ["sv_image_y", "canvas_y"], ["canvas_x"]
     dist7, head7 = [], []
