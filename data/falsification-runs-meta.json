@@ -1,0 +1,274 @@
+{
+  "_provenance": {
+    "auto_labeler_commit": "0bbd8e6961b54fdf67648d425a0d69502219d8fe",
+    "imported_from": "sidewalk-auto-labeler runs/ (sites.jsonl + results.jsonl per run)",
+    "importer": "python/import_falsification_inputs.py",
+    "issue": "https://github.com/ProjectSidewalk/label-latlng-estimation/issues/3 (Stage 3)"
+  },
+  "runs": {
+    "bend": {
+      "fuse": {
+        "drops": {
+          "below_floor": 0,
+          "horizon": 3,
+          "out_of_range": 1825
+        },
+        "frame_origin": {
+          "lat0": 44.058730167753914,
+          "lng0": -121.30533784548265
+        },
+        "n_multi_pano_sites": 11655,
+        "n_operational_sites": 14190,
+        "n_panos": 78560,
+        "n_projected": 49715,
+        "n_sites": 14190,
+        "params": {
+          "apply_pose": false,
+          "camera_height_m": 2.6,
+          "floor": 0.1,
+          "gate_chi2": 9.21,
+          "max_match_m": 8.0,
+          "max_range_m": 25.0,
+          "max_vintage_months": null,
+          "min_confidence": 0.55,
+          "residual_per_dof_max": 3.0,
+          "sigma_scale": 1.0
+        }
+      },
+      "imagery": "gsv",
+      "n_panos": 78560,
+      "n_site_members": 49715,
+      "n_sites": 14190,
+      "pano_dims": {
+        "13312x6656": 6008,
+        "16384x8192": 72518,
+        "3328x1664": 34
+      },
+      "results_sha256": "1307faa8041acbbf4cba78fd53979e2215511b8371c018f427c356f6b0e26153",
+      "sites_sha256": "82ec834fd5c0500aac12b3677f3a4b55e8ba9bab8d494a16267fd045a94dc17c",
+      "sources": {
+        "launch": 78560
+      }
+    },
+    "clovis": {
+      "fuse": {
+        "drops": {
+          "below_floor": 0,
+          "horizon": 5,
+          "out_of_range": 330
+        },
+        "frame_origin": {
+          "lat0": 34.414780656695605,
+          "lng0": -103.19813378992049
+        },
+        "n_multi_pano_sites": 1560,
+        "n_operational_sites": 2495,
+        "n_panos": 72776,
+        "n_projected": 8626,
+        "n_sites": 2495,
+        "params": {
+          "apply_pose": false,
+          "camera_height_m": 2.6,
+          "floor": 0.1,
+          "gate_chi2": 9.21,
+          "max_match_m": 8.0,
+          "max_range_m": 25.0,
+          "max_vintage_months": null,
+          "min_confidence": 0.55,
+          "residual_per_dof_max": 3.0,
+          "sigma_scale": 1.0
+        }
+      },
+      "imagery": "mapillary",
+      "n_panos": 72776,
+      "n_site_members": 8626,
+      "n_sites": 2495,
+      "pano_dims": {
+        "5760x2880": 72776
+      },
+      "results_sha256": "f6a896f19f4c7036186b201bbd2a1bfa4d6a20f34c14f5586a72da936475c15d",
+      "sites_sha256": "ac7f8f900b8326f5427cd8fd042b75848fd3b90ed11657af0b6f92bc99bcb5d1",
+      "sources": {
+        "mapillary": 72776
+      }
+    },
+    "gainesville": {
+      "fuse": {
+        "drops": {
+          "below_floor": 0,
+          "horizon": 23,
+          "out_of_range": 6329
+        },
+        "frame_origin": {
+          "lat0": 29.64036048904338,
+          "lng0": -82.33347346860207
+        },
+        "n_multi_pano_sites": 7662,
+        "n_operational_sites": 6041,
+        "n_panos": 35204,
+        "n_projected": 33740,
+        "n_sites": 15707,
+        "params": {
+          "apply_pose": false,
+          "camera_height_m": 2.6,
+          "floor": 0.1,
+          "gate_chi2": 9.21,
+          "max_match_m": 8.0,
+          "max_range_m": 25.0,
+          "max_vintage_months": null,
+          "min_confidence": 0.55,
+          "residual_per_dof_max": 3.0,
+          "sigma_scale": 1.0
+        }
+      },
+      "imagery": "gsv",
+      "n_panos": 35204,
+      "n_site_members": 33740,
+      "n_sites": 15707,
+      "pano_dims": {
+        "13312x6656": 2932,
+        "16384x8192": 31968,
+        "3328x1664": 304
+      },
+      "results_sha256": "bb8a78729cfb97a98a4f99211c90763fb3760c9c216f2233b1c0cc8aa450abde",
+      "sites_sha256": "25329e4f5fdb88264141a7556e6d81eb9a6c8b7695e72c3d7b72be9653bb61b8",
+      "sources": {
+        "launch": 35204
+      }
+    },
+    "paterson": {
+      "fuse": {
+        "drops": {
+          "below_floor": 0,
+          "horizon": 129,
+          "out_of_range": 9079
+        },
+        "frame_origin": {
+          "lat0": 40.914475910034014,
+          "lng0": -74.1609890805733
+        },
+        "n_multi_pano_sites": 7909,
+        "n_operational_sites": 8864,
+        "n_panos": 34427,
+        "n_projected": 36985,
+        "n_sites": 14338,
+        "params": {
+          "apply_pose": false,
+          "camera_height_m": 2.6,
+          "floor": 0.1,
+          "gate_chi2": 9.21,
+          "max_match_m": 8.0,
+          "max_range_m": 25.0,
+          "max_vintage_months": null,
+          "min_confidence": 0.55,
+          "residual_per_dof_max": 3.0,
+          "sigma_scale": 1.0
+        }
+      },
+      "imagery": "gsv",
+      "n_panos": 34427,
+      "n_site_members": 36985,
+      "n_sites": 14338,
+      "pano_dims": {
+        "13312x6656": 1136,
+        "16384x8192": 33005,
+        "3328x1664": 286
+      },
+      "results_sha256": "ba987cfde606ba6ed04b877a4fe95f32383729ecc68be56fa402adb56c86da00",
+      "sites_sha256": "3c00f6ab066946fc0c6d15fc173f88243d0b301482e925a705a508d2f3e4dec8",
+      "sources": {
+        "launch": 34427
+      }
+    },
+    "richmond": {
+      "fuse": {
+        "drops": {
+          "below_floor": 0,
+          "horizon": 236,
+          "out_of_range": 1192
+        },
+        "frame_origin": {
+          "lat0": 37.54138378090508,
+          "lng0": -77.43880953924179
+        },
+        "n_multi_pano_sites": 1183,
+        "n_operational_sites": 1570,
+        "n_panos": 9091,
+        "n_projected": 8098,
+        "n_sites": 1570,
+        "params": {
+          "apply_pose": false,
+          "camera_height_m": 2.6,
+          "floor": 0.1,
+          "gate_chi2": 9.21,
+          "max_match_m": 8.0,
+          "max_range_m": 25.0,
+          "max_vintage_months": null,
+          "min_confidence": 0.55,
+          "residual_per_dof_max": 3.0,
+          "sigma_scale": 1.0
+        }
+      },
+      "imagery": "mapillary",
+      "n_panos": 9091,
+      "n_site_members": 8098,
+      "n_sites": 1570,
+      "pano_dims": {
+        "11000x5500": 4809,
+        "12288x6144": 891,
+        "4096x2048": 2510,
+        "5376x2688": 69,
+        "5760x2880": 808,
+        "5888x2944": 4
+      },
+      "results_sha256": "109e7645ebf5ab982d2cc1388b50e837f6d622a4ff14752c1895b194a5c0d88c",
+      "sites_sha256": "7f01a86786e21afc5de53908a545fb2a6057f8d87513e5986155772818b53c7b",
+      "sources": {
+        "mapillary": 9091
+      }
+    },
+    "sao_paulo": {
+      "fuse": {
+        "drops": {
+          "below_floor": 0,
+          "horizon": 242,
+          "out_of_range": 3487
+        },
+        "frame_origin": {
+          "lat0": -23.54509370428015,
+          "lng0": -46.625937086476206
+        },
+        "n_multi_pano_sites": 7475,
+        "n_operational_sites": 4397,
+        "n_panos": 22741,
+        "n_projected": 36445,
+        "n_sites": 15409,
+        "params": {
+          "apply_pose": false,
+          "camera_height_m": 2.6,
+          "floor": 0.1,
+          "gate_chi2": 9.21,
+          "max_match_m": 8.0,
+          "max_range_m": 25.0,
+          "max_vintage_months": null,
+          "min_confidence": 0.55,
+          "residual_per_dof_max": 3.0,
+          "sigma_scale": 1.0
+        }
+      },
+      "imagery": "gsv",
+      "n_panos": 22741,
+      "n_site_members": 36445,
+      "n_sites": 15409,
+      "pano_dims": {
+        "13312x6656": 663,
+        "16384x8192": 22078
+      },
+      "results_sha256": "72fa99b69ce2742c03becf427ca1674c2a0971531cc4f84ad793d5dc3a2fe926",
+      "sites_sha256": "c46e4519358fbe7e3dc73acf0c3fa51b2b2f47dcaf1d19329731941ec04b5b2e",
+      "sources": {
+        "launch": 22741
+      }
+    }
+  }
+}

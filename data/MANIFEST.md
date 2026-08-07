@@ -165,6 +165,36 @@ it derives entirely from the `labels-*-latlng.csv.gz` files and the R-fixture sp
 `python python/run_pov_inversion.py --write` regenerates it deterministically on any machine,
 and the findings tests re-derive its headline numbers in-process from the same code.
 
+# Mapillary-falsification inputs (issue #3, Stage 3)
+
+The `falsification-*` files are the Stage 3 inputs: the auto-labeler's fused multi-view
+curb-ramp sites for the two Mapillary-viewer cities (**richmond**, **clovis**) and the four GSV
+controls (**paterson**, **gainesville**, **bend**, **sao_paulo**), plus per-panorama metadata.
+They are committed here because both are gitignored artifacts of the
+[sidewalk-auto-labeler](https://github.com/ProjectSidewalk/sidewalk-auto-labeler) repo's run
+directories — same preservation principle as the depth payloads: evidence nobody can regenerate
+is not evidence.
+
+- `falsification-sites-<run>.jsonl.gz` — `fuse_sites.py` output, verbatim: one fused site per
+  line (GLS position + covariance) with per-member detections (`x/y_normalized`, ray
+  `range_m`/`bearing_deg`, per-member lat/lng, capture date). All six runs were fused with
+  identical default parameters (recorded in the meta JSON); clovis/gainesville/bend/sao_paulo
+  were fused 2026-08-07 at auto-labeler `0bbd8e6`, and regeneration at that commit was verified
+  byte-identical against the run-time richmond output.
+- `falsification-panos-<run>.csv.gz` — one row per panorama in the run's `results.jsonl`:
+  position, dimensions, pose, detection count, and (Mapillary) the full Graph API census
+  fields — `camera_type`/make/model, `sequence_id`, raw vs `computed_*` geometry / compass /
+  altitude, SfM `computed_rotation` and `atomic_scale`, creator, `quality_score`. GSV rows
+  leave the Mapillary-only columns empty. Covers **all** panos the run saw (72,776 for clovis),
+  not just those with detections, so the census is unconditioned on the detector.
+- `falsification-runs-meta.json` — per-run fuse parameters/counts, height×width histograms,
+  and SHA-256s of the source files, plus the auto-labeler commit.
+
+Regenerate with `python python/import_falsification_inputs.py <auto-labeler>/runs`
+(deterministic; byte-identical across reruns). The fused sites depend only on each run's
+committed-there `results.jsonl`, so the import is reproducible from an auto-labeler checkout at
+the recorded commit.
+
 # Distance-refit summary (issue #3)
 
 `distance-refit-summary.json` is the committed evidence of the 2026-08-07 distance-half refit

@@ -1,0 +1,1057 @@
+{
+  "census": {
+    "mapillary": {
+      "richmond": {
+        "n_panos": 9091,
+        "n_sequences": 358,
+        "n_creators": 8,
+        "capture_dates": [
+          "2023-06",
+          "2025-09"
+        ],
+        "camera_type": {
+          "spherical": 9091
+        },
+        "all_true_equirect": true,
+        "pano_heights": {
+          "2048": 2510,
+          "2688": 69,
+          "2880": 808,
+          "2944": 4,
+          "5500": 4809,
+          "6144": 891
+        },
+        "rigs": {
+          "Arashi Vision / insta360 x4": {
+            "n_panos": 4,
+            "n_sequences": 3,
+            "n_site_members": 3,
+            "pano_dims": {
+              "5888x2944": 4
+            },
+            "camera_type": [
+              "spherical"
+            ]
+          },
+          "GoPro / GoPro Max": {
+            "n_panos": 3318,
+            "n_sequences": 15,
+            "n_site_members": 1688,
+            "pano_dims": {
+              "4096x2048": 2510,
+              "5760x2880": 808
+            },
+            "camera_type": [
+              "spherical"
+            ]
+          },
+          "NCTECH LTD / iSTAR Pulsar": {
+            "n_panos": 4809,
+            "n_sequences": 325,
+            "n_site_members": 5614,
+            "pano_dims": {
+              "11000x5500": 4809
+            },
+            "camera_type": [
+              "spherical"
+            ]
+          },
+          "none / none": {
+            "n_panos": 960,
+            "n_sequences": 15,
+            "n_site_members": 793,
+            "pano_dims": {
+              "5376x2688": 69,
+              "12288x6144": 891
+            },
+            "camera_type": [
+              "spherical"
+            ]
+          }
+        },
+        "raw_field_degeneracy": {
+          "compass_angle_exact_zero": 6,
+          "camera_parameters_present": 0
+        },
+        "sfm_vs_raw": {
+          "position_shift_m": {
+            "median": 2.946,
+            "p90": 9.606,
+            "max": 183.2
+          },
+          "abs_compass_delta_deg": {
+            "median": 2.64,
+            "p90": 157.72
+          },
+          "altitude_delta_m": {
+            "median": 27.51,
+            "p10": -5.71,
+            "p90": 38.76
+          }
+        },
+        "quality_score": {
+          "median": 0.865,
+          "p10": 0.771
+        },
+        "capture_modes": {
+          "on_foot": {
+            "n_sequences": 1,
+            "n_panos": 6,
+            "n_site_members": 17
+          },
+          "slow": {
+            "n_sequences": 111,
+            "n_panos": 4157,
+            "n_site_members": 4024
+          },
+          "vehicle": {
+            "n_sequences": 210,
+            "n_panos": 4870,
+            "n_site_members": 3979
+          },
+          "unknown": {
+            "n_sequences": 36,
+            "n_panos": 58,
+            "n_site_members": 78
+          }
+        },
+        "sequences_with_site_members": 319
+      },
+      "clovis": {
+        "n_panos": 72776,
+        "n_sequences": 514,
+        "n_creators": 1,
+        "capture_dates": [
+          "2019-04",
+          "2021-05"
+        ],
+        "camera_type": {
+          "equirectangular": 72776
+        },
+        "all_true_equirect": true,
+        "pano_heights": {
+          "2880": 72776
+        },
+        "rigs": {
+          "GoPro / Fusion": {
+            "n_panos": 32680,
+            "n_sequences": 264,
+            "n_site_members": 3133,
+            "pano_dims": {
+              "5760x2880": 32680
+            },
+            "camera_type": [
+              "equirectangular"
+            ]
+          },
+          "GoPro / GoPro Fusion FS1.04.01.80.00": {
+            "n_panos": 40096,
+            "n_sequences": 250,
+            "n_site_members": 5493,
+            "pano_dims": {
+              "5760x2880": 40096
+            },
+            "camera_type": [
+              "equirectangular"
+            ]
+          }
+        },
+        "raw_field_degeneracy": {
+          "compass_angle_exact_zero": 40778,
+          "camera_parameters_present": 72776
+        },
+        "sfm_vs_raw": {
+          "position_shift_m": {
+            "median": 0.309,
+            "p90": 3.503,
+            "max": 546.6
+          },
+          "abs_compass_delta_deg": {
+            "median": 17.14,
+            "p90": 173.74
+          },
+          "altitude_delta_m": {
+            "median": 25.04,
+            "p10": 23.74,
+            "p90": 26.52
+          }
+        },
+        "quality_score": {
+          "median": 0.883,
+          "p10": 0.834
+        },
+        "capture_modes": {
+          "on_foot": {
+            "n_sequences": 6,
+            "n_panos": 332,
+            "n_site_members": 6
+          },
+          "slow": {
+            "n_sequences": 18,
+            "n_panos": 1421,
+            "n_site_members": 191
+          },
+          "vehicle": {
+            "n_sequences": 466,
+            "n_panos": 70744,
+            "n_site_members": 8382
+          },
+          "unknown": {
+            "n_sequences": 24,
+            "n_panos": 279,
+            "n_site_members": 47
+          }
+        },
+        "sequences_with_site_members": 389
+      }
+    },
+    "gsv_control": {
+      "paterson": {
+        "n_panos": 34427,
+        "capture_dates": [
+          "2007-08",
+          "2026-05"
+        ],
+        "pano_heights": {
+          "1664": {
+            "n_panos": 286,
+            "n_site_members": 227
+          },
+          "6656": {
+            "n_panos": 1136,
+            "n_site_members": 1296
+          },
+          "8192": {
+            "n_panos": 33005,
+            "n_site_members": 31049
+          }
+        },
+        "camera_pitch_deg": {
+          "median": 0.38,
+          "p90_abs": 3.32
+        },
+        "camera_roll_deg": {
+          "median": 1.64,
+          "p90_abs": 359.59
+        }
+      },
+      "gainesville": {
+        "n_panos": 35204,
+        "capture_dates": [
+          "2007-11",
+          "2026-04"
+        ],
+        "pano_heights": {
+          "1664": {
+            "n_panos": 304,
+            "n_site_members": 178
+          },
+          "6656": {
+            "n_panos": 2932,
+            "n_site_members": 2303
+          },
+          "8192": {
+            "n_panos": 31968,
+            "n_site_members": 24070
+          }
+        },
+        "camera_pitch_deg": {
+          "median": 0.61,
+          "p90_abs": 2.06
+        },
+        "camera_roll_deg": {
+          "median": 1.49,
+          "p90_abs": 359.49
+        }
+      },
+      "bend": {
+        "n_panos": 78560,
+        "capture_dates": [
+          "2007-11",
+          "2025-08"
+        ],
+        "pano_heights": {
+          "1664": {
+            "n_panos": 34,
+            "n_site_members": 6
+          },
+          "6656": {
+            "n_panos": 6008,
+            "n_site_members": 3069
+          },
+          "8192": {
+            "n_panos": 72518,
+            "n_site_members": 46640
+          }
+        },
+        "camera_pitch_deg": {
+          "median": -0.04,
+          "p90_abs": 3.01
+        },
+        "camera_roll_deg": {
+          "median": 1.31,
+          "p90_abs": 359.57
+        }
+      },
+      "sao_paulo": {
+        "n_panos": 22741,
+        "capture_dates": [
+          "2010-01",
+          "2026-01"
+        ],
+        "pano_heights": {
+          "6656": {
+            "n_panos": 663,
+            "n_site_members": 595
+          },
+          "8192": {
+            "n_panos": 22078,
+            "n_site_members": 27836
+          }
+        },
+        "camera_pitch_deg": {
+          "median": 0.51,
+          "p90_abs": 3.62
+        },
+        "camera_roll_deg": {
+          "median": 2.87,
+          "p90_abs": 359.61
+        }
+      }
+    }
+  },
+  "diagnostics": {
+    "conventions": {
+      "max_abs_range_m_delta": 0.000494,
+      "n": 7711
+    },
+    "runs": {
+      "richmond": {
+        "n_sites": 1183,
+        "n_members": 7711,
+        "per_model": {
+          "A_status_quo": {
+            "rms_over_range": 0.285,
+            "range_slope": {
+              "slope": -0.3233,
+              "se": 0.0165
+            },
+            "height_slope": {
+              "slope": -0.6896,
+              "se": 0.0208
+            }
+          },
+          "B_normalized": {
+            "rms_over_range": 0.2665,
+            "range_slope": {
+              "slope": -0.2931,
+              "se": 0.0113
+            },
+            "height_slope": {
+              "slope": -0.2688,
+              "se": 0.022
+            }
+          },
+          "C_cotangent": {
+            "rms_over_range": 0.2048,
+            "range_slope": {
+              "slope": 0.1188,
+              "se": 0.0055
+            },
+            "height_slope": {
+              "slope": -0.2284,
+              "se": 0.0161
+            }
+          },
+          "D_blend": {
+            "rms_over_range": 0.1998,
+            "range_slope": {
+              "slope": -0.002,
+              "se": 0.0064
+            },
+            "height_slope": {
+              "slope": -0.2357,
+              "se": 0.0155
+            }
+          }
+        }
+      },
+      "clovis": {
+        "n_sites": 1560,
+        "n_members": 7691,
+        "per_model": {
+          "A_status_quo": {
+            "rms_over_range": 0.2878,
+            "range_slope": {
+              "slope": -1.4029,
+              "se": 0.0271
+            },
+            "height_slope": {
+              "slope": null,
+              "se": null
+            }
+          },
+          "B_normalized": {
+            "rms_over_range": 0.2098,
+            "range_slope": {
+              "slope": -0.164,
+              "se": 0.0104
+            },
+            "height_slope": {
+              "slope": null,
+              "se": null
+            }
+          },
+          "C_cotangent": {
+            "rms_over_range": 0.1875,
+            "range_slope": {
+              "slope": 0.1576,
+              "se": 0.0056
+            },
+            "height_slope": {
+              "slope": null,
+              "se": null
+            }
+          },
+          "D_blend": {
+            "rms_over_range": 0.1797,
+            "range_slope": {
+              "slope": 0.0617,
+              "se": 0.0062
+            },
+            "height_slope": {
+              "slope": null,
+              "se": null
+            }
+          }
+        }
+      },
+      "paterson": {
+        "n_sites": 6995,
+        "n_members": 25229,
+        "per_model": {
+          "A_status_quo": {
+            "rms_over_range": 0.2573,
+            "range_slope": {
+              "slope": -0.2347,
+              "se": 0.0045
+            },
+            "height_slope": {
+              "slope": -0.432,
+              "se": 0.0209
+            }
+          },
+          "B_normalized": {
+            "rms_over_range": 0.2225,
+            "range_slope": {
+              "slope": -0.4381,
+              "se": 0.0055
+            },
+            "height_slope": {
+              "slope": 0.0349,
+              "se": 0.021
+            }
+          },
+          "C_cotangent": {
+            "rms_over_range": 0.1351,
+            "range_slope": {
+              "slope": 0.0985,
+              "se": 0.0018
+            },
+            "height_slope": {
+              "slope": 0.1444,
+              "se": 0.0107
+            }
+          },
+          "D_blend": {
+            "rms_over_range": 0.1388,
+            "range_slope": {
+              "slope": -0.0355,
+              "se": 0.0024
+            },
+            "height_slope": {
+              "slope": 0.1073,
+              "se": 0.011
+            }
+          }
+        }
+      },
+      "gainesville": {
+        "n_sites": 5926,
+        "n_members": 16770,
+        "per_model": {
+          "A_status_quo": {
+            "rms_over_range": 0.2545,
+            "range_slope": {
+              "slope": -0.2327,
+              "se": 0.0064
+            },
+            "height_slope": {
+              "slope": -0.3439,
+              "se": 0.03
+            }
+          },
+          "B_normalized": {
+            "rms_over_range": 0.2248,
+            "range_slope": {
+              "slope": -0.3829,
+              "se": 0.0076
+            },
+            "height_slope": {
+              "slope": 0.0333,
+              "se": 0.0296
+            }
+          },
+          "C_cotangent": {
+            "rms_over_range": 0.1291,
+            "range_slope": {
+              "slope": 0.0791,
+              "se": 0.0025
+            },
+            "height_slope": {
+              "slope": 0.1555,
+              "se": 0.0146
+            }
+          },
+          "D_blend": {
+            "rms_over_range": 0.1381,
+            "range_slope": {
+              "slope": -0.0527,
+              "se": 0.0034
+            },
+            "height_slope": {
+              "slope": 0.1015,
+              "se": 0.0157
+            }
+          }
+        }
+      },
+      "bend": {
+        "n_sites": 11655,
+        "n_members": 47180,
+        "per_model": {
+          "A_status_quo": {
+            "rms_over_range": 0.2622,
+            "range_slope": {
+              "slope": -0.1051,
+              "se": 0.0026
+            },
+            "height_slope": {
+              "slope": -0.3049,
+              "se": 0.0293
+            }
+          },
+          "B_normalized": {
+            "rms_over_range": 0.2091,
+            "range_slope": {
+              "slope": -0.2076,
+              "se": 0.0031
+            },
+            "height_slope": {
+              "slope": 0.1746,
+              "se": 0.029
+            }
+          },
+          "C_cotangent": {
+            "rms_over_range": 0.1211,
+            "range_slope": {
+              "slope": 0.0989,
+              "se": 0.0012
+            },
+            "height_slope": {
+              "slope": 0.3346,
+              "se": 0.0148
+            }
+          },
+          "D_blend": {
+            "rms_over_range": 0.1207,
+            "range_slope": {
+              "slope": -0.0035,
+              "se": 0.0014
+            },
+            "height_slope": {
+              "slope": 0.2742,
+              "se": 0.0146
+            }
+          }
+        }
+      },
+      "sao_paulo": {
+        "n_sites": 6261,
+        "n_members": 19283,
+        "per_model": {
+          "A_status_quo": {
+            "rms_over_range": 0.3073,
+            "range_slope": {
+              "slope": -0.2297,
+              "se": 0.0054
+            },
+            "height_slope": {
+              "slope": -0.5926,
+              "se": 0.0871
+            }
+          },
+          "B_normalized": {
+            "rms_over_range": 0.2453,
+            "range_slope": {
+              "slope": -0.3865,
+              "se": 0.0066
+            },
+            "height_slope": {
+              "slope": -0.125,
+              "se": 0.0843
+            }
+          },
+          "C_cotangent": {
+            "rms_over_range": 0.122,
+            "range_slope": {
+              "slope": 0.0303,
+              "se": 0.0023
+            },
+            "height_slope": {
+              "slope": 0.0449,
+              "se": 0.04
+            }
+          },
+          "D_blend": {
+            "rms_over_range": 0.1332,
+            "range_slope": {
+              "slope": -0.0901,
+              "se": 0.003
+            },
+            "height_slope": {
+              "slope": 0.0087,
+              "se": 0.0439
+            }
+          }
+        }
+      }
+    }
+  },
+  "sequence_scales": {
+    "richmond": {
+      "n_sequences_fitted": 255,
+      "n_multi_sequence_sites": 997,
+      "n_sites": 1183,
+      "n_members_in_objective": 7186,
+      "per_rig": {
+        "GoPro / GoPro Max": {
+          "n_sequences": 13,
+          "n_members": 1158,
+          "k_rel_median": 0.872,
+          "k_rel_iqr": [
+            0.8368,
+            0.9762
+          ],
+          "k_rel_weighted_mean": 0.9122
+        },
+        "NCTECH LTD / iSTAR Pulsar": {
+          "n_sequences": 229,
+          "n_members": 5231,
+          "k_rel_median": 1.0216,
+          "k_rel_iqr": [
+            0.9747,
+            1.0634
+          ],
+          "k_rel_weighted_mean": 1.0283
+        },
+        "none / none": {
+          "n_sequences": 13,
+          "n_members": 643,
+          "k_rel_median": 1.009,
+          "k_rel_iqr": [
+            0.9735,
+            1.0417
+          ],
+          "k_rel_weighted_mean": 1.0046
+        }
+      },
+      "d_blend_unscaled": {
+        "rms_over_range": 0.1998,
+        "range_slope": {
+          "slope": -0.002,
+          "se": 0.0064
+        },
+        "height_slope": {
+          "slope": -0.2357,
+          "se": 0.0155
+        }
+      },
+      "d_blend_per_sequence_scale": {
+        "rms_over_range": 0.1886,
+        "range_slope": {
+          "slope": 0.0041,
+          "se": 0.0058
+        },
+        "height_slope": {
+          "slope": -0.0219,
+          "se": 0.0148
+        }
+      },
+      "holdout": {
+        "seed": 666,
+        "n_fit_sites": 591,
+        "n_held_sites": 592,
+        "n_held_members": 3973,
+        "n_sequences_transferred": 196,
+        "held_members_covered": 3505,
+        "d_blend_unscaled": {
+          "rms_over_range": 0.2013,
+          "range_slope": {
+            "slope": 0.0031,
+            "se": 0.0091
+          },
+          "height_slope": {
+            "slope": -0.2546,
+            "se": 0.0209
+          }
+        },
+        "d_blend_transferred_scale": {
+          "rms_over_range": 0.2012,
+          "range_slope": {
+            "slope": 0.0178,
+            "se": 0.0088
+          },
+          "height_slope": {
+            "slope": -0.0797,
+            "se": 0.0212
+          }
+        }
+      },
+      "holdout_seed_sweep": [
+        {
+          "seed": 1,
+          "d_blend_unscaled": {
+            "rms_over_range": 0.2017,
+            "range_slope": {
+              "slope": -0.0033,
+              "se": 0.0092
+            },
+            "height_slope": {
+              "slope": -0.2556,
+              "se": 0.0222
+            }
+          },
+          "d_blend_transferred_scale": {
+            "rms_over_range": 0.1993,
+            "range_slope": {
+              "slope": 0.0042,
+              "se": 0.0089
+            },
+            "height_slope": {
+              "slope": -0.0738,
+              "se": 0.0223
+            }
+          }
+        },
+        {
+          "seed": 7,
+          "d_blend_unscaled": {
+            "rms_over_range": 0.2054,
+            "range_slope": {
+              "slope": -0.0045,
+              "se": 0.0093
+            },
+            "height_slope": {
+              "slope": -0.2354,
+              "se": 0.022
+            }
+          },
+          "d_blend_transferred_scale": {
+            "rms_over_range": 0.2038,
+            "range_slope": {
+              "slope": 0.0157,
+              "se": 0.0089
+            },
+            "height_slope": {
+              "slope": -0.0592,
+              "se": 0.0222
+            }
+          }
+        },
+        {
+          "seed": 42,
+          "d_blend_unscaled": {
+            "rms_over_range": 0.1986,
+            "range_slope": {
+              "slope": -0.0136,
+              "se": 0.0094
+            },
+            "height_slope": {
+              "slope": -0.2158,
+              "se": 0.0225
+            }
+          },
+          "d_blend_transferred_scale": {
+            "rms_over_range": 0.1999,
+            "range_slope": {
+              "slope": 0.0216,
+              "se": 0.0091
+            },
+            "height_slope": {
+              "slope": 0.0577,
+              "se": 0.0228
+            }
+          }
+        },
+        {
+          "seed": 666,
+          "d_blend_unscaled": {
+            "rms_over_range": 0.2013,
+            "range_slope": {
+              "slope": 0.0031,
+              "se": 0.0091
+            },
+            "height_slope": {
+              "slope": -0.2546,
+              "se": 0.0209
+            }
+          },
+          "d_blend_transferred_scale": {
+            "rms_over_range": 0.2012,
+            "range_slope": {
+              "slope": 0.0178,
+              "se": 0.0088
+            },
+            "height_slope": {
+              "slope": -0.0797,
+              "se": 0.0212
+            }
+          }
+        },
+        {
+          "seed": 2026,
+          "d_blend_unscaled": {
+            "rms_over_range": 0.2008,
+            "range_slope": {
+              "slope": -0.0094,
+              "se": 0.0092
+            },
+            "height_slope": {
+              "slope": -0.2371,
+              "se": 0.022
+            }
+          },
+          "d_blend_transferred_scale": {
+            "rms_over_range": 0.2005,
+            "range_slope": {
+              "slope": 0.0118,
+              "se": 0.0089
+            },
+            "height_slope": {
+              "slope": -0.0795,
+              "se": 0.0222
+            }
+          }
+        }
+      ]
+    },
+    "clovis": {
+      "n_sequences_fitted": 210,
+      "n_multi_sequence_sites": 929,
+      "n_sites": 1560,
+      "n_members_in_objective": 5631,
+      "per_rig": {
+        "GoPro / Fusion": {
+          "n_sequences": 73,
+          "n_members": 1697,
+          "k_rel_median": 0.9919,
+          "k_rel_iqr": [
+            0.915,
+            1.0542
+          ],
+          "k_rel_weighted_mean": 0.9972
+        },
+        "GoPro / GoPro Fusion FS1.04.01.80.00": {
+          "n_sequences": 137,
+          "n_members": 3722,
+          "k_rel_median": 0.9907,
+          "k_rel_iqr": [
+            0.9397,
+            1.0475
+          ],
+          "k_rel_weighted_mean": 1.0075
+        }
+      },
+      "d_blend_unscaled": {
+        "rms_over_range": 0.1797,
+        "range_slope": {
+          "slope": 0.0617,
+          "se": 0.0062
+        },
+        "height_slope": {
+          "slope": null,
+          "se": null
+        }
+      },
+      "d_blend_per_sequence_scale": {
+        "rms_over_range": 0.1765,
+        "range_slope": {
+          "slope": 0.0661,
+          "se": 0.0059
+        },
+        "height_slope": {
+          "slope": null,
+          "se": null
+        }
+      },
+      "holdout": {
+        "seed": 666,
+        "n_fit_sites": 780,
+        "n_held_sites": 780,
+        "n_held_members": 3927,
+        "n_sequences_transferred": 143,
+        "held_members_covered": 2974,
+        "d_blend_unscaled": {
+          "rms_over_range": 0.1803,
+          "range_slope": {
+            "slope": 0.0598,
+            "se": 0.0086
+          },
+          "height_slope": {
+            "slope": null,
+            "se": null
+          }
+        },
+        "d_blend_transferred_scale": {
+          "rms_over_range": 0.186,
+          "range_slope": {
+            "slope": 0.0728,
+            "se": 0.0086
+          },
+          "height_slope": {
+            "slope": null,
+            "se": null
+          }
+        }
+      },
+      "holdout_seed_sweep": [
+        {
+          "seed": 1,
+          "d_blend_unscaled": {
+            "rms_over_range": 0.1789,
+            "range_slope": {
+              "slope": 0.0634,
+              "se": 0.0087
+            },
+            "height_slope": {
+              "slope": null,
+              "se": null
+            }
+          },
+          "d_blend_transferred_scale": {
+            "rms_over_range": 0.1866,
+            "range_slope": {
+              "slope": 0.0888,
+              "se": 0.0089
+            },
+            "height_slope": {
+              "slope": null,
+              "se": null
+            }
+          }
+        },
+        {
+          "seed": 7,
+          "d_blend_unscaled": {
+            "rms_over_range": 0.1768,
+            "range_slope": {
+              "slope": 0.0621,
+              "se": 0.0087
+            },
+            "height_slope": {
+              "slope": null,
+              "se": null
+            }
+          },
+          "d_blend_transferred_scale": {
+            "rms_over_range": 0.1857,
+            "range_slope": {
+              "slope": 0.0833,
+              "se": 0.0088
+            },
+            "height_slope": {
+              "slope": null,
+              "se": null
+            }
+          }
+        },
+        {
+          "seed": 42,
+          "d_blend_unscaled": {
+            "rms_over_range": 0.1766,
+            "range_slope": {
+              "slope": 0.0797,
+              "se": 0.0085
+            },
+            "height_slope": {
+              "slope": null,
+              "se": null
+            }
+          },
+          "d_blend_transferred_scale": {
+            "rms_over_range": 0.1817,
+            "range_slope": {
+              "slope": 0.0994,
+              "se": 0.0085
+            },
+            "height_slope": {
+              "slope": null,
+              "se": null
+            }
+          }
+        },
+        {
+          "seed": 666,
+          "d_blend_unscaled": {
+            "rms_over_range": 0.1803,
+            "range_slope": {
+              "slope": 0.0598,
+              "se": 0.0086
+            },
+            "height_slope": {
+              "slope": null,
+              "se": null
+            }
+          },
+          "d_blend_transferred_scale": {
+            "rms_over_range": 0.186,
+            "range_slope": {
+              "slope": 0.0728,
+              "se": 0.0086
+            },
+            "height_slope": {
+              "slope": null,
+              "se": null
+            }
+          }
+        },
+        {
+          "seed": 2026,
+          "d_blend_unscaled": {
+            "rms_over_range": 0.1799,
+            "range_slope": {
+              "slope": 0.0632,
+              "se": 0.0087
+            },
+            "height_slope": {
+              "slope": null,
+              "se": null
+            }
+          },
+          "d_blend_transferred_scale": {
+            "rms_over_range": 0.1876,
+            "range_slope": {
+              "slope": 0.0847,
+              "se": 0.0088
+            },
+            "height_slope": {
+              "slope": null,
+              "se": null
+            }
+          }
+        }
+      ]
+    }
+  }
+}
