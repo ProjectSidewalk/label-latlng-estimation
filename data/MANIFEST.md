@@ -164,3 +164,18 @@ report: `reports/2026-08-06-pov-inversion.md`), asserted by
 it derives entirely from the `labels-*-latlng.csv.gz` files and the R-fixture split, so
 `python python/run_pov_inversion.py --write` regenerates it deterministically on any machine,
 and the findings tests re-derive its headline numbers in-process from the same code.
+
+# Distance-refit summary (issue #3)
+
+`distance-refit-summary.json` is the committed evidence of the 2026-08-07 distance-half refit
+([issue #3](https://github.com/ProjectSidewalk/label-latlng-estimation/issues/3), Stages 1–2;
+report: `reports/2026-08-07-distance-refit.md`), asserted by
+`tests/test_distance_refit_findings.py`. Like the POV-inversion summary it needs no fetch —
+it derives from the `labels-*-latlng.csv.gz` files, the R-fixture split, and two committed #4/#9
+artifacts (`depth-pilot-panos.csv.gz` for served camera heights, `depth-validation-panometa.csv.gz`
+for the tilt rider) — so `python python/run_distance_refit.py --write` regenerates it
+deterministically on any machine (byte-identical across reruns), and the findings tests re-derive
+its headline numbers in-process from the same code. Contents: the full rung × loss results matrix,
+the fixed-frame and #4765 apply-path checks, near-horizon and click-noise robustness tables,
+per-type camera heights, riders, and the provisional production coefficients (Stage 3, the
+Mapillary falsification, remains open).
