@@ -283,10 +283,15 @@ def model_distances(dep_deg: np.ndarray, pano_height: np.ndarray) -> dict[str, n
             0.0, EST_INTERCEPT - EST_PANO_Y_SLOPE * dep / 180.0 * CALIBRATION_HEIGHT
             + canvas_term),
         "C_cotangent": cot,
+        # The tail evaluates at max(dep, 0) — the #12 review's horizon clamp, so a click
+        # above the horizon gets the horizon's ~28 m, not a runaway extrapolation. Inert
+        # here (the fuse gate keeps every member at dep >= ~5.9 deg) but kept identical
+        # to the shipped form.
         "D_blend": np.where(
             dep >= BLEND_A_DEG,
             BLEND_H_M / np.tan(np.radians(np.maximum(dep, 1e-9))),
-            np.clip(cot_at_a + tail_slope * (BLEND_A_DEG - dep), 0.0, BLEND_CAP_M)),
+            np.clip(cot_at_a + tail_slope * (BLEND_A_DEG - np.maximum(dep, 0.0)),
+                    0.0, BLEND_CAP_M)),
     }
 
 
