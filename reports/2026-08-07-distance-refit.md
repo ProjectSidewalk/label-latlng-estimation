@@ -250,13 +250,44 @@ heading: exact POV inversion (#5), zero parameters, NO era constant
 geodesy: spherical (turf destination) — matches production and how these were scored
 ```
 
+Reading the pieces:
+
+- **`depression_deg` — the pixel→angle conversion is itself the #4765 fix.** Dividing the
+  pixel offset by the panorama height turns it into an angle, which is the same for a
+  6656-px and an 8192-px shot of the same scene. Nothing downstream ever sees a pixel, so
+  nothing downstream can depend on resolution. (The front end gets the identical angle from
+  `calculatePovIfCentered` without touching `pano_y` at all.)
+- **`h[t]` — "camera height" is really the drop to where that label type's truth lives.**
+  The cotangent assumes the click marks a point one camera-height below the horizon. That
+  drop differs by type for two stacked reasons: users click some types above their ground
+  contact (an obstacle's body rather than its base — a shallower angle, recovered by a
+  smaller effective height), and the depth ray behind the ground truth lands on different
+  surfaces (a curb ramp descends to *road* grade — the full drop, 2.78 m — while a surface
+  problem sits on the *raised sidewalk* plane, which the ray hits sooner — 2.50 m). The
+  0.28 m fitted spread is the per-type share of §6's 0.48 m curb-height bias, ordered
+  exactly as ground contact predicts, and it is the same signal est3 (median-by-type)
+  proved in 2021, re-expressed as geometry: worth ~4 cm of median error over one shared
+  height. All seven values bracket what GSV actually serves for the camera (median 2.37 m
+  measured, 2.6 m the ecosystem constant).
+- **`a = 11.25°` — fit, not chosen.** The blend angle was profiled over a 1–12° grid
+  (0.25° steps), re-fitting the heights at each candidate and scoring the full train set's
+  mean absolute error in meters; 11.25° is the interior minimum. Its physical reading:
+  `h/tan(11.25°) ≈ 14 m`, i.e. the data locates the radius inside which flat-ground
+  geometry is the best available model. Beyond it — where sightlines stop being flat open
+  ground, a fraction of a degree of click noise moves the answer by meters, and the depth
+  truth is itself weakest — the linear tail continues the cotangent with matched value and
+  slope (that is all the `sin²` term is: the cotangent's derivative at `a`), reaching at
+  most ~28 m at the horizon instead of diverging. The floor twin makes the opposite
+  trade: same heights, a hard clamp at `h/tan(7.0°) ≈ 21.9 m` that also holds *above* the
+  horizon, for 0.0007 m of test median.
+
 Applies to all labels (the §5 noise result); recomputing stored labels is a separate decision
-(#3 Stage 4 note — `lat`/`lng` are computed at insert time). If a hard bound above the horizon
-is preferred over the blend's growing tail, the floor twin (same heights, `dep_min = 7.0°`,
-maximum answer 21.9 m) gives up 0.0007 m of test median. What Stage 3 must check before any of
-this ships: the range slope near zero on Mapillary (compression), the height-residual slope at
-the confound floor (#4765's diagnostic), and whether a single per-source camera height fixes the
-scale axis for non-GSV rigs.
+(#3 Stage 4 note — `lat`/`lng` are computed at insert time). What Stage 3 must check before any
+of this ships: the range slope near zero on Mapillary (compression), the height-residual slope
+at the confound floor (#4765's diagnostic), and whether a single per-source camera height fixes
+the scale axis for non-GSV rigs — on rigs that are not a GSV car, every `h[t]` shifts by the
+same rig offset, so a per-source base height with the per-type *offsets* kept is the natural
+generalization.
 
 ## Reproducing this report
 
