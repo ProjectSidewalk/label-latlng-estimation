@@ -1,9 +1,11 @@
 """Issue #3 Stage 3 — falsify the refit candidates on Mapillary, don't fit on them.
 
 This module consumes the committed ``data/falsification-*`` inputs (auto-labeler fused
-multi-view sites plus per-pano metadata; see ``data/MANIFEST.md``) and currently implements
-the opening move: the **projection/metadata census** of the two Mapillary-viewer cities.
-The census answers, before any diagnostic runs, whether the falsification's assumptions hold:
+multi-view sites plus per-pano metadata; see ``data/MANIFEST.md``) and implements all three
+stages of the falsification: the **projection/metadata census**, the two **scale-free
+diagnostics**, and the **per-sequence camera-height fit**.
+
+The census runs first and answers, before any diagnostic, whether the assumptions hold:
 
 - projection — every pano a true 2:1 equirect? (`camera_type`, width == 2·height)
 - which pose fields are usable — raw `compass_angle` is 56% literal-zero in clovis, so any
@@ -297,22 +299,15 @@ def model_distances(dep_deg: np.ndarray, pano_height: np.ndarray) -> dict[str, n
 
 def member_frame(run: str, data_dir: Path = DATA_DIR) -> pd.DataFrame:
     """One row per in_refit member of every multi-member site, with pano metadata joined."""
-    panos = load_panos(run, data_dir).set_index("pano_id")
     rows = []
     for site in load_sites(run, data_dir):
         members = [m for m in site["members"] if m.get("in_refit", True)]
         if len(members) < MIN_SITE_MEMBERS:
             continue
         for m in members:
-            p = panos.loc[m["pano_id"]]
             rows.append({
                 "site_id": site["site_id"],
                 "pano_id": m["pano_id"],
-                "sequence_id": p.get("sequence_id"),
-                "rig": f"{p.get('camera_make') or '(none)'} / {p.get('camera_model') or '(none)'}",
-                "pano_height": int(p["height"]),
-                "pano_lat": float(p["lat"]),
-                "pano_lng": float(p["lng"]),
                 "y_normalized": float(m["y_normalized"]),
                 "bearing_deg": float(m["bearing_deg"]),
                 "range_m": float(m["range_m"]),
@@ -320,8 +315,18 @@ def member_frame(run: str, data_dir: Path = DATA_DIR) -> pd.DataFrame:
                 "member_lng": float(m["lng"]),
             })
     frame = pd.DataFrame(rows)
+    # One merge rather than a .loc per member: identical rows in identical order, but
+    # ~120k index lookups across the six runs collapse into six hash joins.
+    panos = load_panos(run, data_dir)
+    pano_cols = panos[["pano_id", "sequence_id", "camera_make", "camera_model",
+                       "height", "lat", "lng"]].rename(
+        columns={"height": "pano_height", "lat": "pano_lat", "lng": "pano_lng"})
+    frame = frame.merge(pano_cols, on="pano_id", how="left", sort=False)
+    frame["rig"] = (frame["camera_make"].fillna("(none)") + " / "
+                    + frame["camera_model"].fillna("(none)"))
+    frame["pano_height"] = frame["pano_height"].astype(int)
     frame["dep_deg"] = (frame["y_normalized"] - 0.5) * 180.0
-    return frame
+    return frame.drop(columns=["camera_make", "camera_model"])
 
 
 def _local_en(lat, lng, lat0: float, lng0: float) -> tuple[np.ndarray, np.ndarray]:
@@ -388,7 +393,8 @@ def diagnose_run(run: str, data_dir: Path = DATA_DIR,
 
 
 def conventions_check(run: str = "richmond", data_dir: Path = DATA_DIR) -> dict:
-    """The auto-labeler's stored ray range must equal our cotangent at h=2.6 exactly."""
+    """The auto-labeler's stored ray range must equal our cotangent at h=2.6 to the
+    precision the sites file stores (sub-millimetre; the findings test pins < 1 mm)."""
     f = member_frame(run, data_dir)
     cot = model_distances(f["dep_deg"].to_numpy(), f["pano_height"].to_numpy())["C_cotangent"]
     return {"max_abs_range_m_delta": round(float(np.max(np.abs(cot - f["range_m"]))), 6),
@@ -416,38 +422,66 @@ def build_diagnostics(data_dir: Path = DATA_DIR) -> dict:
 # RampNet#101 (shrinking every range buys residual for free when views cluster on one
 # side), so everything reported is relative to the run's member-weighted geometric mean,
 # and the absolute anchor stays the GSV-fit heights.
+#
+# Only multi-sequence sites enter the objective. A site whose members all come from ONE
+# sequence carries no information about relative scale, and it is worse than uninformative:
+# scaling that sequence moves its placements *and* their mean together, so the site's
+# residual is exactly k^2 x (its residual at k = 1) and the least-squares step pulls k
+# toward zero with nothing opposing it. Left in, that degeneracy collapsed 32 clovis
+# sequences (all of whose members sit in single-sequence sites) to k as low as 0.02.
+# Dropping those sites moves nothing published — richmond's per-rig medians shift by
+# <= 0.005 and its post-scale height slope by 0.0008 — but it removes the failure mode.
+# The fitted scales are still APPLIED to every member; only the objective is restricted.
+#
+# Because a per-sequence scale has one free parameter per sequence and pano height is
+# constant within a sequence, the in-sample collapse of the height slope is expected under
+# either hypothesis (rig confounding OR a height-dependent model error). What separates
+# them is out-of-sample transfer, which `sequence_scale_holdout` measures: fit k on half
+# the sites, score the other half's members with it.
 # --------------------------------------------------------------------------------------
 
 SEQ_SCALE_ITERATIONS = 200
 SEQ_MIN_MEMBERS = 5
+SEQ_HOLDOUT_SEED = 666  # the repo-wide seed
+SEQ_HOLDOUT_SWEEP = (1, 7, 42, 666, 2026)  # so "not a lucky split" is checkable, not asserted
 
 
 def fit_sequence_scales(run: str, data_dir: Path = DATA_DIR,
                         frame: pd.DataFrame | None = None) -> tuple[pd.DataFrame, pd.DataFrame]:
     """Alternating least squares for per-sequence distance scales under D_blend.
 
+    The objective covers members of multi-sequence sites only (see the section comment);
+    sequences with no such member keep k = 1 and are reported with ``n_fit_members`` 0.
+
     Returns (member frame with fitted per-member scale, per-sequence table).
     """
     f = member_frame(run, data_dir) if frame is None else frame
-    lat0, lng0 = float(f["pano_lat"].mean()), float(f["pano_lng"].mean())
-    pe, pn = _local_en(f["pano_lat"], f["pano_lng"], lat0, lng0)
-    theta = np.radians(f["bearing_deg"])
-    ux, uy = np.sin(theta), np.cos(theta)
-    d0 = model_distances(f["dep_deg"].to_numpy(), f["pano_height"].to_numpy())["D_blend"]
     seq_codes, seq_ids = pd.factorize(f["sequence_id"])
-    site_codes, _ = pd.factorize(f["site_id"])
-    k = np.ones(len(seq_ids))
+    n_seq = len(seq_ids)
+
+    # the informative subset: sites seen by two or more sequences
+    per_site = f.groupby("site_id")["sequence_id"].transform("nunique")
+    fit_rows = (per_site >= 2).to_numpy()
+    sub = f[fit_rows]
+
+    lat0, lng0 = float(sub["pano_lat"].mean()), float(sub["pano_lng"].mean())
+    pe, pn = _local_en(sub["pano_lat"], sub["pano_lng"], lat0, lng0)
+    theta = np.radians(sub["bearing_deg"])
+    ux, uy = np.sin(theta), np.cos(theta)
+    d0 = model_distances(sub["dep_deg"].to_numpy(), sub["pano_height"].to_numpy())["D_blend"]
+    sub_seq_codes = seq_codes[fit_rows]
+    site_codes, _ = pd.factorize(sub["site_id"])
+    k = np.ones(n_seq)
     n_sites = site_codes.max() + 1
+    den = np.bincount(sub_seq_codes, weights=d0 ** 2, minlength=n_seq)  # k-independent
     for _ in range(SEQ_SCALE_ITERATIONS):
-        dist = k[seq_codes] * d0
+        dist = k[sub_seq_codes] * d0
         px, py = pe + dist * ux, pn + dist * uy
         counts = np.bincount(site_codes, minlength=n_sites)
         cx = np.bincount(site_codes, weights=px, minlength=n_sites) / counts
         cy = np.bincount(site_codes, weights=py, minlength=n_sites) / counts
         tx, ty = cx[site_codes] - pe, cy[site_codes] - pn
-        num = np.bincount(seq_codes, weights=d0 * (tx * ux + ty * uy),
-                          minlength=len(seq_ids))
-        den = np.bincount(seq_codes, weights=d0 ** 2, minlength=len(seq_ids))
+        num = np.bincount(sub_seq_codes, weights=d0 * (tx * ux + ty * uy), minlength=n_seq)
         k_new = np.where(den > 0, num / np.maximum(den, 1e-12), 1.0)
         if np.max(np.abs(k_new - k)) < 1e-10:
             k = k_new
@@ -456,17 +490,17 @@ def fit_sequence_scales(run: str, data_dir: Path = DATA_DIR,
 
     # relative to the member-weighted geometric mean (the unidentified global axis)
     member_k = k[seq_codes]
-    k_rel = k / np.exp(np.mean(np.log(np.maximum(member_k, 1e-6))))
+    gmean = np.exp(np.mean(np.log(np.maximum(member_k, 1e-6))))
     seq_table = pd.DataFrame({
         "sequence_id": seq_ids,
-        "k_rel": k_rel[np.arange(len(seq_ids))],
-        "n_members": np.bincount(seq_codes, minlength=len(seq_ids)),
+        "k_rel": k / gmean,
+        "n_members": np.bincount(seq_codes, minlength=n_seq),
+        "n_fit_members": np.bincount(sub_seq_codes, minlength=n_seq),
     })
     rig_by_seq = f.groupby("sequence_id")["rig"].first()
     seq_table["rig"] = seq_table["sequence_id"].map(rig_by_seq)
     seq_table["implied_h_m"] = seq_table["k_rel"] * BLEND_H_M
-    f = f.assign(seq_scale=member_k / np.exp(np.mean(np.log(np.maximum(member_k, 1e-6)))))
-    return f, seq_table
+    return f.assign(seq_scale=member_k / gmean), seq_table
 
 
 def sequence_scale_summary(run: str, data_dir: Path = DATA_DIR) -> dict:
@@ -474,14 +508,17 @@ def sequence_scale_summary(run: str, data_dir: Path = DATA_DIR) -> dict:
 
     # identifiability: how many sites see more than one sequence?
     per_site = f.groupby("site_id")["sequence_id"].nunique()
-    fitted = seq_table[seq_table["n_members"] >= SEQ_MIN_MEMBERS]
+    # report only sequences the objective could actually see (n_fit_members, not n_members):
+    # a sequence living entirely in single-sequence sites keeps k = 1 by fiat, and quoting
+    # that 1.0 as a measurement would be circular.
+    fitted = seq_table[seq_table["n_fit_members"] >= SEQ_MIN_MEMBERS]
 
     per_rig = {}
     for rig, g in fitted.groupby("rig"):
-        weights = g["n_members"].to_numpy(dtype=float)
+        weights = g["n_fit_members"].to_numpy(dtype=float)
         per_rig[rig] = {
             "n_sequences": int(len(g)),
-            "n_members": int(g["n_members"].sum()),
+            "n_members": int(g["n_fit_members"].sum()),
             "k_rel_median": round(float(g["k_rel"].median()), 4),
             "k_rel_iqr": [round(float(g["k_rel"].quantile(0.25)), 4),
                           round(float(g["k_rel"].quantile(0.75)), 4)],
@@ -496,9 +533,55 @@ def sequence_scale_summary(run: str, data_dir: Path = DATA_DIR) -> dict:
         "n_sequences_fitted": int(len(fitted)),
         "n_multi_sequence_sites": int((per_site >= 2).sum()),
         "n_sites": int(per_site.size),
+        "n_members_in_objective": int(seq_table["n_fit_members"].sum()),
         "per_rig": per_rig,
         "d_blend_unscaled": base,
         "d_blend_per_sequence_scale": scaled,
+        "holdout": sequence_scale_holdout(run, data_dir, frame=f),
+        "holdout_seed_sweep": [
+            {"seed": s, **{k: v for k, v in sequence_scale_holdout(run, data_dir, frame=f,
+                                                                   seed=s).items()
+                           if k in ("d_blend_unscaled", "d_blend_transferred_scale")}}
+            for s in SEQ_HOLDOUT_SWEEP],
+    }
+
+
+def sequence_scale_holdout(run: str, data_dir: Path = DATA_DIR,
+                           frame: pd.DataFrame | None = None,
+                           seed: int = SEQ_HOLDOUT_SEED) -> dict:
+    """Fit the per-sequence scales on half the sites; score the other half with them.
+
+    In-sample, one free parameter per sequence can absorb any height-correlated systematic
+    by construction (pano height is constant within a sequence), so the in-sample collapse
+    of the height slope is not evidence on its own. If the collapse is real per-rig camera
+    height, scales fitted on disjoint sites must transfer; if it is 316 parameters eating
+    noise, they must not. This measures that, on the held-out half only.
+    """
+    f = member_frame(run, data_dir) if frame is None else frame
+    sites = np.sort(f["site_id"].unique())
+    order = np.random.default_rng(seed).permutation(len(sites))
+    fit_sites = set(sites[order[: len(sites) // 2]].tolist())
+    in_fit = f["site_id"].isin(fit_sites).to_numpy()
+
+    _, seq_table = fit_sequence_scales(run, data_dir, frame=f[in_fit].reset_index(drop=True))
+    usable = seq_table[seq_table["n_fit_members"] >= SEQ_MIN_MEMBERS]
+    k = usable.set_index("sequence_id")["k_rel"]
+
+    held = f[~in_fit].reset_index(drop=True)
+    scale = held["sequence_id"].map(k)
+    covered = scale.notna()
+    scale = scale.fillna(1.0)  # sequences the fit half could not measure stay unscaled
+    base = diagnose_run(run, data_dir, frame=held)["per_model"]["D_blend"]
+    scaled = diagnose_run(run, data_dir, frame=held, scale=scale)["per_model"]["D_blend"]
+    return {
+        "seed": seed,
+        "n_fit_sites": int(len(fit_sites)),
+        "n_held_sites": int(held["site_id"].nunique()),
+        "n_held_members": int(len(held)),
+        "n_sequences_transferred": int(len(usable)),
+        "held_members_covered": int(covered.sum()),
+        "d_blend_unscaled": base,
+        "d_blend_transferred_scale": scaled,
     }
 
 

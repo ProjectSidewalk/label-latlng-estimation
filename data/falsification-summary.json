@@ -630,39 +630,40 @@
   },
   "sequence_scales": {
     "richmond": {
-      "n_sequences_fitted": 257,
+      "n_sequences_fitted": 255,
       "n_multi_sequence_sites": 997,
       "n_sites": 1183,
+      "n_members_in_objective": 7186,
       "per_rig": {
         "GoPro / GoPro Max": {
           "n_sequences": 13,
-          "n_members": 1489,
-          "k_rel_median": 0.8709,
+          "n_members": 1158,
+          "k_rel_median": 0.872,
           "k_rel_iqr": [
-            0.8374,
-            0.9637
+            0.8368,
+            0.9762
           ],
-          "k_rel_weighted_mean": 0.9125
+          "k_rel_weighted_mean": 0.9122
         },
         "NCTECH LTD / iSTAR Pulsar": {
-          "n_sequences": 231,
-          "n_members": 5312,
-          "k_rel_median": 1.023,
+          "n_sequences": 229,
+          "n_members": 5231,
+          "k_rel_median": 1.0216,
           "k_rel_iqr": [
-            0.9742,
-            1.0643
+            0.9747,
+            1.0634
           ],
-          "k_rel_weighted_mean": 1.0292
+          "k_rel_weighted_mean": 1.0283
         },
         "none / none": {
           "n_sequences": 13,
-          "n_members": 760,
-          "k_rel_median": 1.0096,
+          "n_members": 643,
+          "k_rel_median": 1.009,
           "k_rel_iqr": [
-            0.9809,
-            1.0398
+            0.9735,
+            1.0417
           ],
-          "k_rel_weighted_mean": 0.9992
+          "k_rel_weighted_mean": 1.0046
         }
       },
       "d_blend_unscaled": {
@@ -677,41 +678,199 @@
         }
       },
       "d_blend_per_sequence_scale": {
-        "rms_over_range": 0.1883,
+        "rms_over_range": 0.1886,
         "range_slope": {
-          "slope": 0.005,
+          "slope": 0.0041,
           "se": 0.0058
         },
         "height_slope": {
-          "slope": -0.0221,
+          "slope": -0.0219,
           "se": 0.0148
         }
-      }
+      },
+      "holdout": {
+        "seed": 666,
+        "n_fit_sites": 591,
+        "n_held_sites": 592,
+        "n_held_members": 3973,
+        "n_sequences_transferred": 196,
+        "held_members_covered": 3505,
+        "d_blend_unscaled": {
+          "rms_over_range": 0.2013,
+          "range_slope": {
+            "slope": 0.0031,
+            "se": 0.0091
+          },
+          "height_slope": {
+            "slope": -0.2546,
+            "se": 0.0209
+          }
+        },
+        "d_blend_transferred_scale": {
+          "rms_over_range": 0.2012,
+          "range_slope": {
+            "slope": 0.0178,
+            "se": 0.0088
+          },
+          "height_slope": {
+            "slope": -0.0797,
+            "se": 0.0212
+          }
+        }
+      },
+      "holdout_seed_sweep": [
+        {
+          "seed": 1,
+          "d_blend_unscaled": {
+            "rms_over_range": 0.2017,
+            "range_slope": {
+              "slope": -0.0033,
+              "se": 0.0092
+            },
+            "height_slope": {
+              "slope": -0.2556,
+              "se": 0.0222
+            }
+          },
+          "d_blend_transferred_scale": {
+            "rms_over_range": 0.1993,
+            "range_slope": {
+              "slope": 0.0042,
+              "se": 0.0089
+            },
+            "height_slope": {
+              "slope": -0.0738,
+              "se": 0.0223
+            }
+          }
+        },
+        {
+          "seed": 7,
+          "d_blend_unscaled": {
+            "rms_over_range": 0.2054,
+            "range_slope": {
+              "slope": -0.0045,
+              "se": 0.0093
+            },
+            "height_slope": {
+              "slope": -0.2354,
+              "se": 0.022
+            }
+          },
+          "d_blend_transferred_scale": {
+            "rms_over_range": 0.2038,
+            "range_slope": {
+              "slope": 0.0157,
+              "se": 0.0089
+            },
+            "height_slope": {
+              "slope": -0.0592,
+              "se": 0.0222
+            }
+          }
+        },
+        {
+          "seed": 42,
+          "d_blend_unscaled": {
+            "rms_over_range": 0.1986,
+            "range_slope": {
+              "slope": -0.0136,
+              "se": 0.0094
+            },
+            "height_slope": {
+              "slope": -0.2158,
+              "se": 0.0225
+            }
+          },
+          "d_blend_transferred_scale": {
+            "rms_over_range": 0.1999,
+            "range_slope": {
+              "slope": 0.0216,
+              "se": 0.0091
+            },
+            "height_slope": {
+              "slope": 0.0577,
+              "se": 0.0228
+            }
+          }
+        },
+        {
+          "seed": 666,
+          "d_blend_unscaled": {
+            "rms_over_range": 0.2013,
+            "range_slope": {
+              "slope": 0.0031,
+              "se": 0.0091
+            },
+            "height_slope": {
+              "slope": -0.2546,
+              "se": 0.0209
+            }
+          },
+          "d_blend_transferred_scale": {
+            "rms_over_range": 0.2012,
+            "range_slope": {
+              "slope": 0.0178,
+              "se": 0.0088
+            },
+            "height_slope": {
+              "slope": -0.0797,
+              "se": 0.0212
+            }
+          }
+        },
+        {
+          "seed": 2026,
+          "d_blend_unscaled": {
+            "rms_over_range": 0.2008,
+            "range_slope": {
+              "slope": -0.0094,
+              "se": 0.0092
+            },
+            "height_slope": {
+              "slope": -0.2371,
+              "se": 0.022
+            }
+          },
+          "d_blend_transferred_scale": {
+            "rms_over_range": 0.2005,
+            "range_slope": {
+              "slope": 0.0118,
+              "se": 0.0089
+            },
+            "height_slope": {
+              "slope": -0.0795,
+              "se": 0.0222
+            }
+          }
+        }
+      ]
     },
     "clovis": {
-      "n_sequences_fitted": 239,
+      "n_sequences_fitted": 210,
       "n_multi_sequence_sites": 929,
       "n_sites": 1560,
+      "n_members_in_objective": 5631,
       "per_rig": {
         "GoPro / Fusion": {
-          "n_sequences": 92,
-          "n_members": 2409,
-          "k_rel_median": 0.995,
+          "n_sequences": 73,
+          "n_members": 1697,
+          "k_rel_median": 0.9919,
           "k_rel_iqr": [
-            0.9314,
-            1.0509
+            0.915,
+            1.0542
           ],
-          "k_rel_weighted_mean": 0.9981
+          "k_rel_weighted_mean": 0.9972
         },
         "GoPro / GoPro Fusion FS1.04.01.80.00": {
-          "n_sequences": 147,
-          "n_members": 5050,
-          "k_rel_median": 0.9982,
+          "n_sequences": 137,
+          "n_members": 3722,
+          "k_rel_median": 0.9907,
           "k_rel_iqr": [
-            0.951,
-            1.0536
+            0.9397,
+            1.0475
           ],
-          "k_rel_weighted_mean": 1.0125
+          "k_rel_weighted_mean": 1.0075
         }
       },
       "d_blend_unscaled": {
@@ -726,16 +885,173 @@
         }
       },
       "d_blend_per_sequence_scale": {
-        "rms_over_range": 0.1743,
+        "rms_over_range": 0.1765,
         "range_slope": {
-          "slope": 0.0667,
+          "slope": 0.0661,
           "se": 0.0059
         },
         "height_slope": {
           "slope": null,
           "se": null
         }
-      }
+      },
+      "holdout": {
+        "seed": 666,
+        "n_fit_sites": 780,
+        "n_held_sites": 780,
+        "n_held_members": 3927,
+        "n_sequences_transferred": 143,
+        "held_members_covered": 2974,
+        "d_blend_unscaled": {
+          "rms_over_range": 0.1803,
+          "range_slope": {
+            "slope": 0.0598,
+            "se": 0.0086
+          },
+          "height_slope": {
+            "slope": null,
+            "se": null
+          }
+        },
+        "d_blend_transferred_scale": {
+          "rms_over_range": 0.186,
+          "range_slope": {
+            "slope": 0.0728,
+            "se": 0.0086
+          },
+          "height_slope": {
+            "slope": null,
+            "se": null
+          }
+        }
+      },
+      "holdout_seed_sweep": [
+        {
+          "seed": 1,
+          "d_blend_unscaled": {
+            "rms_over_range": 0.1789,
+            "range_slope": {
+              "slope": 0.0634,
+              "se": 0.0087
+            },
+            "height_slope": {
+              "slope": null,
+              "se": null
+            }
+          },
+          "d_blend_transferred_scale": {
+            "rms_over_range": 0.1866,
+            "range_slope": {
+              "slope": 0.0888,
+              "se": 0.0089
+            },
+            "height_slope": {
+              "slope": null,
+              "se": null
+            }
+          }
+        },
+        {
+          "seed": 7,
+          "d_blend_unscaled": {
+            "rms_over_range": 0.1768,
+            "range_slope": {
+              "slope": 0.0621,
+              "se": 0.0087
+            },
+            "height_slope": {
+              "slope": null,
+              "se": null
+            }
+          },
+          "d_blend_transferred_scale": {
+            "rms_over_range": 0.1857,
+            "range_slope": {
+              "slope": 0.0833,
+              "se": 0.0088
+            },
+            "height_slope": {
+              "slope": null,
+              "se": null
+            }
+          }
+        },
+        {
+          "seed": 42,
+          "d_blend_unscaled": {
+            "rms_over_range": 0.1766,
+            "range_slope": {
+              "slope": 0.0797,
+              "se": 0.0085
+            },
+            "height_slope": {
+              "slope": null,
+              "se": null
+            }
+          },
+          "d_blend_transferred_scale": {
+            "rms_over_range": 0.1817,
+            "range_slope": {
+              "slope": 0.0994,
+              "se": 0.0085
+            },
+            "height_slope": {
+              "slope": null,
+              "se": null
+            }
+          }
+        },
+        {
+          "seed": 666,
+          "d_blend_unscaled": {
+            "rms_over_range": 0.1803,
+            "range_slope": {
+              "slope": 0.0598,
+              "se": 0.0086
+            },
+            "height_slope": {
+              "slope": null,
+              "se": null
+            }
+          },
+          "d_blend_transferred_scale": {
+            "rms_over_range": 0.186,
+            "range_slope": {
+              "slope": 0.0728,
+              "se": 0.0086
+            },
+            "height_slope": {
+              "slope": null,
+              "se": null
+            }
+          }
+        },
+        {
+          "seed": 2026,
+          "d_blend_unscaled": {
+            "rms_over_range": 0.1799,
+            "range_slope": {
+              "slope": 0.0632,
+              "se": 0.0087
+            },
+            "height_slope": {
+              "slope": null,
+              "se": null
+            }
+          },
+          "d_blend_transferred_scale": {
+            "rms_over_range": 0.1876,
+            "range_slope": {
+              "slope": 0.0847,
+              "se": 0.0088
+            },
+            "height_slope": {
+              "slope": null,
+              "se": null
+            }
+          }
+        }
+      ]
     }
   }
 }

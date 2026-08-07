@@ -1,12 +1,13 @@
-"""Run the #3 Stage 3 opening: the Mapillary projection/metadata census.
+"""Run the #3 Stage 3 falsification: census, scale-free diagnostics, per-sequence heights.
 
 Usage (from the repo root):
-    python python/run_mapillary_falsification.py            # print the census
+    python python/run_mapillary_falsification.py            # print everything
     python python/run_mapillary_falsification.py --write    # also write data/falsification-summary.json
 
-Offline and deterministic: the committed data/falsification-* inputs in, zero network.
-Later Stage 3 stages (per-sequence camera heights, the two scale-free falsification
-diagnostics) will extend this runner and the same summary file.
+Offline and deterministic (~25 s): the committed data/falsification-* inputs in, zero
+network. Three stages, all written to the one summary file — the Mapillary projection and
+metadata census, the two scale-free self-consistency diagnostics on all six runs, and the
+per-sequence camera-height fit with its held-out transfer check.
 """
 
 from __future__ import annotations
@@ -89,7 +90,8 @@ def main() -> None:
     print("\nPer-sequence camera heights (D_blend, relative to run gmean):")
     for run, s in seq_scales.items():
         print(f"  {run}: {s['n_sequences_fitted']} seqs fitted, "
-              f"{s['n_multi_sequence_sites']}/{s['n_sites']} multi-sequence sites")
+              f"{s['n_multi_sequence_sites']}/{s['n_sites']} multi-sequence sites, "
+              f"{s['n_members_in_objective']} members in the objective")
         for rig, r in sorted(s["per_rig"].items(), key=lambda kv: -kv[1]["n_members"]):
             print(f"    {rig:<40} {r['n_sequences']:>4} seqs {r['n_members']:>5} members  "
                   f"k_rel med {r['k_rel_median']:.3f} iqr {r['k_rel_iqr']}")
@@ -98,6 +100,23 @@ def main() -> None:
             v = s[key]
             print(f"    D {lbl:<14} rms/range {v['rms_over_range']:.4f}  "
                   f"range {fmt_slope(v['range_slope'])}  height {fmt_slope(v['height_slope'])}")
+        h = s["holdout"]
+        print(f"    held out: fit on {h['n_fit_sites']} sites, score {h['n_held_members']} "
+              f"members of {h['n_held_sites']} disjoint sites "
+              f"({h['held_members_covered']} covered by {h['n_sequences_transferred']} seqs)")
+        for lbl, key in [("unscaled", "d_blend_unscaled"),
+                         ("transferred k", "d_blend_transferred_scale")]:
+            v = h[key]
+            print(f"    H {lbl:<14} rms/range {v['rms_over_range']:.4f}  "
+                  f"range {fmt_slope(v['range_slope'])}  height {fmt_slope(v['height_slope'])}")
+        sweep = []
+        for w in s["holdout_seed_sweep"]:
+            u = w["d_blend_unscaled"]["height_slope"]["slope"]
+            t = w["d_blend_transferred_scale"]["height_slope"]["slope"]
+            sweep.append(f"{w['seed']}: n/a" if u is None
+                         else f"{w['seed']}: {100 * (1 - abs(t) / abs(u)):.0f}%")
+        print(f"    seed sweep, height slope removed on the held-out half — "
+              + ", ".join(sweep))
 
     if args.write:
         out = args.data_dir / "falsification-summary.json"

@@ -32,13 +32,20 @@ Diagnostics findings (the two scale-free axes of #4765/#4766, all six runs):
 - The shipped blend D is the flattest model on the range axis on every run: |slope|
   <= 0.09 m/m everywhere, versus the status quo's -0.11..-0.32 on GSV and a
   catastrophic -1.40 on clovis's 2880-px panos (the #4765 sign-flip, measured).
-- On the height-residual axis D sits at the confound floor (B's slope) on richmond,
-  and fitted per-sequence camera heights collapse it to ~0 — the residual height
-  dependence was rig confounding (camera height correlates with pano height), not
-  pixel-frame error.
+- On the height-residual axis only A reads pixels, so only A can carry a pixel-frame
+  height defect — and it does: -0.690 on richmond, 2.6x outside the band the three
+  height-blind placements (B, C, D) show from rig confounding alone. That band is a
+  region, not a floor: C and D sit well outside B on three of four GSV controls.
 - Per-sequence camera heights separate by rig exactly as mount geometry predicts:
   GoPro Max sequences ~13% below the run mean, the iSTAR Pulsar car rig slightly
-  above; clovis's two model-strings are one physical rig (both k ~= 1.00).
+  above; clovis's two model-strings are one physical rig (both k ~= 0.99).
+- And they TRANSFER: scales fitted on a random half of richmond's sites remove ~69%
+  of the held-out half's height slope (66-75% over five seeds), against the 91% the
+  in-sample fit reports. The in-sample collapse alone proves nothing — pano height is
+  constant within a sequence, so one free parameter per sequence absorbs any
+  height-correlated systematic by construction. Out-of-sample RMS/range is flat, so
+  what the scales carry is height-axis information, not general self-consistency;
+  clovis (one physical rig) correctly transfers nothing at all.
 """
 
 import json
@@ -201,13 +208,30 @@ def test_clovis_status_quo_compression_is_catastrophic(diag):
     assert diag["clovis"]["per_model"]["A_status_quo"]["range_slope"]["slope"] < -1.0
 
 
-def test_richmond_blend_sits_at_the_confound_floor(diag):
-    """The falsification's second axis: D shows no height dependence beyond the floor
-    that a placement with no pixel dependence at all (B) shows by construction."""
+def test_only_the_pixel_reading_model_leaves_a_height_defect(diag):
+    """The falsification's second axis. B, C and D take no pano_height input, so their
+    slopes bound the rig-confounding band; A is the only candidate that reads pixels and
+    the only one that can carry a pixel-frame defect. On richmond it sits 2.6x outside
+    the band — #4765's defect, alive on Mapillary."""
     per_model = diag["richmond"]["per_model"]
-    floor = abs(per_model["B_normalized"]["height_slope"]["slope"])
-    assert abs(per_model["D_blend"]["height_slope"]["slope"]) < floor + 0.02
-    assert abs(per_model["A_status_quo"]["height_slope"]["slope"]) > 2 * floor
+    band = max(abs(per_model[k]["height_slope"]["slope"])
+               for k in ["B_normalized", "C_cotangent", "D_blend"])
+    assert abs(per_model["D_blend"]["height_slope"]["slope"]) <= band
+    assert abs(per_model["A_status_quo"]["height_slope"]["slope"]) > 2 * band
+    # and A points the way the mechanism predicts on every run that has two pano heights
+    for run in ["richmond", "paterson", "gainesville", "bend", "sao_paulo"]:
+        assert diag[run]["per_model"]["A_status_quo"]["height_slope"]["slope"] < 0, run
+
+
+def test_the_height_blind_band_is_a_region_not_a_floor(diag):
+    """B is not a universal confound floor: on three of four GSV controls both C and D
+    sit well outside it, which is why the report reads the three as a band. Locked so the
+    'D is at the floor' reading cannot come back by accident."""
+    for run in ["paterson", "gainesville", "bend"]:
+        per_model = diag[run]["per_model"]
+        b = abs(per_model["B_normalized"]["height_slope"]["slope"])
+        for other in ["C_cotangent", "D_blend"]:
+            assert abs(per_model[other]["height_slope"]["slope"]) > b + 0.05, (run, other)
 
 
 def test_single_height_runs_report_no_height_slope(diag):
@@ -224,13 +248,68 @@ def scales(summary):
 
 
 def test_per_sequence_heights_collapse_richmonds_height_slope(scales):
-    """Rig confounding, not pixel-frame error: fitted camera heights remove what the
-    height-normalized floor could not."""
+    """In-sample: fitted camera heights take the height slope to ~0. On its own this
+    proves nothing (see the holdout tests below) — pano height is constant within a
+    sequence, so one free parameter per sequence absorbs it by construction."""
     r = scales["richmond"]
     assert abs(r["d_blend_unscaled"]["height_slope"]["slope"]) > 0.2
     assert abs(r["d_blend_per_sequence_scale"]["height_slope"]["slope"]) < 0.05
     # and the range axis stays flat rather than being traded away
     assert abs(r["d_blend_per_sequence_scale"]["range_slope"]["slope"]) < 0.02
+
+
+def test_single_sequence_sites_are_excluded_from_the_objective(scales):
+    """A site seen by one sequence scales with that sequence, so it pulls k toward zero
+    with nothing opposing it — zero information about relative scale, pure degeneracy.
+    Only multi-sequence members enter the fit."""
+    for run, total in [("richmond", 7711), ("clovis", 7691)]:
+        assert 0 < scales[run]["n_members_in_objective"] < total, run
+    assert scales["richmond"]["n_members_in_objective"] == 7186   # 525 members dropped
+    assert scales["clovis"]["n_members_in_objective"] == 5631     # 2,060 dropped (27%)
+
+
+def test_fitted_rig_heights_transfer_to_held_out_sites(scales):
+    """The finding the in-sample collapse cannot deliver: scales fitted on a random half
+    of richmond's sites remove ~69% of the DISJOINT half's height slope. Real rig
+    geometry, measured with no ground truth."""
+    h = scales["richmond"]["holdout"]
+    before = abs(h["d_blend_unscaled"]["height_slope"]["slope"])
+    after = abs(h["d_blend_transferred_scale"]["height_slope"]["slope"])
+    assert before > 0.2
+    assert after < 0.4 * before          # ~69% removed
+    assert h["n_held_members"] > 3000 and h["held_members_covered"] > 3000
+
+
+def test_the_transfer_is_not_a_lucky_split(scales):
+    """Same result on five seeds: 66-75% of the held-out slope removed, every time."""
+    sweep = scales["richmond"]["holdout_seed_sweep"]
+    assert len(sweep) == 5
+    removed = [1 - abs(w["d_blend_transferred_scale"]["height_slope"]["slope"])
+               / abs(w["d_blend_unscaled"]["height_slope"]["slope"]) for w in sweep]
+    assert min(removed) > 0.6, removed
+    assert max(removed) < 0.85, removed
+
+
+def test_the_transfer_buys_the_height_axis_and_not_self_consistency(scales):
+    """RMS/range improves 6% in-sample but is flat out-of-sample, so the fitted scales
+    carry height-axis information specifically — the in-sample RMS gain was the added
+    parameters. Stated so the report cannot quietly claim more than that."""
+    r = scales["richmond"]
+    in_sample = (r["d_blend_unscaled"]["rms_over_range"]
+                 - r["d_blend_per_sequence_scale"]["rms_over_range"])
+    h = r["holdout"]
+    held = h["d_blend_unscaled"]["rms_over_range"] - h["d_blend_transferred_scale"]["rms_over_range"]
+    assert in_sample > 0.008
+    assert abs(held) < 0.002
+
+
+def test_clovis_one_rig_transfers_nothing(scales):
+    """The null control: one physical camera, so there is no per-sequence height to find,
+    and transferring the fitted scales to held-out sites does not help (it slightly
+    hurts). A method that only fit noise could not produce this."""
+    h = scales["clovis"]["holdout"]
+    assert (h["d_blend_transferred_scale"]["rms_over_range"]
+            > h["d_blend_unscaled"]["rms_over_range"])
 
 
 def test_rig_classes_separate_as_mount_geometry_predicts(scales):

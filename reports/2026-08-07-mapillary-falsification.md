@@ -1,4 +1,4 @@
-# The blend survives Mapillary: compression is gone, and the height residual is the rigs, not the pixels
+# The blend survives Mapillary: compression is gone, and most of the height residual is the rigs
 
 **2026-08-07** · issue [#3](https://github.com/ProjectSidewalk/label-latlng-estimation/issues/3) (Stage 3, opening) · scores the candidate shipped by [Stages 1–2](2026-08-07-distance-refit.md) · feeds [SidewalkWebpage#4765](https://github.com/ProjectSidewalk/SidewalkWebpage/issues/4765) and [#4766](https://github.com/ProjectSidewalk/SidewalkWebpage/issues/4766)
 
@@ -6,8 +6,9 @@
 |---|---|
 | **−0.002 / +0.062** | the shipped blend's within-site range slope (m/m) on richmond / clovis — the compression signature #4766 measured at −0.59 for the deployed estimator is gone on the imagery it was never fit on |
 | **−1.40** | the deployed raw-pixel model's range slope on clovis's uniform 2880-px panoramas — #4765's sign-flip, measured directly: at 2.3× below the calibration height the linear model is not degraded, it is broken |
-| **−0.236 → −0.022** | richmond height-residual slope for the blend: already at the confound floor as shipped, and collapsing to zero once each sequence gets its own fitted camera height — the residual height dependence was the rigs, not the pixels |
-| **0.871 vs 1.023** | fitted relative distance scale, GoPro Max vs iSTAR Pulsar sequences: per-source camera height is real, measurable from the data, and ordered exactly as mount geometry predicts |
+| **−0.690 vs −0.24** | richmond height-residual slope, deployed model vs the three height-blind placements: only the deployed model reads pixels, and only it carries a pixel-frame height defect — 2.6× the band rig confounding alone produces |
+| **69%** | of the held-out half's height slope removed by per-sequence camera heights fitted on a **disjoint** half of the sites (66–75% over five seeds; 91% in-sample). Most of the residual is transferable rig geometry — not all of it, and the in-sample figure flatters |
+| **0.872 vs 1.022** | fitted relative distance scale, GoPro Max vs iSTAR Pulsar sequences: per-source camera height is real, measurable from the data, and ordered exactly as mount geometry predicts |
 
 > Reproduce every number here in one command each:
 >
@@ -51,11 +52,15 @@ questions, each locked by the findings tests:
   yes — |slope| ≤ 0.09 on all six runs, with one located, designed exception (sao_paulo's
   far-field tail).
 - **Q5 — The blend, height axis.** Is the blend's residual height dependence a pixel-frame
-  defect or camera-height (rig) confounding? → **§7**: confounding — at the confound floor as
-  shipped, collapsing to ≈ 0 once each sequence gets a fitted camera height.
+  defect or camera-height (rig) confounding? → **§7**: mostly confounding — the blend reads no
+  pixels at all, it sits inside the band the other height-blind placements show, and fitted
+  per-sequence camera heights remove 69% of it on **held-out** sites (not the 91% the
+  in-sample fit reports).
 - **Q6 — The Stage 4 generalization.** Can per-source camera height be measured from
-  self-consistency alone, with no ground truth? → **§7**: yes — rigs separate exactly as
-  mount geometry predicts (GoPro Max 13% below the car mast).
+  self-consistency alone, with no ground truth? → **§7**: yes, and it transfers — rigs
+  separate exactly as mount geometry predicts (GoPro Max 13% below the car mast), scales
+  fitted on one half of the sites flatten the other half, and clovis's one physical rig
+  correctly yields nothing.
 
 Three things are out of scope by design — absolute scale on Mapillary, human-click behaviour,
 and the near-horizon regime; **§8** says why, and where the evidence for each lives instead.
@@ -70,7 +75,14 @@ fused site is several independent detections of one physical curb ramp from diff
 panoramas — repeatable AI detections, not human clicks — with a GLS position, per-member
 normalized pixel coordinates, and a ray bearing derived from the SfM pose.
 
-| run | imagery | role | fused sites | site members (views) | panos seen | dominant capture |
+Two counts run through this report and they are not the same population. The fuse emits
+**operational sites** (richmond 1,570, of which 8,098 member detections); the diagnostics need
+at least two views to disagree, so they run on the **multi-member** subset — the two count
+columns below, and every slope in §6–§7. §4's census percentages are over
+all operational members (8,098 richmond / 8,626 clovis), because the census is about the
+imagery, not the diagnostic.
+
+| run | imagery | role | multi-member sites | site members (views) | panos seen | dominant capture |
 |---|---|---|---:|---:|---:|---|
 | richmond | Mapillary | test | 1,183 | 7,711 | 9,091 | iSTAR Pulsar car mount (11000×5500, 69% of members) over a four-rig zoo (heights 2048–6144) |
 | clovis | Mapillary | test | 1,560 | 7,691 | 72,776 | one creator, one GoPro Fusion (5760×2880), two years |
@@ -103,11 +115,13 @@ Measured over every pano the runs saw (9,091 richmond / 72,776 clovis), before a
 - **Only the SfM pose is usable.** Clovis's raw EXIF compass is literal zero on 56% of panos,
   and richmond's SfM (`computed_*`) moves raw GPS positions a median 2.9 m (p90 9.6 m). Every
   bearing and position in this report is the SfM one — scoring against raw EXIF would score GPS
-  noise. (The `altitude → computed_altitude` shift is a consistent ≈ +25–27 m in both cities —
-  a vertical-datum offset, not information about camera height above ground.)
+  noise. (The `altitude → computed_altitude` shift has a ≈ +25–27 m median in both cities, but
+  only clovis is tight about it — p10 23.7 / p90 26.5, against richmond's −5.7 / +38.8. Either
+  way it is a vertical-datum offset with SfM drift on top, not information about camera height
+  above ground, and nothing here uses it.)
 - **The rig zoo is real but car-shaped.** Richmond's six pano heights (2048–6144) come from
   four rigs — a professional car mount (NCTECH iSTAR Pulsar, 11000×5500, 69% of site members),
-  GoPro Max (21%), and two minor ones — under 8 creators. Clovis is a single creator driving
+  GoPro Max (21%), and two minor ones — across 8 creators. Clovis is a single creator driving
   one GoPro Fusion at 5760×2880 for two years (its two Mapillary model strings are the same
   physical camera; §7 confirms that from the data). **On-foot capture is negligible**: 17 of
   8,098 and 6 of 8,626 site members come from walking-speed sequences (classified from
@@ -132,9 +146,12 @@ bearing, and the candidate's predicted distance from the **exact depression angl
 - **range slope** (m/m): pooled OLS of along-ray residual on predicted range, both demeaned
   within site. Negative = far views under-shoot their peers = compression;
 - **height slope**: pooled OLS of along-ray residual (per site mean range) on
-  `pano_height/6656`, both demeaned within site. The **confound floor** is the
-  height-normalized model B's slope — B has no pixel dependence, so its slope is what rig
-  confounding alone produces (#4765's diagnostic);
+  `pano_height/6656`, both demeaned within site (#4765's diagnostic). Read it against the
+  **height-blind band**: B, C and D take no `pano_height` input at all, so whatever slope
+  *they* show is rig confounding refracted through each one's shape, never a pixel-frame
+  error. Only A reads pixels, so only A can carry one. The band is not a single number —
+  §7's table shows B, C and D disagreeing by up to 0.16 on the same run — so it bounds a
+  region, not a floor;
 - **RMS/range**: pooled 2D residual RMS over mean predicted range.
 
 The four candidates: **A** the deployed raw-pixel linear model (production zoom-1
@@ -198,40 +215,81 @@ Four readings:
   relative to the pure cotangent. That is the designed trade — boundedness at the horizon paid
   for in the far field — visible exactly where it should be and nowhere else.
 
-## §7 · Second axis: the height residual is the rigs, and the rigs are measurable
+## §7 · Second axis: most of the height residual is the rigs, and the rigs transfer
 
-On richmond (figure 18 below), the deployed model's
-height slope (−0.690) sits 2.6× above the confound floor (B: −0.269) — the pixel-frame defect,
-alive on Mapillary. The blend as shipped is **already at the floor** (−0.236): no measurable
-pixel-frame height dependence beyond what a pixel-independent placement shows from rig
-confounding alone.
+Within-site height slope, every run that has more than one pano height (clovis has one, so the
+slope is undefined there and the summary records `null` rather than float noise):
 
-Then the floor itself: one multiplicative distance scale per sequence (equivalently, one
-camera height per outing — a Mapillary sequence is one rig on one drive), fitted by
-alternating least squares on the same multi-view objective, **relative scale only** (997 of
-1,183 richmond sites see ≥ 2 sequences, so relative rig scale is identified; the global axis
-is the RampNet#101 trap and stays anchored to the GSV fit):
+| run | A status quo | B normalized | C cotangent | **D blend** |
+|---|---:|---:|---:|---:|
+| richmond (Mapillary) | **−0.690** | −0.269 | −0.228 | −0.236 |
+| paterson (GSV) | −0.432 | +0.035 | +0.144 | +0.107 |
+| gainesville (GSV) | −0.344 | +0.033 | +0.156 | +0.102 |
+| bend (GSV) | −0.305 | +0.175 | +0.335 | +0.274 |
+| sao_paulo (GSV) | −0.593 | −0.125 | +0.045 | +0.009 |
+
+(SEs 0.011–0.087.) Read the last three columns as one band, not as a floor and a measurement.
+**B, C and D take no `pano_height` input at all** — their predicted distance is a function of
+the depression angle alone — so none of them *can* show a pixel-frame height defect, and the
+spread between them (up to 0.16 on bend) is the same confound arriving through three different
+distance curves. The load-bearing row is A, the only candidate that reads pixels: on richmond
+it sits at −0.690, **2.6× outside** the height-blind band, and it is negative on every run
+while the band is positive on three of four GSV controls. That is #4765's pixel-frame defect,
+alive on Mapillary and pointing the way the mechanism predicts.
+
+So D is not *certified* clean on this axis by sitting in the band — it is height-blind, it
+could not be otherwise. The question the band leaves open is whether the band itself is really
+camera height. That is what the rest of this section tests.
+
+**Fitting the rigs.** One multiplicative distance scale per sequence (equivalently, one camera
+height per outing — a Mapillary sequence is one rig on one drive), by alternating least squares
+on the same multi-view objective, **relative scale only**. Only the 997 of 1,183 richmond sites
+seen by ≥ 2 sequences enter the objective (7,186 of 7,711 members): a site seen by one sequence
+scales with that sequence and so pulls its `k` toward zero with nothing opposing it — pure
+degeneracy, no information about relative scale. The global axis stays the RampNet#101 trap and
+stays anchored to the GSV fit.
 
 | richmond rig | sequences | members | fitted k (median, rel. to run mean) |
 |---|---:|---:|---:|
-| NCTECH iSTAR Pulsar (car mount, 11000×5500) | 231 | 5,312 | 1.023 |
-| GoPro Max (2048/2880 px) | 13 | 1,489 | **0.871** |
-| unbranded (12288×6144) | 13 | 760 | 1.010 |
+| NCTECH iSTAR Pulsar (car mount, 11000×5500) | 229 | 5,231 | 1.022 |
+| GoPro Max (2048/2880 px) | 13 | 1,158 | **0.872** |
+| unbranded (12288×6144) | 13 | 643 | 1.009 |
 
-![Figure 18 — left: richmond within-site height slope per candidate, with the confound floor marked; the blend sits at the floor as shipped and at ≈ 0 with per-sequence heights. Right: fitted per-sequence distance scale by rig — the GoPro Max sequences separate cleanly below the car-mount rigs.](../figures/fig18-falsification-height-axis.png)
+![Figure 18 — left: richmond within-site height slope per candidate, with the height-blind band shaded; the blend sits inside it, in-sample per-sequence heights collapse it, and the held-out bar (hatched) removes 69% of the held-out half's own slope. Right: fitted per-sequence distance scale by rig — the GoPro Max sequences separate cleanly below the car-mount rigs.](../figures/fig18-falsification-height-axis.png)
 
-With those per-sequence heights applied, the blend's richmond height slope collapses
-−0.236 → **−0.022 ≈ 0** (range slope undisturbed at +0.005; RMS/range 0.200 → 0.188). So the
-entire residual height dependence was **camera-height confounding** — pano height correlates
-with rig, rig correlates with mount height — not a pixel-frame error in the model. The rigs
-order exactly as mount geometry predicts (a GoPro on a low mount vs a telescoping car mast,
-13% apart), and clovis cross-checks the method: its two model strings fit to k = 0.995 and
-0.998 — one physical camera, correctly measured as one.
+**In-sample, the collapse proves nothing on its own.** Applying the fitted scales takes the
+blend's richmond height slope −0.236 → −0.022 and RMS/range 0.200 → 0.189. But pano height is
+*constant within a sequence*, so one free parameter per sequence can absorb any height-correlated
+systematic by construction — rig geometry and model error alike. A 91% collapse is what this fit
+does to noise.
+
+**Held out, most of it survives.** Fit the scales on a random half of the sites; score the
+other half's 3,973 members, which the fit never saw:
+
+| richmond, held-out half | RMS/range | range slope | height slope |
+|---|---:|---:|---:|
+| D blend, unscaled | 0.2013 | +0.003 ± 0.009 | −0.255 ± 0.021 |
+| D blend, transferred k | 0.2012 | +0.018 ± 0.009 | **−0.080 ± 0.021** |
+
+**69% of the held-out height slope is removed by scales fitted on disjoint sites** — 66–75%
+across five seeds, all committed in `holdout_seed_sweep`. That is the finding: per-source camera
+height is real, measurable without ground truth, and it *transfers*. Two honest riders come with
+it. The residual −0.080 is still 3.8 SE from zero, so per-sequence height explains most but not
+all of the height dependence. And RMS/range is flat out-of-sample (0.2013 → 0.2012) while it
+improved 6% in-sample: the scales carry height-axis information specifically, not general
+self-consistency — the in-sample RMS gain was the parameters.
+
+Clovis is the control that makes this legible. Its two Mapillary model strings are one physical
+camera, and the fit says so: k = 0.991 and 0.992, both within 1% of the run mean. With nothing
+to measure, transferring its scales to held-out sites makes self-consistency slightly *worse*
+(RMS/range 0.180 → 0.186) — exactly the null result a method that only fits noise would fail to
+produce.
 
 This is the empirical backing for the Stage 4 generalization the Stages 1–2 report proposed:
 **a per-source (or per-sequence, where sequences are known) base camera height with the
 per-type offsets kept.** On GSV nothing changes; on Mapillary the base height is identifiable
-from exactly this kind of self-consistency, per city or per rig, without any ground truth.
+from exactly this kind of self-consistency, per city or per rig, without any ground truth —
+with the caveat that it recovers most, not all, of the rig spread.
 
 ## §8 · What this settles, and what it deliberately does not
 
@@ -239,10 +297,16 @@ from exactly this kind of self-consistency, per city or per rig, without any gro
 
 - The #4766 checklist item the depth data could not reach: the geometry-shaped refit
   **transfers across a 2.8× resolution extrapolation to imagery from different cameras, rigs,
-  and an SfM pose pipeline** with no compression signature and no pixel-frame height residual.
-  Both scale-free diagnostics that condemned the deployed model now pass on its replacement.
+  and an SfM pose pipeline** with no compression signature (§6, the falsifiable axis) and no
+  pixel dependence to defect on (§7 — the blend reads only the depression angle).
 - #4765's defect is re-confirmed on the deployed model at production scale, from
-  self-consistency alone — and clovis shows its severity is not linear in the height ratio.
+  self-consistency alone — the compression axis on both cities, and the height axis at 2.6×
+  the height-blind band on richmond — and clovis shows its severity is not linear in the
+  height ratio.
+- **Per-source camera height is measurable without ground truth and transfers**: scales fitted
+  on one half of richmond's sites remove 69% of the other half's height slope, order by rig as
+  mount geometry predicts, and correctly find nothing on clovis's single physical rig. That is
+  the empirical licence for the Stage 4 per-source-height generalization.
 - The falsification harness itself is validated against #4766's independent implementation.
 
 **Deliberately not claimed:**
@@ -256,6 +320,10 @@ from exactly this kind of self-consistency, per city or per rig, without any gro
   settled separately by Stage 2's perturbation sweep.
 - **The near-horizon regime** — excluded by the fuse gate (§3). Its evidence remains Stage 2's
   near-horizon table on GSV depth truth.
+- **A clean bill of health for the blend on the height axis.** §7's band cannot deliver one:
+  the blend takes no `pano_height` input, so its height slope is a consistency check, not a
+  test it could have failed. The falsifiable axis for the blend is §6's, and the residual
+  −0.080 the fitted rig heights leave behind is unexplained.
 
 ## Reproducing this report
 
@@ -263,7 +331,7 @@ from exactly this kind of self-consistency, per city or per rig, without any gro
 pip install -r python/requirements.txt
 python python/run_mapillary_falsification.py --write  # ~25 s, offline, deterministic
 python python/falsification_figures.py                # figs 17-18
-pytest tests/test_mapillary_falsification_findings.py # 20 findings, incl. re-derivation
+pytest tests/test_mapillary_falsification_findings.py # 26 findings, incl. re-derivation
 ```
 
 No network anywhere: everything derives from the committed `data/falsification-*` inputs,

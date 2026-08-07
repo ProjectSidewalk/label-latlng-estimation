@@ -95,49 +95,63 @@ def fig17(diags):
     _save(fig, "fig17-falsification-range-axis.png")
 
 
-def fig18(diags, seq_scales):
-    fig, (ax, ax2) = plt.subplots(1, 2, figsize=(12.0, 4.6), width_ratios=[1.0, 1.15])
+def fig18(diags, seq_scales, seq_table):
+    fig, (ax, ax2) = plt.subplots(1, 2, figsize=(13.0, 5.0), width_ratios=[1.0, 1.2])
 
-    # left: richmond's height axis, with the confound floor and the per-sequence collapse
+    # left: richmond's height axis — the height-blind band, the per-sequence collapse, and
+    # the held-out transfer that says the collapse is not just the added parameters
     r = diags["richmond"]["per_model"]
     scaled = seq_scales["richmond"]["d_blend_per_sequence_scale"]
+    hold = seq_scales["richmond"]["holdout"]
     bars = [("A\nraw px", r["A_status_quo"]["height_slope"], C_EST7),
-            ("B\nnormalized", r["B_normalized"]["height_slope"], C_NORM),
-            ("C\ncotangent", r["C_cotangent"]["height_slope"], MUTED),
+            ("B\nnorm.", r["B_normalized"]["height_slope"], C_NORM),
+            ("C\ncotan.", r["C_cotangent"]["height_slope"], MUTED),
             ("D\nblend", r["D_blend"]["height_slope"], C_GEOM),
-            ("D + per-seq\nheight", scaled["height_slope"], "#0d6b4a")]
-    floor = abs(r["B_normalized"]["height_slope"]["slope"])
-    ax.axhspan(-floor, floor, color=BASELINE, alpha=0.45, zorder=0)
+            ("D + k\nin-sample", scaled["height_slope"], "#0d6b4a"),
+            ("D + k\nheld out", hold["d_blend_transferred_scale"]["height_slope"], "#0d6b4a")]
+    band = max(abs(r["B_normalized"]["height_slope"]["slope"]),
+               abs(r["C_cotangent"]["height_slope"]["slope"]))
+    ax.axhspan(-band, band, color=BASELINE, alpha=0.45, zorder=0)
     ax.axhline(0, color=BASELINE, lw=1)
     for i, (label, s, color) in enumerate(bars):
-        ax.bar(i, s["slope"], width=0.62, color=color, zorder=2)
+        ax.bar(i, s["slope"], width=0.62, color=color, zorder=2,
+               hatch="///" if i == len(bars) - 1 else None, edgecolor="white" if i == len(bars) - 1 else None)
         ax.errorbar(i, s["slope"], yerr=2 * s["se"], fmt="none", ecolor=INK,
                     elinewidth=1.1, zorder=3)
-    ax.text(2.0, 0.185, "confound floor (±B)", color=SECONDARY, fontsize=8.5, ha="center")
+    # the held-out half's own unscaled slope, so the last bar is read against its own baseline
+    hu = hold["d_blend_unscaled"]["height_slope"]["slope"]
+    ax.plot(len(bars) - 1, hu, marker="_", ms=18, mew=2.0, color=C_GEOM, zorder=4)
+    ax.annotate("its own unscaled D", xy=(len(bars) - 1, hu), xytext=(3.4, -0.44),
+                color=C_GEOM, fontsize=7.6, ha="center",
+                arrowprops=dict(arrowstyle="-", color=C_GEOM, lw=0.9))
+    ax.text(1.5, 0.20, "height-blind models (B, C)", color=SECONDARY, fontsize=8.5, ha="center")
     ax.set_xticks(range(len(bars)))
-    ax.set_xticklabels([l for l, _, _ in bars], fontsize=8.4)
+    ax.set_xticklabels([l for l, _, _ in bars], fontsize=8.0)
+    ax.set_ylim(-0.78, 0.30)
     ax.set_ylabel("within-site height slope (per h/6656)")
-    ax.set_title("richmond: residual height dependence  (whiskers ±2 SE)", loc="left")
+    ax.set_title("richmond: residual height dependence  (whiskers ±2 SE)", loc="left",
+                 fontsize=10)
     for spine in ("top", "right"):
         ax.spines[spine].set_visible(False)
 
-    # right: per-sequence relative camera heights by rig
-    frame, seq_table = mf.fit_sequence_scales("richmond")
-    fitted = seq_table[seq_table["n_members"] >= mf.SEQ_MIN_MEMBERS]
-    rig_order = (fitted.groupby("rig")["n_members"].sum().sort_values(ascending=False).index)
+    # right: per-sequence relative camera heights by rig (the fit the caller already ran)
+    fitted = seq_table[seq_table["n_fit_members"] >= mf.SEQ_MIN_MEMBERS]
+    rig_order = (fitted.groupby("rig")["n_fit_members"].sum()
+                 .sort_values(ascending=False).index)
     rng = np.random.default_rng(3)
     for i, rig in enumerate(rig_order):
         g = fitted[fitted["rig"] == rig]
         y = i + rng.uniform(-0.16, 0.16, len(g))
-        ax2.scatter(g["k_rel"], y, s=8 + 1.1 * np.sqrt(g["n_members"]), color=C_GEOM,
+        ax2.scatter(g["k_rel"], y, s=8 + 1.1 * np.sqrt(g["n_fit_members"]), color=C_GEOM,
                     alpha=0.45, linewidths=0, zorder=2)
         med = float(g["k_rel"].median())
         ax2.plot([med, med], [i - 0.26, i + 0.26], color=INK, lw=2.2, zorder=3)
         ax2.text(med, i + 0.44, f"{med:.3f}", ha="center", color=INK, fontsize=8)
     ax2.axvline(1.0, color=BASELINE, lw=1)
     ax2.set_yticks(range(len(rig_order)))
-    ax2.set_yticklabels([f"{rig}\n({int(fitted[fitted['rig'] == rig]['n_members'].sum()):,} members)"
-                         for rig in rig_order], fontsize=8.5)
+    ax2.set_yticklabels(
+        [f"{rig}\n({int(fitted[fitted['rig'] == rig]['n_fit_members'].sum()):,} members)"
+         for rig in rig_order], fontsize=8.5)
     ax2.invert_yaxis()
     secax = ax2.secondary_xaxis("top", functions=(lambda k: k * mf.BLEND_H_M,
                                                   lambda h: h / mf.BLEND_H_M))
@@ -145,24 +159,27 @@ def fig18(diags, seq_scales):
                      color=SECONDARY)
     secax.tick_params(labelsize=8, colors=MUTED)
     ax2.set_xlabel("per-sequence distance scale k (relative to run geometric mean)")
-    ax2.set_title("richmond: fitted per-sequence scale by rig", loc="left")
+    ax2.set_title("richmond: fitted per-sequence scale by rig", loc="left", fontsize=10, pad=24)
     for spine in ("top", "right"):
         ax2.spines[spine].set_visible(False)
 
-    _title(fig, "The height axis is rig confounding, and the rigs are measurable",
-           "Left: the shipped blend already sits at the confound floor — the slope a pixel-independent "
-           "placement shows from rig confounding alone — and one fitted height per sequence collapses it "
-           "to zero. Right: the fitted scales separate by rig as mount geometry predicts (dot size = "
-           "site members; the global scale is deliberately unidentified, RampNet#101).")
-    fig.subplots_adjust(top=0.70, wspace=0.42)
+    _title(fig, "Most of the height residual is the rigs — and the rigs transfer",
+           "Left: only A reads pixels, so only A can carry a pixel-frame height defect — and it does, "
+           "at 2.6× the band the height-blind models (B, C) show from rig confounding alone. D sits "
+           "inside that band; one fitted height per sequence collapses it. The last bar is the honest "
+           "test — scales fitted on a disjoint half remove 69% of the held-out half's slope (66–75% "
+           "over five seeds): real transferable rig geometry, but not the whole residual. Right: the "
+           "fitted scales order as mount geometry predicts.", wrap=128)
+    fig.subplots_adjust(top=0.62, wspace=0.34)
     _save(fig, "fig18-falsification-height-axis.png")
 
 
 def main():
     diags = {run: mf.diagnose_run(run) for run in RUNS}
     seq_scales = {"richmond": mf.sequence_scale_summary("richmond")}
+    _, seq_table = mf.fit_sequence_scales("richmond")
     fig17(diags)
-    fig18(diags, seq_scales)
+    fig18(diags, seq_scales, seq_table)
     print("wrote figures/fig17-falsification-range-axis.png and "
           "figures/fig18-falsification-height-axis.png")
 
