@@ -17,11 +17,38 @@
 > pytest tests/test_distance_refit_findings.py  # the findings, locked
 > ```
 
-## §1 · The ladder and the harness
+## §1 · The data, the ladder, and the harness
 
-Every candidate is fit on the exact published train split (316,118 rows) and scored on the exact
-published test split (79,029), so every row below is directly comparable to the 2021 median of
-1.46 m. Three conventions, decided deliberately:
+**Where the data comes from.** Every number in this report is computed from
+`data/labels-*-latlng.csv.gz`: 468,608 human label placements made in Project Sidewalk's
+Explore interface between 2017 and 2020, across seven cities (DC — 58% of rows — Seattle,
+Newberg, Columbus, SPGG, CDMX, Pittsburgh). Each row carries two things:
+
+- **the click, as the front end recorded it** — `canvas_x/y`, the viewport `heading`/`pitch`/
+  `zoom`, and the derived panorama coordinates `sv_image_x/y`. These are the predictors; every
+  candidate below sees only what production sees at placement time.
+- **the stored label position (`lat`/`lng`), which is the ground truth** — computed *at
+  placement time* by the 2017–2020 client from **Google's per-panorama depth map**
+  (`Label.js::toLatLng`; the depth API was withdrawn in November 2020, freezing this
+  population). "True distance" is the haversine distance between the stored panorama position
+  and that stored label position. This is not a surveyed position: it is Google's model of the
+  scene, validated against imagery in the #9 report — which is why §6's caveats (curb-height
+  bias, occlusion clusters, item G) travel with every fit.
+
+The 2021 analysis' input CSVs were lost; these files are the 2026-08-05 **reconstruction from
+the production databases** ([#1](https://github.com/ProjectSidewalk/label-latlng-estimation/issues/1),
+`scripts/extraction/`), which turned out to be reproduction-grade: the 2021 cleaning pipeline
+lands on **exactly** the published 395,147 cleaned rows, and the train/test partition is the
+published R split itself (`tests/fixtures/r-baseline/split_*.csv.gz`, 316,118 / 79,029, keyed by
+label id). Full provenance and caveats: `data/MANIFEST.md` and the
+[recovery report](2026-08-05-recovery-and-verification.md). Two committed side artifacts feed
+riders only: `depth-pilot-panos.csv.gz` (#4: camera heights GSV served in 2026 for 409 panos)
+and `depth-validation-panometa.csv.gz` (#9: per-pano tilt). No new data was collected for this
+report, and nothing here touches the network.
+
+So every candidate is fit on the exact published train split and scored on the exact published
+test split — every row of §4's table is directly comparable to the 2021 median of 1.46 m. Three
+harness conventions, decided deliberately:
 
 1. **The vertical input is the exact depression angle** from #5's projection
    (`pov_inversion.exact_depression_deg`), computed from `(canvas_x, canvas_y, heading, pitch,
