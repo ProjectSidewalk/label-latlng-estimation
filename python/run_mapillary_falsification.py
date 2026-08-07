@@ -35,7 +35,15 @@ def main() -> None:
 
     step("census over the committed falsification inputs...")
     census = mf.build_census(args.data_dir)
-    summary = {"census": census}
+
+    step("the two scale-free diagnostics, all six runs...")
+    diagnostics = mf.build_diagnostics(args.data_dir)
+
+    step("per-sequence camera heights (alternating least squares)...")
+    seq_scales = mf.build_sequence_scales(args.data_dir)
+
+    summary = {"census": census, "diagnostics": diagnostics,
+               "sequence_scales": seq_scales}
 
     for run, c in census["mapillary"].items():
         print(f"\n{run}: {c['n_panos']} panos, {c['n_sequences']} sequences, "
@@ -63,6 +71,33 @@ def main() -> None:
         members = {h: v["n_site_members"] for h, v in c["pano_heights"].items()}
         print(f"  {run:<12} {c['n_panos']:>6} panos {c['capture_dates'][0]}..{c['capture_dates'][1]} "
               f"heights {heights} site members {members}")
+
+    def fmt_slope(s):
+        return "      n/a      " if s["slope"] is None else f"{s['slope']:+.4f}±{s['se']:.4f}"
+
+    print(f"\nConventions: cotangent(h=2.6) vs stored ray range, max |delta| "
+          f"{diagnostics['conventions']['max_abs_range_m_delta']} m "
+          f"(n={diagnostics['conventions']['n']})")
+    print("\nScale-free diagnostics (within-site demeaned; height slope vs h/6656):")
+    for run, d in diagnostics["runs"].items():
+        print(f"  {run} ({d['n_sites']} sites, {d['n_members']} members)")
+        for key in mf.MODEL_KEYS:
+            v = d["per_model"][key]
+            print(f"    {key:<14} rms/range {v['rms_over_range']:.4f}  "
+                  f"range {fmt_slope(v['range_slope'])}  height {fmt_slope(v['height_slope'])}")
+
+    print("\nPer-sequence camera heights (D_blend, relative to run gmean):")
+    for run, s in seq_scales.items():
+        print(f"  {run}: {s['n_sequences_fitted']} seqs fitted, "
+              f"{s['n_multi_sequence_sites']}/{s['n_sites']} multi-sequence sites")
+        for rig, r in sorted(s["per_rig"].items(), key=lambda kv: -kv[1]["n_members"]):
+            print(f"    {rig:<40} {r['n_sequences']:>4} seqs {r['n_members']:>5} members  "
+                  f"k_rel med {r['k_rel_median']:.3f} iqr {r['k_rel_iqr']}")
+        for lbl, key in [("unscaled", "d_blend_unscaled"),
+                         ("per-seq scale", "d_blend_per_sequence_scale")]:
+            v = s[key]
+            print(f"    D {lbl:<14} rms/range {v['rms_over_range']:.4f}  "
+                  f"range {fmt_slope(v['range_slope'])}  height {fmt_slope(v['height_slope'])}")
 
     if args.write:
         out = args.data_dir / "falsification-summary.json"

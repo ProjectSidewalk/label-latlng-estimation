@@ -22,6 +22,23 @@ Headline findings:
   camera height only has to separate car-class rigs, not pedestrians.
 - The GSV controls place their site members overwhelmingly on 8192-px panos, with a
   6656-px minority — the same two heights the refit was fit on.
+
+Diagnostics findings (the two scale-free axes of #4765/#4766, all six runs):
+
+- The implementation validates externally: where the metric cannot depend on the run's
+  rig mix (B and C on the shared-height cities), the range slopes land within a few
+  thousandths of #4766's published numbers — including its counterintuitive finding
+  that height-normalization alone makes the GSV range axis *worse*.
+- The shipped blend D is the flattest model on the range axis on every run: |slope|
+  <= 0.09 m/m everywhere, versus the status quo's -0.11..-0.32 on GSV and a
+  catastrophic -1.40 on clovis's 2880-px panos (the #4765 sign-flip, measured).
+- On the height-residual axis D sits at the confound floor (B's slope) on richmond,
+  and fitted per-sequence camera heights collapse it to ~0 — the residual height
+  dependence was rig confounding (camera height correlates with pano height), not
+  pixel-frame error.
+- Per-sequence camera heights separate by rig exactly as mount geometry predicts:
+  GoPro Max sequences ~13% below the run mean, the iSTAR Pulsar car rig slightly
+  above; clovis's two model-strings are one physical rig (both k ~= 1.00).
 """
 
 import json
@@ -126,3 +143,111 @@ def test_census_rederives_from_committed_inputs(mapillary):
 
     fresh = json.loads(json.dumps(mf.census_mapillary_run("richmond")))
     assert fresh == mapillary["richmond"]
+
+
+# ------------------------------------------------------------------ diagnostics
+
+@pytest.fixture(scope="module")
+def diag(summary):
+    return summary["diagnostics"]["runs"]
+
+
+ALL_RUNS = ["richmond", "clovis", "paterson", "gainesville", "bend", "sao_paulo"]
+
+
+def test_conventions_pin_exactly(summary):
+    """Our cotangent at h=2.6 reproduces the auto-labeler's stored ray ranges."""
+    assert summary["diagnostics"]["conventions"]["max_abs_range_m_delta"] < 0.001
+
+
+def test_range_slopes_validate_against_4766(diag):
+    """Where the metric cannot depend on rig mix, we land on #4766's published numbers."""
+    published = {  # SidewalkWebpage#4766's table, range slope column
+        ("paterson", "C_cotangent"): 0.0983,
+        ("paterson", "B_normalized"): -0.4496,
+        ("richmond", "C_cotangent"): 0.1207,
+        ("richmond", "B_normalized"): -0.2901,
+    }
+    for (run, model), theirs in published.items():
+        ours = diag[run]["per_model"][model]["range_slope"]["slope"]
+        assert abs(ours - theirs) < 0.02, (run, model, ours, theirs)
+
+
+def test_normalization_alone_worsens_the_gsv_range_axis(diag):
+    """#4766's counterintuitive finding, reproduced on all four GSV controls."""
+    for run in ["paterson", "gainesville", "bend", "sao_paulo"]:
+        a = diag[run]["per_model"]["A_status_quo"]["range_slope"]["slope"]
+        b = diag[run]["per_model"]["B_normalized"]["range_slope"]["slope"]
+        assert b < a < 0, run
+
+
+def test_blend_range_axis_is_flat_everywhere(diag):
+    """The falsification's first axis: no compression signature on any run. D beats the
+    linear models everywhere and the raw cotangent on five of six runs; the exception is
+    sao_paulo (+0.030 for C vs -0.090 for D), whose far-heavy member mix sits in D's
+    linear tail — the designed near-horizon trade, visible exactly where it should be."""
+    for run in ALL_RUNS:
+        per_model = diag[run]["per_model"]
+        d = abs(per_model["D_blend"]["range_slope"]["slope"])
+        assert d <= 0.091, run
+        for other in ["A_status_quo", "B_normalized"]:
+            assert d < abs(per_model[other]["range_slope"]["slope"]), (run, other)
+        beats_cot = d < abs(per_model["C_cotangent"]["range_slope"]["slope"])
+        assert beats_cot == (run != "sao_paulo"), run
+
+
+def test_clovis_status_quo_compression_is_catastrophic(diag):
+    """The #4765 sign-flip measured: raw pixels on a uniform 2880-px city."""
+    assert diag["clovis"]["per_model"]["A_status_quo"]["range_slope"]["slope"] < -1.0
+
+
+def test_richmond_blend_sits_at_the_confound_floor(diag):
+    """The falsification's second axis: D shows no height dependence beyond the floor
+    that a placement with no pixel dependence at all (B) shows by construction."""
+    per_model = diag["richmond"]["per_model"]
+    floor = abs(per_model["B_normalized"]["height_slope"]["slope"])
+    assert abs(per_model["D_blend"]["height_slope"]["slope"]) < floor + 0.02
+    assert abs(per_model["A_status_quo"]["height_slope"]["slope"]) > 2 * floor
+
+
+def test_single_height_runs_report_no_height_slope(diag):
+    """Clovis has one pano height; a numeric slope there would be float noise."""
+    for model, v in diag["clovis"]["per_model"].items():
+        assert v["height_slope"]["slope"] is None, model
+
+
+# ------------------------------------------------------------------ sequence scales
+
+@pytest.fixture(scope="module")
+def scales(summary):
+    return summary["sequence_scales"]
+
+
+def test_per_sequence_heights_collapse_richmonds_height_slope(scales):
+    """Rig confounding, not pixel-frame error: fitted camera heights remove what the
+    height-normalized floor could not."""
+    r = scales["richmond"]
+    assert abs(r["d_blend_unscaled"]["height_slope"]["slope"]) > 0.2
+    assert abs(r["d_blend_per_sequence_scale"]["height_slope"]["slope"]) < 0.05
+    # and the range axis stays flat rather than being traded away
+    assert abs(r["d_blend_per_sequence_scale"]["range_slope"]["slope"]) < 0.02
+
+
+def test_rig_classes_separate_as_mount_geometry_predicts(scales):
+    rigs = scales["richmond"]["per_rig"]
+    gopro = rigs["GoPro / GoPro Max"]["k_rel_median"]
+    pulsar = rigs["NCTECH LTD / iSTAR Pulsar"]["k_rel_median"]
+    assert gopro < 0.93 < pulsar < 1.10
+
+
+def test_clovis_is_one_physical_rig(scales):
+    """Two Mapillary model-strings, one camera: both fit within 2% of the run mean."""
+    for rig, r in scales["clovis"]["per_rig"].items():
+        assert abs(r["k_rel_median"] - 1.0) < 0.02, rig
+
+
+def test_relative_scale_is_identified(scales):
+    """Most sites see more than one sequence, so relative rig scale is measured, not
+    assumed (the global scale stays unidentified — RampNet#101)."""
+    assert scales["richmond"]["n_multi_sequence_sites"] > 900
+    assert scales["clovis"]["n_multi_sequence_sites"] > 900

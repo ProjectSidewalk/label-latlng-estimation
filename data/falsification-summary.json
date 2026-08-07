@@ -319,5 +319,423 @@
         }
       }
     }
+  },
+  "diagnostics": {
+    "conventions": {
+      "max_abs_range_m_delta": 0.000494,
+      "n": 7711
+    },
+    "runs": {
+      "richmond": {
+        "n_sites": 1183,
+        "n_members": 7711,
+        "per_model": {
+          "A_status_quo": {
+            "rms_over_range": 0.285,
+            "range_slope": {
+              "slope": -0.3233,
+              "se": 0.0165
+            },
+            "height_slope": {
+              "slope": -0.6896,
+              "se": 0.0208
+            }
+          },
+          "B_normalized": {
+            "rms_over_range": 0.2665,
+            "range_slope": {
+              "slope": -0.2931,
+              "se": 0.0113
+            },
+            "height_slope": {
+              "slope": -0.2688,
+              "se": 0.022
+            }
+          },
+          "C_cotangent": {
+            "rms_over_range": 0.2048,
+            "range_slope": {
+              "slope": 0.1188,
+              "se": 0.0055
+            },
+            "height_slope": {
+              "slope": -0.2284,
+              "se": 0.0161
+            }
+          },
+          "D_blend": {
+            "rms_over_range": 0.1998,
+            "range_slope": {
+              "slope": -0.002,
+              "se": 0.0064
+            },
+            "height_slope": {
+              "slope": -0.2357,
+              "se": 0.0155
+            }
+          }
+        }
+      },
+      "clovis": {
+        "n_sites": 1560,
+        "n_members": 7691,
+        "per_model": {
+          "A_status_quo": {
+            "rms_over_range": 0.2878,
+            "range_slope": {
+              "slope": -1.4029,
+              "se": 0.0271
+            },
+            "height_slope": {
+              "slope": null,
+              "se": null
+            }
+          },
+          "B_normalized": {
+            "rms_over_range": 0.2098,
+            "range_slope": {
+              "slope": -0.164,
+              "se": 0.0104
+            },
+            "height_slope": {
+              "slope": null,
+              "se": null
+            }
+          },
+          "C_cotangent": {
+            "rms_over_range": 0.1875,
+            "range_slope": {
+              "slope": 0.1576,
+              "se": 0.0056
+            },
+            "height_slope": {
+              "slope": null,
+              "se": null
+            }
+          },
+          "D_blend": {
+            "rms_over_range": 0.1797,
+            "range_slope": {
+              "slope": 0.0617,
+              "se": 0.0062
+            },
+            "height_slope": {
+              "slope": null,
+              "se": null
+            }
+          }
+        }
+      },
+      "paterson": {
+        "n_sites": 6995,
+        "n_members": 25229,
+        "per_model": {
+          "A_status_quo": {
+            "rms_over_range": 0.2573,
+            "range_slope": {
+              "slope": -0.2347,
+              "se": 0.0045
+            },
+            "height_slope": {
+              "slope": -0.432,
+              "se": 0.0209
+            }
+          },
+          "B_normalized": {
+            "rms_over_range": 0.2225,
+            "range_slope": {
+              "slope": -0.4381,
+              "se": 0.0055
+            },
+            "height_slope": {
+              "slope": 0.0349,
+              "se": 0.021
+            }
+          },
+          "C_cotangent": {
+            "rms_over_range": 0.1351,
+            "range_slope": {
+              "slope": 0.0985,
+              "se": 0.0018
+            },
+            "height_slope": {
+              "slope": 0.1444,
+              "se": 0.0107
+            }
+          },
+          "D_blend": {
+            "rms_over_range": 0.1388,
+            "range_slope": {
+              "slope": -0.0355,
+              "se": 0.0024
+            },
+            "height_slope": {
+              "slope": 0.1073,
+              "se": 0.011
+            }
+          }
+        }
+      },
+      "gainesville": {
+        "n_sites": 5926,
+        "n_members": 16770,
+        "per_model": {
+          "A_status_quo": {
+            "rms_over_range": 0.2545,
+            "range_slope": {
+              "slope": -0.2327,
+              "se": 0.0064
+            },
+            "height_slope": {
+              "slope": -0.3439,
+              "se": 0.03
+            }
+          },
+          "B_normalized": {
+            "rms_over_range": 0.2248,
+            "range_slope": {
+              "slope": -0.3829,
+              "se": 0.0076
+            },
+            "height_slope": {
+              "slope": 0.0333,
+              "se": 0.0296
+            }
+          },
+          "C_cotangent": {
+            "rms_over_range": 0.1291,
+            "range_slope": {
+              "slope": 0.0791,
+              "se": 0.0025
+            },
+            "height_slope": {
+              "slope": 0.1555,
+              "se": 0.0146
+            }
+          },
+          "D_blend": {
+            "rms_over_range": 0.1381,
+            "range_slope": {
+              "slope": -0.0527,
+              "se": 0.0034
+            },
+            "height_slope": {
+              "slope": 0.1015,
+              "se": 0.0157
+            }
+          }
+        }
+      },
+      "bend": {
+        "n_sites": 11655,
+        "n_members": 47180,
+        "per_model": {
+          "A_status_quo": {
+            "rms_over_range": 0.2622,
+            "range_slope": {
+              "slope": -0.1051,
+              "se": 0.0026
+            },
+            "height_slope": {
+              "slope": -0.3049,
+              "se": 0.0293
+            }
+          },
+          "B_normalized": {
+            "rms_over_range": 0.2091,
+            "range_slope": {
+              "slope": -0.2076,
+              "se": 0.0031
+            },
+            "height_slope": {
+              "slope": 0.1746,
+              "se": 0.029
+            }
+          },
+          "C_cotangent": {
+            "rms_over_range": 0.1211,
+            "range_slope": {
+              "slope": 0.0989,
+              "se": 0.0012
+            },
+            "height_slope": {
+              "slope": 0.3346,
+              "se": 0.0148
+            }
+          },
+          "D_blend": {
+            "rms_over_range": 0.1207,
+            "range_slope": {
+              "slope": -0.0035,
+              "se": 0.0014
+            },
+            "height_slope": {
+              "slope": 0.2742,
+              "se": 0.0146
+            }
+          }
+        }
+      },
+      "sao_paulo": {
+        "n_sites": 6261,
+        "n_members": 19283,
+        "per_model": {
+          "A_status_quo": {
+            "rms_over_range": 0.3073,
+            "range_slope": {
+              "slope": -0.2297,
+              "se": 0.0054
+            },
+            "height_slope": {
+              "slope": -0.5926,
+              "se": 0.0871
+            }
+          },
+          "B_normalized": {
+            "rms_over_range": 0.2453,
+            "range_slope": {
+              "slope": -0.3865,
+              "se": 0.0066
+            },
+            "height_slope": {
+              "slope": -0.125,
+              "se": 0.0843
+            }
+          },
+          "C_cotangent": {
+            "rms_over_range": 0.122,
+            "range_slope": {
+              "slope": 0.0303,
+              "se": 0.0023
+            },
+            "height_slope": {
+              "slope": 0.0449,
+              "se": 0.04
+            }
+          },
+          "D_blend": {
+            "rms_over_range": 0.1332,
+            "range_slope": {
+              "slope": -0.0901,
+              "se": 0.003
+            },
+            "height_slope": {
+              "slope": 0.0087,
+              "se": 0.0439
+            }
+          }
+        }
+      }
+    }
+  },
+  "sequence_scales": {
+    "richmond": {
+      "n_sequences_fitted": 257,
+      "n_multi_sequence_sites": 997,
+      "n_sites": 1183,
+      "per_rig": {
+        "GoPro / GoPro Max": {
+          "n_sequences": 13,
+          "n_members": 1489,
+          "k_rel_median": 0.8709,
+          "k_rel_iqr": [
+            0.8374,
+            0.9637
+          ],
+          "k_rel_weighted_mean": 0.9125
+        },
+        "NCTECH LTD / iSTAR Pulsar": {
+          "n_sequences": 231,
+          "n_members": 5312,
+          "k_rel_median": 1.023,
+          "k_rel_iqr": [
+            0.9742,
+            1.0643
+          ],
+          "k_rel_weighted_mean": 1.0292
+        },
+        "none / none": {
+          "n_sequences": 13,
+          "n_members": 760,
+          "k_rel_median": 1.0096,
+          "k_rel_iqr": [
+            0.9809,
+            1.0398
+          ],
+          "k_rel_weighted_mean": 0.9992
+        }
+      },
+      "d_blend_unscaled": {
+        "rms_over_range": 0.1998,
+        "range_slope": {
+          "slope": -0.002,
+          "se": 0.0064
+        },
+        "height_slope": {
+          "slope": -0.2357,
+          "se": 0.0155
+        }
+      },
+      "d_blend_per_sequence_scale": {
+        "rms_over_range": 0.1883,
+        "range_slope": {
+          "slope": 0.005,
+          "se": 0.0058
+        },
+        "height_slope": {
+          "slope": -0.0221,
+          "se": 0.0148
+        }
+      }
+    },
+    "clovis": {
+      "n_sequences_fitted": 239,
+      "n_multi_sequence_sites": 929,
+      "n_sites": 1560,
+      "per_rig": {
+        "GoPro / Fusion": {
+          "n_sequences": 92,
+          "n_members": 2409,
+          "k_rel_median": 0.995,
+          "k_rel_iqr": [
+            0.9314,
+            1.0509
+          ],
+          "k_rel_weighted_mean": 0.9981
+        },
+        "GoPro / GoPro Fusion FS1.04.01.80.00": {
+          "n_sequences": 147,
+          "n_members": 5050,
+          "k_rel_median": 0.9982,
+          "k_rel_iqr": [
+            0.951,
+            1.0536
+          ],
+          "k_rel_weighted_mean": 1.0125
+        }
+      },
+      "d_blend_unscaled": {
+        "rms_over_range": 0.1797,
+        "range_slope": {
+          "slope": 0.0617,
+          "se": 0.0062
+        },
+        "height_slope": {
+          "slope": null,
+          "se": null
+        }
+      },
+      "d_blend_per_sequence_scale": {
+        "rms_over_range": 0.1743,
+        "range_slope": {
+          "slope": 0.0667,
+          "se": 0.0059
+        },
+        "height_slope": {
+          "slope": null,
+          "se": null
+        }
+      }
+    }
   }
 }
