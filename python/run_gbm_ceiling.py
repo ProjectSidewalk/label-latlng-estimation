@@ -417,7 +417,8 @@ def main() -> None:
 
     if args.write:
         out = os.path.join(args.data_dir, "gbm-ceiling-summary.json")
-        with open(out, "w", encoding="utf-8") as f:
+        # newline="\n" so a Windows rerun matches the committed LF bytes exactly
+        with open(out, "w", encoding="utf-8", newline="\n") as f:
             json.dump(summary, f, indent=2)
             f.write("\n")
         print(f"\nSummary written to {out}")
