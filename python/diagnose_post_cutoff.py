@@ -23,7 +23,7 @@ import numpy as np
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from label_latlng_estimation import (  # noqa: E402
-    CITIES, CUTOFF_UTC, EARTH_RADIUS_M, haversine_m, load_city,
+    CITIES, CUTOFF_UTC, haversine_m, load_city, spherical_dest,
 )
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
@@ -32,17 +32,6 @@ PUBLISHED_DIST = [(18.6051843, 0.0138947, 0.0011023),
                   (20.8794248, 0.0184087, 0.0022135),
                   (25.2472682, 0.0264216, 0.0011071)]
 PUBLISHED_HEAD = [(-51.2401711, 0.1443374), (-27.5267447, 0.0784357), (-13.5675945, 0.0396061)]
-
-
-def spherical_dest(lng, lat, brng_deg, dist_m):
-    """turf.destination — spherical, like the production front end (NOT geosphere's destPoint)."""
-    lat1, lng1, b = map(np.radians, (np.asarray(lat, float), np.asarray(lng, float),
-                                     np.asarray(brng_deg, float)))
-    d = np.asarray(dist_m, float) / EARTH_RADIUS_M
-    lat2 = np.arcsin(np.sin(lat1) * np.cos(d) + np.cos(lat1) * np.sin(d) * np.cos(b))
-    lng2 = lng1 + np.arctan2(np.sin(b) * np.sin(d) * np.cos(lat1),
-                             np.cos(d) - np.sin(lat1) * np.sin(lat2))
-    return np.degrees(lng2), np.degrees(lat2)
 
 
 def residual_to_published_estimate(df) -> np.ndarray:

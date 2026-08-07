@@ -56,9 +56,9 @@ def main() -> None:
           f"(train {m['rows_train']} / test {m['rows_test']}, split: {m['split']})")
 
     print("\nTest-set error summary (m), sorted by median:")
-    print(f"{'estimate':<12}{'mean':>8}{'median':>8}{'min':>10}{'max':>8}{'sd':>8}")
+    print(f"{'estimate':<12}{'mean':>8}{'median':>8}{'p90':>8}{'min':>10}{'max':>8}{'sd':>8}")
     for r in results["error_stats"]["summary"]:
-        print(f"{r['estimate']:<12}{r['mean']:>8.3f}{r['median']:>8.3f}"
+        print(f"{r['estimate']:<12}{r['mean']:>8.3f}{r['median']:>8.3f}{r['p90']:>8.3f}"
               f"{r['min']:>10.6f}{r['max']:>8.2f}{r['sd']:>8.3f}")
 
     print("\nest7 coefficients (this run vs published 2021):")

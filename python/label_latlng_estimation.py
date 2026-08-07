@@ -170,6 +170,17 @@ def dest_point(lng, lat, brng_deg, dist_m) -> tuple[np.ndarray, np.ndarray]:
     return np.asarray(lng2), np.asarray(lat2)
 
 
+def spherical_dest(lng, lat, brng_deg, dist_m) -> tuple[np.ndarray, np.ndarray]:
+    """turf.destination — spherical, like the production front end (NOT geosphere's destPoint)."""
+    lat1, lng1, b = map(np.radians, (np.asarray(lat, float), np.asarray(lng, float),
+                                     np.asarray(brng_deg, float)))
+    d = np.asarray(dist_m, float) / EARTH_RADIUS_M
+    lat2 = np.arcsin(np.sin(lat1) * np.cos(d) + np.cos(lat1) * np.sin(d) * np.cos(b))
+    lng2 = lng1 + np.arctan2(np.sin(b) * np.sin(d) * np.cos(lat1),
+                             np.cos(d) - np.sin(lat1) * np.sin(lat2))
+    return np.degrees(lng2), np.degrees(lat2)
+
+
 def add_heading_diff(df: pd.DataFrame) -> pd.DataFrame:
     """label_heading (bearing pano->label, [0, 360)) and heading_diff wrapped to (-180, 180]."""
     label_heading = bearing_deg(df["pano_lng"], df["pano_lat"], df["lng"], df["lat"]) % 360
@@ -347,6 +358,7 @@ def error_stats(err: pd.DataFrame) -> dict:
     summary = [{
         "estimate": c, "mean": float(err[c].mean()), "median": float(err[c].median()),
         "min": float(err[c].min()), "max": float(err[c].max()), "sd": float(err[c].std(ddof=1)),
+        "p90": float(err[c].quantile(0.9)),
     } for c in ests]
     summary.sort(key=lambda r: r["median"])
     return {
