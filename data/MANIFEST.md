@@ -152,3 +152,15 @@ with the cache deleted and no network at all.
 **Regenerate by intent only**: `python python/run_depth_validation.py fetch` then `build`. A refetch
 observes a different GSV state, so drift in the numbers is expected rather than an error; update the
 findings tests and the reports alongside it.
+
+---
+
+# POV-inversion summary (issue #5)
+
+`pov-inversion-summary.json` is the committed evidence of the 2026-08-06 exact-POV-inversion
+comparison ([issue #5](https://github.com/ProjectSidewalk/label-latlng-estimation/issues/5);
+report: `reports/2026-08-06-pov-inversion.md`), asserted by
+`tests/test_pov_inversion_findings.py`. Unlike the depth artifacts it needs no fetch at all —
+it derives entirely from the `labels-*-latlng.csv.gz` files and the R-fixture split, so
+`python python/run_pov_inversion.py --write` regenerates it deterministically on any machine,
+and the findings tests re-derive its headline numbers in-process from the same code.

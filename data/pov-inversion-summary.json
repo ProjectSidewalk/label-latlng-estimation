@@ -1,0 +1,203 @@
+{
+  "n_test": 79029,
+  "era_cal_delta_deg": 0.7198324609691498,
+  "depth_grid_column_deg": 0.703125,
+  "heading_error_median_deg": {
+    "est7": 1.3183717601816056,
+    "exact": 1.2500022690520822,
+    "era": 1.2029790767903137,
+    "era_cal": 1.030621540338808
+  },
+  "latlng_error_median_m": {
+    "est7": 1.4620895098041462,
+    "exact": 1.456501108302505,
+    "era": 1.4546360146647848,
+    "era_cal": 1.4468833019515752
+  },
+  "heading_error_median_deg_by_zoom": {
+    "1": {
+      "est7": 1.5886971165398514,
+      "exact": 1.369648246676121,
+      "era": 1.3202137043356288,
+      "era_cal": 1.1595573616017845
+    },
+    "2": {
+      "est7": 0.9009197923532728,
+      "exact": 1.0584612383500058,
+      "era": 1.0219302335820402,
+      "era_cal": 0.8339386926962273
+    },
+    "3": {
+      "est7": 0.7007479545548954,
+      "exact": 0.896144915512842,
+      "era": 0.870787152927079,
+      "era_cal": 0.6533703875632271
+    }
+  },
+  "by_canvas_x_offset": [
+    {
+      "bin": "(-0.001, 90.0]",
+      "n": 30493,
+      "heading_error_median_deg": {
+        "est7": 1.0580083308037915,
+        "exact": 1.1844394167004566,
+        "era": 1.145778790000989,
+        "era_cal": 0.9881490148238696
+      },
+      "mean_abs_disagreement_deg": 0.9766471384931487
+    },
+    {
+      "bin": "(90.0, 180.0]",
+      "n": 26020,
+      "heading_error_median_deg": {
+        "est7": 1.4593596327169536,
+        "exact": 1.315123716305692,
+        "era": 1.2645990748202394,
+        "era_cal": 1.0932021090515107
+      },
+      "mean_abs_disagreement_deg": 1.6121672853016282
+    },
+    {
+      "bin": "(180.0, 270.0]",
+      "n": 17185,
+      "heading_error_median_deg": {
+        "est7": 1.4138488580296809,
+        "exact": 1.2970865414749255,
+        "era": 1.246475050846044,
+        "era_cal": 1.0459920077874827
+      },
+      "mean_abs_disagreement_deg": 1.4227996449282572
+    },
+    {
+      "bin": "(270.0, 360.0]",
+      "n": 5331,
+      "heading_error_median_deg": {
+        "est7": 2.5227156302168154,
+        "exact": 1.2049407240083525,
+        "era": 1.1540707464216098,
+        "era_cal": 0.9897234124817302
+      },
+      "mean_abs_disagreement_deg": 2.2996701664884234
+    }
+  ],
+  "by_abs_pitch": [
+    {
+      "bin": "(-0.001, 5.0]",
+      "n": 4995,
+      "heading_error_median_deg": {
+        "est7": 1.0167330508258914,
+        "exact": 1.0177914094634275,
+        "era": 0.9532455862616303,
+        "era_cal": 0.7158406109876765
+      },
+      "mean_abs_disagreement_deg": 1.029740200371069
+    },
+    {
+      "bin": "(5.0, 15.0]",
+      "n": 21214,
+      "heading_error_median_deg": {
+        "est7": 1.0375619280681887,
+        "exact": 1.1288212747325446,
+        "era": 1.0648515871970545,
+        "era_cal": 0.8507158718103796
+      },
+      "mean_abs_disagreement_deg": 1.0224177882555252
+    },
+    {
+      "bin": "(15.0, 25.0]",
+      "n": 25591,
+      "heading_error_median_deg": {
+        "est7": 1.2824572303630575,
+        "exact": 1.2571273786750226,
+        "era": 1.2174082866202127,
+        "era_cal": 1.0561633460969588
+      },
+      "mean_abs_disagreement_deg": 1.2032869755890336
+    },
+    {
+      "bin": "(25.0, 35.0]",
+      "n": 27229,
+      "heading_error_median_deg": {
+        "est7": 1.7193895079592778,
+        "exact": 1.4127525636360474,
+        "era": 1.3900804050907993,
+        "era_cal": 1.2517203645802724
+      },
+      "mean_abs_disagreement_deg": 1.866150327226731
+    }
+  ],
+  "photographer_pitch_residual_check": {
+    "n": 79029,
+    "pearson_r": -0.004259994530761425,
+    "slope_deg_per_deg": -0.00428842991390825,
+    "photographer_pitch_p5_p95": [
+      -3.776254272460937,
+      3.8013916015624987
+    ]
+  },
+  "fidelity": {
+    "dc": {
+      "n_with_current_pano_xy": 0
+    },
+    "seattle": {
+      "n_with_current_pano_xy": 118077,
+      "pano_y_exact_match_rate": 1.0,
+      "pano_x_exact_match_rate": 0.9428677896626777,
+      "pano_x_within_1px_rate": 0.9488045936126426,
+      "pano_x_exact_match_rate_pre_cutoff": 0.9409638659653975,
+      "pano_x_exact_match_rate_post_cutoff": 1.0,
+      "mismatch_within_pano_std_deg_median": 0.008304883440144153,
+      "mismatch_across_pano_std_deg": 0.7346356291015801
+    },
+    "newberg": {
+      "n_with_current_pano_xy": 17609,
+      "pano_y_exact_match_rate": 1.0,
+      "pano_x_exact_match_rate": 0.9001078993696405,
+      "pano_x_within_1px_rate": 0.9450848997671645,
+      "pano_x_exact_match_rate_pre_cutoff": 0.8998918672813158,
+      "pano_x_exact_match_rate_post_cutoff": 1.0,
+      "mismatch_within_pano_std_deg_median": 0.0,
+      "mismatch_across_pano_std_deg": 0.17932543112680993
+    },
+    "columbus": {
+      "n_with_current_pano_xy": 20465,
+      "pano_y_exact_match_rate": 1.0,
+      "pano_x_exact_match_rate": 0.953090642560469,
+      "pano_x_within_1px_rate": 0.9572440752504275,
+      "pano_x_exact_match_rate_pre_cutoff": 0.9521674140508222,
+      "pano_x_exact_match_rate_post_cutoff": 1.0,
+      "mismatch_within_pano_std_deg_median": 0.006094118366732253,
+      "mismatch_across_pano_std_deg": 0.4766940665965076
+    },
+    "spgg": {
+      "n_with_current_pano_xy": 31491,
+      "pano_y_exact_match_rate": 1.0,
+      "pano_x_exact_match_rate": 0.48267759042266045,
+      "pano_x_within_1px_rate": 0.5432345749579245,
+      "pano_x_exact_match_rate_pre_cutoff": 0.46933124857487213,
+      "pano_x_exact_match_rate_post_cutoff": 1.0,
+      "mismatch_within_pano_std_deg_median": 0.011304838376093114,
+      "mismatch_across_pano_std_deg": 0.39073483488060123
+    },
+    "cdmx": {
+      "n_with_current_pano_xy": 6768,
+      "pano_y_exact_match_rate": 1.0,
+      "pano_x_exact_match_rate": 0.7755614657210402,
+      "pano_x_within_1px_rate": 0.8008274231678487,
+      "pano_x_exact_match_rate_pre_cutoff": 0.7721955608878225,
+      "pano_x_exact_match_rate_post_cutoff": 1.0,
+      "mismatch_within_pano_std_deg_median": 0.0,
+      "mismatch_across_pano_std_deg": 0.5683847472090097
+    },
+    "pittsburgh": {
+      "n_with_current_pano_xy": 1146,
+      "pano_y_exact_match_rate": 1.0,
+      "pano_x_exact_match_rate": 0.8996509598603839,
+      "pano_x_within_1px_rate": 0.9013961605584643,
+      "pano_x_exact_match_rate_pre_cutoff": 0.8433242506811989,
+      "pano_x_exact_match_rate_post_cutoff": 1.0,
+      "mismatch_within_pano_std_deg_median": 0.0,
+      "mismatch_across_pano_std_deg": 0.23296467309110916
+    }
+  }
+}
