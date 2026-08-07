@@ -205,7 +205,8 @@ def main():
         "runs": {run: import_run(run, args.runs_root, args.data_dir) for run in RUNS},
     }
     meta_path = args.data_dir / "falsification-runs-meta.json"
-    meta_path.write_text(json.dumps(meta, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+    meta_path.write_text(json.dumps(meta, indent=2, sort_keys=True) + "\n", encoding="utf-8",
+                         newline="\n")
     print(f"wrote {meta_path}")
 
 
