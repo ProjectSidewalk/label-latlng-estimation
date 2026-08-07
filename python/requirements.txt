@@ -7,3 +7,4 @@ pytest>=8
 matplotlib>=3.8   # figure scripts: python/make_figures.py, python/depth_validation_figures.py
 pillow>=10   # tile stitching and the overlay gallery (issue #9); also pulled in by matplotlib
 streetlevel==0.12.10   # depth fetch + photometa parsing (issues #4/#9); 0.12.4 is broken against Google's current metadata endpoint
+lightgbm>=4.6   # benchmark-only: the issue #6 GBM accuracy ceiling (python/run_gbm_ceiling.py); never a production dependency

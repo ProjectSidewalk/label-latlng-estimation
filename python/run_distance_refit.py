@@ -149,7 +149,8 @@ def main() -> None:
 
     if args.write:
         out = os.path.join(args.data_dir, "distance-refit-summary.json")
-        with open(out, "w", encoding="utf-8") as f:
+        # newline="\n" or a Windows rerun writes CRLF and stops matching a fresh checkout
+        with open(out, "w", encoding="utf-8", newline="\n") as f:
             json.dump(summary, f, indent=2)
             f.write("\n")
         print(f"\nSummary written to {out}")

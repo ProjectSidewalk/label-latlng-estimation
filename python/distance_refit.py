@@ -586,13 +586,21 @@ def zoom_residual_check(scored: pd.DataFrame, key: str) -> dict:
 
 def noise_sweep(fits: dict, models: dict, train: pd.DataFrame, test: pd.DataFrame,
                 keys: list[str] | None = None, sigmas=(2.0, 5.0, 10.0), n_draws: int = 5,
-                seed: int = 666) -> dict:
+                seed: int = 666, extra_predictors: dict | None = None) -> dict:
     """The gsv-location-extraction-analysis objection made quantitative: perturb the click by
     Gaussian pixel noise, re-derive every click-dependent input (canvas_y, depression via the
     exact projection, sv_image_y via the fixed-frame px/deg scale), and measure how each rung's
     error distribution degrades. The heading half stays at the unperturbed era_cal prediction:
-    the sweep isolates the distance half's noise response (the heading half's was #5's §2)."""
-    keys = keys or HEADLINE_KEYS
+    the sweep isolates the distance half's noise response (the heading half's was #5's §2).
+
+    ``extra_predictors`` maps a key to a callable ``frame -> predicted distance (m)``, so a
+    model that lives outside this module (#6's GBM benchmark) is scored on the *exact same*
+    perturbed clicks instead of re-implementing the sweep and hoping the two copies stay in
+    step. The rng is consumed identically whatever the key set is — one canvas_x draw and one
+    canvas_y draw per repetition, sigma-major — so adding predictors cannot move the #3 rows.
+    """
+    extra = dict(extra_predictors or {})
+    keys = list(keys or HEADLINE_KEYS) + [k for k in extra if k not in (keys or HEADLINE_KEYS)]
     heading_pred, _ = heading_for_scoring(train, test)
     rng = np.random.default_rng(seed)
     n = len(test)
@@ -602,7 +610,9 @@ def noise_sweep(fits: dict, models: dict, train: pd.DataFrame, test: pd.DataFram
     def errors(frame: pd.DataFrame) -> dict:
         res = {}
         for k in keys:
-            if k == "est7":
+            if k in extra:
+                d = extra[k](frame)
+            elif k == "est7":
                 d, _h = predict_dist_heading(models, frame, "est7")
             else:
                 d = predict_dist(fits[k], frame)
