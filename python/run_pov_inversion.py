@@ -16,11 +16,15 @@ import json
 import os
 import sys
 
+import pandas as pd
+
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from label_latlng_estimation import (  # noqa: E402
     CITIES, add_heading_diff, clean_data, fit_models, load_city, split_from_fixtures,
 )
-from pov_inversion import fidelity_report, score_heading_swap, summarize_heading_swap  # noqa: E402
+from pov_inversion import (  # noqa: E402
+    MODEL_NAMES, fidelity_report, score_heading_swap, summarize_heading_swap,
+)
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 
@@ -50,7 +54,6 @@ def main() -> None:
                   f"(pre-cutoff {f['pano_x_exact_match_rate_pre_cutoff']:.4f} / "
                   f"post {f['pano_x_exact_match_rate_post_cutoff']:.4f})")
 
-    import pandas as pd
     cleaned, _ = clean_data(pd.concat(frames, ignore_index=True))
     cleaned = add_heading_diff(cleaned)
     train, test = split_from_fixtures(cleaned, args.fixtures_dir)
@@ -60,7 +63,6 @@ def main() -> None:
     summary = summarize_heading_swap(scored)
     summary["fidelity"] = fidelity
 
-    from pov_inversion import MODEL_NAMES
     names = {"est7": "est7 linear fits (6 params)", "exact": "exact inversion (0 params)",
              "era": "era-faithful exact (0 params)", "era_cal": "era + 1 global const"}
     hm = summary["heading_error_median_deg"]
@@ -98,6 +100,7 @@ def main() -> None:
         out = os.path.join(args.data_dir, "pov-inversion-summary.json")
         with open(out, "w", encoding="utf-8") as f:
             json.dump(summary, f, indent=2)
+            f.write("\n")
         print(f"\nSummary written to {out}")
 
 
