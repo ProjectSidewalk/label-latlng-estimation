@@ -17,23 +17,67 @@
 > pytest tests/test_mapillary_falsification_findings.py # the findings, locked
 > ```
 
-## §1 · What this is, and what the inputs are
+## §1 · Goal
 
 Stages 1–2 refit the estimator's distance half on 395k depth-derived GSV labels and shipped a
 horizon-saturating cotangent (`D_blend`) with provisional coefficients. All of that evidence is
 GSV at 6656/8192 px. Mapillary is where the deployed model is known to break (#4765 measured
 the bias flipping sign there), where there is **no absolute ground truth**, and where the refit
-is a 2.8× resolution extrapolation. So this stage does what issue #3 specified: **falsify,
-don't fit.** No coefficient in the shipped candidate was touched by anything in this report.
+is a 2.8× resolution extrapolation.
+
+**The goal of this stage — what issue #3 specified — is to falsify, not fit:** subject the
+shipped candidate, unmodified, to the two scale-free self-consistency diagnostics that
+condemned the deployed model, on imagery the refit never saw, and either break it or certify
+that it transfers. No coefficient in the shipped candidate was touched by anything in this
+report.
+
+## §2 · Questions
+
+The report and its code (`python/mapillary_falsification.py`) were set up to answer six
+questions, each locked by the findings tests:
+
+- **Q1 — Preconditions.** Are the Mapillary panos true 2:1 equirects, which pose stream is
+  trustworthy, and what rig/capture population is actually present? → **§4**: all equirect;
+  SfM (`computed_*`) pose only; a car-shaped rig zoo with negligible on-foot capture.
+- **Q2 — Harness validity.** Can this reimplementation of #4766's diagnostics (whose code was
+  never committed) be trusted? → **§5**: yes — externally validated to within a few
+  thousandths of #4766's published slopes, including its counterintuitive normalization
+  result.
+- **Q3 — The deployed model.** Does the compression signature #4766 measured reproduce on
+  Mapillary from self-consistency alone, and does #4765's sign-flip mechanism appear?
+  → **§6**: yes — −0.32 on richmond, and −1.40 on clovis's 2880-px panoramas.
+- **Q4 — The blend, range axis.** Is the shipped blend flat where the deployed model
+  compresses — does the refit transfer across the 2.8× resolution extrapolation? → **§6**:
+  yes — |slope| ≤ 0.09 on all six runs, with one located, designed exception (sao_paulo's
+  far-field tail).
+- **Q5 — The blend, height axis.** Is the blend's residual height dependence a pixel-frame
+  defect or camera-height (rig) confounding? → **§7**: confounding — at the confound floor as
+  shipped, collapsing to ≈ 0 once each sequence gets a fitted camera height.
+- **Q6 — The Stage 4 generalization.** Can per-source camera height be measured from
+  self-consistency alone, with no ground truth? → **§7**: yes — rigs separate exactly as
+  mount geometry predicts (GoPro Max 13% below the car mast).
+
+Three things are out of scope by design — absolute scale on Mapillary, human-click behaviour,
+and the near-horizon regime; **§8** says why, and where the evidence for each lives instead.
+
+## §3 · Dataset
 
 The inputs are the auto-labeler's fused multi-view curb-ramp sites for the two Mapillary-viewer
-cities (**richmond**, 1,183 usable sites / 7,711 views; **clovis**, 1,560 / 7,691) and four GSV
-control runs (**paterson**, **gainesville**, **bend**, **sao_paulo**; 108k views), imported and
-committed as `data/falsification-*` at auto-labeler commit `0bbd8e6` (all six runs fused with
-identical default parameters; regeneration verified byte-identical on richmond; provenance in
-`data/MANIFEST.md`). Each fused site is several independent detections of one physical curb
-ramp from different panoramas — repeatable AI detections, not human clicks — with a GLS
-position, per-member normalized pixel coordinates, and a ray bearing derived from the SfM pose.
+cities plus four GSV control runs, imported and committed as `data/falsification-*` at
+auto-labeler commit `0bbd8e6` (all six runs fused with identical default parameters;
+regeneration verified byte-identical on richmond; provenance in `data/MANIFEST.md`). Each
+fused site is several independent detections of one physical curb ramp from different
+panoramas — repeatable AI detections, not human clicks — with a GLS position, per-member
+normalized pixel coordinates, and a ray bearing derived from the SfM pose.
+
+| run | imagery | role | fused sites | site members (views) | panos seen | dominant capture |
+|---|---|---|---:|---:|---:|---|
+| richmond | Mapillary | test | 1,183 | 7,711 | 9,091 | iSTAR Pulsar car mount (11000×5500, 69% of members) over a four-rig zoo (heights 2048–6144) |
+| clovis | Mapillary | test | 1,560 | 7,691 | 72,776 | one creator, one GoPro Fusion (5760×2880), two years |
+| paterson | GSV | control | 6,995 | 25,229 | 34,427 | 8192-px GSV (6656 minority) |
+| gainesville | GSV | control | 5,926 | 16,770 | 35,204 | 8192-px GSV (6656 minority) |
+| bend | GSV | control | 11,655 | 47,180 | 78,560 | 8192-px GSV (6656 minority) |
+| sao_paulo | GSV | control | 6,261 | 19,283 | 22,741 | 8192-px GSV (6656 minority) |
 
 Three properties of this population, fixed before any scoring, bound what it can testify about:
 
@@ -49,7 +93,7 @@ Three properties of this population, fixed before any scoring, bound what it can
 3. **It is curb ramps only** — the auto-labeler detects one label type, so the per-type height
    spread from Stage 1 is untestable here; `D_blend` runs with its CurbRamp height (2.783 m).
 
-## §2 · The census: what the falsification is allowed to assume
+## §4 · The census: what the falsification is allowed to assume
 
 Measured over every pano the runs saw (9,091 richmond / 72,776 clovis), before any diagnostic:
 
@@ -65,7 +109,7 @@ Measured over every pano the runs saw (9,091 richmond / 72,776 clovis), before a
   four rigs — a professional car mount (NCTECH iSTAR Pulsar, 11000×5500, 69% of site members),
   GoPro Max (21%), and two minor ones — under 8 creators. Clovis is a single creator driving
   one GoPro Fusion at 5760×2880 for two years (its two Mapillary model strings are the same
-  physical camera; §5 confirms that from the data). **On-foot capture is negligible**: 17 of
+  physical camera; §7 confirms that from the data). **On-foot capture is negligible**: 17 of
   8,098 and 6 of 8,626 site members come from walking-speed sequences (classified from
   per-sequence gross speed and frame spacing; several rigs stamp `captured_at` at fixed
   intervals, so naive frame speed is untrustworthy — the census records both). The rig class
@@ -75,7 +119,7 @@ Measured over every pano the runs saw (9,091 richmond / 72,776 clovis), before a
   8192-px panos with a 6656-px minority — so any Mapillary-only failure would implicate the
   extrapolation, not the harness.
 
-## §3 · The method, and why to believe this implementation
+## §5 · The method, and why to believe this implementation
 
 [#4766](https://github.com/ProjectSidewalk/SidewalkWebpage/issues/4766)'s two scale-free
 diagnostics, reimplemented from its published description (its code was never committed). Each
@@ -120,9 +164,9 @@ height-slope column is stated under this report's definition only; #4766's heigh
 normalization was not recorded, so those magnitudes are internally comparable here but not
 across reports.
 
-## §4 · First axis: the compression signature is gone
+## §6 · First axis: the compression signature is gone
 
-Within-site range slope, all six runs ([fig 17](../figures/fig17-falsification-range-axis.png)):
+Within-site range slope, all six runs:
 
 | run | views | A status quo | B normalized | C cotangent | **D blend** |
 |---|---:|---:|---:|---:|---:|
@@ -134,6 +178,8 @@ Within-site range slope, all six runs ([fig 17](../figures/fig17-falsification-r
 | sao_paulo (GSV) | 19,283 | −0.230 | −0.387 | +0.030 | **−0.090** |
 
 (SEs 0.001–0.027; full matrix with RMS/range in `data/falsification-summary.json`.)
+
+![Figure 17 — within-site range slope (m/m) for the four candidates on all six runs. The deployed model A sits below zero everywhere and falls off the chart on clovis; the shipped blend D clusters at zero on every run, including the two Mapillary cities it was never fit on.](../figures/fig17-falsification-range-axis.png)
 
 Four readings:
 
@@ -152,9 +198,9 @@ Four readings:
   relative to the pure cotangent. That is the designed trade — boundedness at the horizon paid
   for in the far field — visible exactly where it should be and nowhere else.
 
-## §5 · Second axis: the height residual is the rigs, and the rigs are measurable
+## §7 · Second axis: the height residual is the rigs, and the rigs are measurable
 
-On richmond ([fig 18](../figures/fig18-falsification-height-axis.png)), the deployed model's
+On richmond (figure 18 below), the deployed model's
 height slope (−0.690) sits 2.6× above the confound floor (B: −0.269) — the pixel-frame defect,
 alive on Mapillary. The blend as shipped is **already at the floor** (−0.236): no measurable
 pixel-frame height dependence beyond what a pixel-independent placement shows from rig
@@ -172,6 +218,8 @@ is the RampNet#101 trap and stays anchored to the GSV fit):
 | GoPro Max (2048/2880 px) | 13 | 1,489 | **0.871** |
 | unbranded (12288×6144) | 13 | 760 | 1.010 |
 
+![Figure 18 — left: richmond within-site height slope per candidate, with the confound floor marked; the blend sits at the floor as shipped and at ≈ 0 with per-sequence heights. Right: fitted per-sequence distance scale by rig — the GoPro Max sequences separate cleanly below the car-mount rigs.](../figures/fig18-falsification-height-axis.png)
+
 With those per-sequence heights applied, the blend's richmond height slope collapses
 −0.236 → **−0.022 ≈ 0** (range slope undisturbed at +0.005; RMS/range 0.200 → 0.188). So the
 entire residual height dependence was **camera-height confounding** — pano height correlates
@@ -185,7 +233,7 @@ This is the empirical backing for the Stage 4 generalization the Stages 1–2 re
 per-type offsets kept.** On GSV nothing changes; on Mapillary the base height is identifiable
 from exactly this kind of self-consistency, per city or per rig, without any ground truth.
 
-## §6 · What this settles, and what it deliberately does not
+## §8 · What this settles, and what it deliberately does not
 
 **Settled by this report:**
 
@@ -206,7 +254,7 @@ from exactly this kind of self-consistency, per city or per rig, without any gro
   is the recipe for the Mapillary side of it.
 - **Human-click behaviour.** These are repeatable AI detections; the crowd-noise question was
   settled separately by Stage 2's perturbation sweep.
-- **The near-horizon regime** — excluded by the fuse gate (§1). Its evidence remains Stage 2's
+- **The near-horizon regime** — excluded by the fuse gate (§3). Its evidence remains Stage 2's
   near-horizon table on GSV depth truth.
 
 ## Reproducing this report
