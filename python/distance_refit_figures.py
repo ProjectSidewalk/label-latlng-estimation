@@ -17,6 +17,7 @@ import matplotlib
 matplotlib.use("Agg")
 import matplotlib.pyplot as plt
 import numpy as np
+import pandas as pd
 from matplotlib.colors import LogNorm
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
@@ -68,8 +69,7 @@ def fig14(cleaned, models, fits, chosen, scored):
     ax.plot(xs, _est7_z1_curve(models, xs, float(cleaned["canvas_y"].median())),
             color=C_EST7, lw=2, ls=(0, (5, 3)))
     ax.plot(xs, np.clip(2.6 / np.tan(np.radians(xs)), 0, 50), color=MUTED, lw=2)
-    ax.plot(xs, dr.predict_dist(fits["D_blend_l1"],
-                                __import__("pandas").DataFrame({"depression_deg": xs})),
+    ax.plot(xs, dr.predict_dist(fits["D_blend_l1"], pd.DataFrame({"depression_deg": xs})),
             color=C_GEOM, lw=2.2, solid_capstyle="round")
     e = fits["E_l1"]
     ax.plot(e["knots_dep_deg"], e["knots_dist_m"], color=INK, lw=1.6, ls=(0, (2, 2)))
@@ -113,7 +113,7 @@ def fig14(cleaned, models, fits, chosen, scored):
     _title(fig, "The distance half is geometry too — fig 14",
            "Left: distance vs the exact depression angle from #5's projection — the cotangent family follows "
            "the data where the per-zoom linear fits (blue, at median canvas_y) are compressive. Middle: the "
-           "0-parameter 2.6 m anchor already beats the 12-parameter status quo. Right: est7's compression "
+           "0-parameter 2.6 m anchor already beats the 15-coefficient status quo. Right: est7's compression "
            "bias (fig 4) is what the saturating cotangent removes.", wrap=150)
     fig.subplots_adjust(top=0.76, wspace=0.28)
     _save(fig, "fig14-distance-geometry.png")
@@ -123,7 +123,6 @@ def fig15(fits, chosen, scored, noise):
     fig, axes = plt.subplots(1, 3, figsize=(12.5, 4.1))
 
     ax = axes[0]
-    import pandas as pd
     xs = np.linspace(-2, 10, 400)
     frame = pd.DataFrame({"depression_deg": xs,
                           "label_type": np.repeat("CurbRamp", len(xs)),
@@ -132,8 +131,8 @@ def fig15(fits, chosen, scored, noise):
                            ("D_blend_l1", C_GEOM_DARK, "-"), ("E_l1", INK, (0, (2, 2)))):
         ax.plot(xs, dr.predict_dist(fits[key], frame), color=color, lw=2, ls=ls)
     for label, color, x, y in (("C raw cotangent", C_LEGACY, 4.3, 41.0),
-                               ("D floor", C_GEOM, -1.7, 19.0),
-                               ("D blend", C_GEOM_DARK, -1.7, 32.5),
+                               ("D floor", C_GEOM, -1.7, 18.6),
+                               ("D blend", C_GEOM_DARK, -1.7, 29.4),
                                ("E isotonic", INK, 3.2, 26.3)):
         ax.text(x, y, label, color=color, fontsize=8.6)
     ax.axhline(dr.DIST_CAP_M, color=BASELINE, lw=1)
@@ -156,8 +155,11 @@ def fig15(fits, chosen, scored, noise):
                  "E_l1": INK}[k]
         ax.plot([v["latlng_median_m"], v["latlng_p95_m"]], [y, y], color=color, lw=2, alpha=0.45)
         ax.plot(v["latlng_median_m"], y, "o", color=color, ms=7)
-        ax.text(56.5, y, f"<= {v['dist_pred_max_m']:.0f} m", color=MUTED, fontsize=8.2,
-                va="center", ha="right")
+        # The STRUCTURAL bound (swept over the whole depression domain), not this bin's max --
+        # a form can look bounded on 300 rows and still run to the cap on a click they lack.
+        bound = dr.structural_max_m(fits[k]) if k in fits else None
+        txt = f"<= {dr.DIST_CAP_M:.0f} m (clip)" if bound is None else f"<= {bound:.0f} m"
+        ax.text(56.5, y, txt, color=MUTED, fontsize=8.2, va="center", ha="right")
     ax.set_yticks(ys, rungs)
     ax.set_xlabel("lat/lng error 0-2 deg (median; to p95)")
     ax.set_xlim(0, 57)
@@ -180,12 +182,11 @@ def fig15(fits, chosen, scored, noise):
     ax.set_title("click-noise sensitivity", loc="left")
 
     _title(fig, "At the horizon a raw cotangent diverges; the saturating forms stay bounded — fig 15",
-           "Left: below ~6 deg the raw cotangent (C) runs to the 50 m cap; the floor, blend, and isotonic "
-           "forms saturate in the low 20s like the data. Middle: in the thin 0-2 deg bin the saturating "
-           "forms match est7 while C answers 28 m (right-edge text: each form's largest possible answer). "
-           "Right: at realistic 2-5 px click noise every geometry rung degrades by centimeters — the 2016 "
-           "noise objection, dissolved.", wrap=150)
-    fig.subplots_adjust(top=0.76, wspace=0.34)
+           "Left: below ~6 deg the raw cotangent (C) runs to the 50 m cap; floor, blend and isotonic "
+           "saturate in the 20s, the blend's tail held flat at its horizon value. Middle: the thin 0-2 "
+           "deg bin - right-edge text is each form's STRUCTURAL bound, the largest answer it can EVER "
+           "return. Right: 2-5 px click noise costs every rung centimeters.", wrap=150)
+    fig.subplots_adjust(top=0.76, wspace=0.42)
     _save(fig, "fig15-horizon-saturation.png")
 
 

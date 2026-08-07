@@ -25,10 +25,16 @@ Conventions, decided deliberately (issue #3 rider 2 and amendment 2):
   "loss vs metric" stay unconfounded (the published headline metric is a median). Linear L1
   fits use statsmodels QuantReg at tau=0.5; the one-parameter disparity fits use the exact
   weighted-median LAD solution, which is deterministic and closed-form.
-- **Boundedness**: the status quo's one virtue is that a linear form is bounded; every rung
-  here ends in ``clip(0, DIST_CAP_M)`` and D_soft is bounded at ``1/c0 <= DIST_CAP_M`` by
-  construction, so no candidate can return the divergent horizon distances that make a raw
-  cotangent undeployable.
+- **Boundedness**: the status quo's one virtue is that a linear form is bounded, and the D
+  family is here to keep it. Every rung ends in ``clip(0, DIST_CAP_M)``, but that clip is the
+  training-domain cap, not saturation — what matters is each form's *structural* bound, the
+  largest distance it can return anywhere in the depression domain (``structural_max_m``
+  measures it, ``bounds`` in the summary publishes it, and a findings test asserts every one):
+  D_floor at ``h/tan(dep_min)``, D_blend at its horizon value (its linear tail is evaluated at
+  ``max(dep, 0)``, so a click above the horizon gets the horizon's answer rather than a
+  runaway extrapolation), E at its first knot. D_soft's ``1/c0`` bound is nominally structural
+  but the ``c0 >= 1/DIST_CAP_M`` constraint is *active* in all four variants, so in practice it
+  saturates at the cap — one of the reasons it loses to floor/blend.
 - **Scoring geodesy**: lat/lng error for every rung uses turf-style ``spherical_dest`` — what
   production ``toLatLng`` actually runs — with the heading half held identical across rungs:
   the era-faithful exact inversion plus the one train-fitted constant from #5 (the stored
@@ -47,11 +53,17 @@ import os
 
 import numpy as np
 import pandas as pd
+import statsmodels.api as sm
+from scipy.optimize import isotonic_regression, lsq_linear
+from statsmodels.regression.quantile_regression import QuantReg
 
 from label_latlng_estimation import (
-    MAX_DIST_FROM_PANO, _design, _named, _ols, haversine_m, spherical_dest,
+    MAX_DIST_FROM_PANO, _design, _named, _ols, haversine_m, latlng_error_m,
+    predict_dist_heading, spherical_dest,
 )
-from pov_inversion import era_heading_diff, exact_depression_deg, pov_if_centered
+from pov_inversion import (
+    CANVAS_H, CANVAS_W, era_heading_diff, exact_depression_deg, pov_if_centered,
+)
 
 DIST_CAP_M = float(MAX_DIST_FROM_PANO)  # the training-domain bound every rung respects
 SV_PX_PER_DEG = 6656.0 / 180.0  # sv_image_y is stored in a fixed 13312x6656 frame (see report)
@@ -89,20 +101,23 @@ def heading_for_scoring(train: pd.DataFrame, test: pd.DataFrame) -> tuple[np.nda
 # ------------------------------------------------------------------------------- fit helpers
 
 def _weighted_median(values: np.ndarray, weights: np.ndarray) -> float:
-    order = np.argsort(values)
+    order = np.argsort(values, kind="stable")
     v, w = values[order], weights[order]
     cw = np.cumsum(w)
     return float(v[np.searchsorted(cw, 0.5 * cw[-1])])
 
 
 def _lad_origin_slope(x: np.ndarray, y: np.ndarray) -> float:
-    """Exact L1 solution of y ~ slope * x (no intercept): the |x|-weighted median of y/x."""
-    ok = x > 0
-    return _weighted_median(y[ok] / x[ok], x[ok])
+    """Exact L1 solution of y ~ slope * x (no intercept): the |x|-weighted median of y/x.
+
+    sum|y - s*x| = sum |x| * |y/x - s| over the rows with x != 0, and the x == 0 rows add a
+    constant independent of s, so they drop out. Every call site here passes a non-negative
+    tan(depression), but the |x| weighting keeps the solver correct rather than merely lucky."""
+    ok = x != 0
+    return _weighted_median(y[ok] / x[ok], np.abs(x[ok]))
 
 
 def _quantreg(X: np.ndarray, y: np.ndarray, q: float = 0.5) -> np.ndarray:
-    from statsmodels.regression.quantile_regression import QuantReg
     return np.asarray(QuantReg(y, X).fit(q=q, max_iter=5000).params, float)
 
 
@@ -154,7 +169,13 @@ def fit_cotangent(train: pd.DataFrame, loss: str, per_type: bool = False) -> dic
     """Rung C: ``dist = h / tan(depression)`` with h fitted in disparity space, optionally one
     h per label type (amendment 4: the ground-plane assumption is differently wrong per type).
     Clicks at or above the horizon cannot inform a ground-plane height and are excluded from
-    the fit (counted); at predict time they saturate to the cap."""
+    the fit (counted); at predict time they saturate to the cap.
+
+    The per-type variants also record ``height_fallback_m`` — the pooled height, fitted the
+    same way on every usable row. It is what ``predict_dist`` uses for a label type this
+    2017-2020 population never contained, so a production caller cannot silently get NaN out
+    of a type the table has no row for (the seven fitted types cover every row scored here,
+    so the fallback contributes nothing to any number in the summary)."""
     dep = train["depression_deg"].to_numpy(float)
     disp, n_capped = _disparity(train["pano_dist"].to_numpy(float))
     t = _tan_dep(dep)
@@ -170,6 +191,7 @@ def fit_cotangent(train: pd.DataFrame, loss: str, per_type: bool = False) -> dic
     if per_type:
         types = train["label_type"].to_numpy(str)
         out["height_by_type_m"] = {lt: _h(usable & (types == lt)) for lt in LABEL_TYPES}
+        out["height_fallback_m"] = _h(usable)
         out["n_params"] = len(out["height_by_type_m"])
     else:
         out["height_m"] = _h(usable)
@@ -178,21 +200,23 @@ def fit_cotangent(train: pd.DataFrame, loss: str, per_type: bool = False) -> dic
 
 
 def _heights_in_disparity(t: np.ndarray, disp: np.ndarray, types: np.ndarray | None,
-                          loss: str) -> tuple[float | dict, np.ndarray]:
+                          loss: str) -> tuple[float | dict, np.ndarray, float]:
     """Inner camera-height fit for the cotangent family: disparity ~ (1/h) * t, either one
-    global h or one per label type. Returns (h params, per-row 1/h)."""
+    global h or one per label type. Returns (h params, per-row 1/h, pooled fallback h)."""
+    def _h(x: np.ndarray, y: np.ndarray) -> float:
+        return float(x @ y / (x @ x)) if loss == "ols" else _lad_origin_slope(x, y)
+
+    pooled = _h(t, disp)
     if types is None:
-        s = float(t @ disp / (t @ t)) if loss == "ols" else _lad_origin_slope(t, disp)
-        return 1.0 / s, np.full(len(t), s)
+        return 1.0 / pooled, np.full(len(t), pooled), 1.0 / pooled
     s_row = np.empty(len(t))
     hs = {}
     for lt in LABEL_TYPES:
         m = types == lt
-        x, y = t[m], disp[m]
-        s = float(x @ y / (x @ x)) if loss == "ols" else _lad_origin_slope(x, y)
+        s = _h(t[m], disp[m])
         hs[lt] = 1.0 / s
         s_row[m] = s
-    return hs, s_row
+    return hs, s_row, 1.0 / pooled
 
 
 def fit_floor(train: pd.DataFrame, loss: str, per_type: bool = False) -> dict:
@@ -208,15 +232,16 @@ def fit_floor(train: pd.DataFrame, loss: str, per_type: bool = False) -> dict:
     best = None
     for dep_min in np.arange(0.5, 12.01, 0.25):
         t = _tan_dep(dep, dep_min)
-        h, s_row = _heights_in_disparity(t, disp, types, loss)
+        h, s_row, fallback = _heights_in_disparity(t, disp, types, loss)
         pred = np.clip(1.0 / (s_row * t), 0.0, DIST_CAP_M)
         err = pred - dist
         train_loss = float(np.mean(err ** 2)) if loss == "ols" else float(np.mean(np.abs(err)))
         if best is None or train_loss < best[0]:
-            best = (train_loss, h, float(dep_min))
+            best = (train_loss, h, float(dep_min), fallback)
     out = {"form": "floor", "loss": loss, "dep_min_deg": best[2]}
     if per_type:
-        out.update(height_by_type_m=best[1], n_params=1 + len(LABEL_TYPES))
+        out.update(height_by_type_m=best[1], height_fallback_m=best[3],
+                   n_params=1 + len(LABEL_TYPES))
     else:
         out.update(height_m=best[1], n_params=2)
     return out
@@ -236,9 +261,10 @@ def fit_blend(train: pd.DataFrame, loss: str, per_type: bool = False) -> dict:
     best = None
     for a in np.arange(1.0, 12.01, 0.25):
         m = dep >= a
-        h, _ = _heights_in_disparity(t[m], disp[m], types[m] if per_type else None, loss)
-        params = ({"height_by_type_m": h} if per_type else {"height_m": h}) | {
-            "blend_deg": float(a)}
+        h, _, fallback = _heights_in_disparity(t[m], disp[m],
+                                               types[m] if per_type else None, loss)
+        params = ({"height_by_type_m": h, "height_fallback_m": fallback} if per_type
+                  else {"height_m": h}) | {"blend_deg": float(a)}
         pred = _predict_blend(params, dep, types)
         err = pred - dist
         train_loss = float(np.mean(err ** 2)) if loss == "ols" else float(np.mean(np.abs(err)))
@@ -253,43 +279,48 @@ def fit_softcap(train: pd.DataFrame, loss: str, per_type: bool = False) -> dict:
     ``1/dist = c0 + c1 * tan(max(depression, 0))`` with ``c0 >= 1/DIST_CAP_M``, so predicted
     distance is bounded at ``1/c0`` *by construction* — the saturation is the intercept, not a
     bolt-on. Optionally a per-label-type slope (shared cap). L1 uses QuantReg; if its
-    unconstrained intercept falls below 1/cap it is projected there and the slope refit
-    (recorded in ``projected``)."""
+    unconstrained intercept falls below 1/cap it is projected there and the slopes refit
+    (recorded in ``projected``). Measured outcome: that bound is active in all four variants,
+    so this rung's "structural" bound is the 50 m cap itself — see ``bounds`` in the summary.
+
+    Both losses hold the slopes at ``c1 >= 0`` (a negative slope would invert the form —
+    farther clicks answered as nearer — and ``clip`` would hide it): OLS gets it from
+    ``lsq_linear``'s bounds, L1 by flooring after the fit, recorded in ``c1_floored``."""
     dep = train["depression_deg"].to_numpy(float)
     disp, n_capped = _disparity(train["pano_dist"].to_numpy(float))
     t = _tan_dep(dep)
     c0_min = 1.0 / DIST_CAP_M
-    out = {"form": "softcap", "loss": loss, "n_disparity_capped": n_capped, "projected": False}
+    types = train["label_type"].to_numpy(str)
+    masks = [types == lt for lt in LABEL_TYPES] if per_type else None
+    out = {"form": "softcap", "loss": loss, "n_disparity_capped": n_capped,
+           "projected": False, "c1_floored": False}
 
-    if per_type:
-        dummies = np.column_stack([(train["label_type"].to_numpy(str) == lt) * t
-                                   for lt in LABEL_TYPES])
-        X = np.column_stack([np.ones(len(t)), dummies])
-        if loss == "ols":
-            from scipy.optimize import lsq_linear
-            lo = np.r_[c0_min, np.zeros(len(LABEL_TYPES))]
-            c = lsq_linear(X, disp, bounds=(lo, np.full(len(lo), np.inf))).x
-        else:
-            c = _quantreg(X, disp)
-            if c[0] < c0_min:
-                out["projected"] = True
-                c = np.r_[c0_min, [_lad_origin_slope(
-                    t[m], disp[m] - c0_min)
-                    for m in ((train["label_type"].to_numpy(str) == lt) for lt in LABEL_TYPES)]]
-        out.update(c0=float(max(c[0], c0_min)),
-                   c1_by_type={lt: float(v) for lt, v in zip(LABEL_TYPES, c[1:])},
-                   n_params=1 + len(LABEL_TYPES))
+    X = (np.column_stack([np.ones(len(t))] + [m * t for m in masks]) if per_type
+         else np.column_stack([np.ones(len(t)), t]))
+    if loss == "ols":
+        lo = np.r_[c0_min, np.zeros(X.shape[1] - 1)]
+        c = lsq_linear(X, disp, bounds=(lo, np.full(X.shape[1], np.inf))).x
     else:
-        X = np.column_stack([np.ones(len(t)), t])
-        if loss == "ols":
-            from scipy.optimize import lsq_linear
-            c = lsq_linear(X, disp, bounds=([c0_min, 0.0], [np.inf, np.inf])).x
-        else:
-            c = _quantreg(X, disp)
-            if c[0] < c0_min:
-                out["projected"] = True
-                c = np.array([c0_min, _lad_origin_slope(t, disp - c0_min)])
-        out.update(c0=float(max(c[0], c0_min)), c1=float(c[1]), n_params=2)
+        c = _quantreg(X, disp)
+        if c[0] < c0_min:  # project onto the boundary, then refit the slopes there
+            out["projected"] = True
+            resid = disp - c0_min
+            c = (np.r_[c0_min, [_lad_origin_slope(t[m], resid[m]) for m in masks]] if per_type
+                 else np.array([c0_min, _lad_origin_slope(t, resid)]))
+        if (c[1:] < 0).any():
+            out["c1_floored"] = True
+            c = np.r_[c[0], np.maximum(c[1:], 0.0)]
+
+    c0 = float(max(c[0], c0_min))
+    if per_type:
+        # Fallback slope for a label type this population never contained: the pooled fit at
+        # the same intercept, under the same loss (see fit_cotangent on why a fallback exists).
+        resid = disp - c0
+        pooled = (float(t @ resid / (t @ t)) if loss == "ols" else _lad_origin_slope(t, resid))
+        out.update(c0=c0, c1_by_type={lt: float(v) for lt, v in zip(LABEL_TYPES, c[1:])},
+                   c1_fallback=max(float(pooled), 0.0), n_params=1 + len(LABEL_TYPES))
+    else:
+        out.update(c0=c0, c1=float(c[1]), n_params=2)
     return out
 
 
@@ -299,7 +330,6 @@ def fit_isotonic(train: pd.DataFrame, loss: str, max_knots: int = 24) -> dict:
     loss='ols' is the exact L2 isotonic fit on all rows; loss='l1' runs the pool-adjacent-
     violators step on 200 quantile-bin medians (count-weighted) — a documented approximation,
     since exact L1 isotonic is not in scipy."""
-    from scipy.optimize import isotonic_regression
     dep = train["depression_deg"].to_numpy(float)
     dist = train["pano_dist"].to_numpy(float)
     order = np.argsort(dep, kind="stable")
@@ -346,9 +376,23 @@ def fit_all_rungs(train: pd.DataFrame, models: dict, data_dir: str) -> dict:
 
 # -------------------------------------------------------------------------------- prediction
 
+def _heights(params: dict, df: pd.DataFrame) -> np.ndarray:
+    """Per-row camera height from a per-type table, pooled fallback for unseen types."""
+    return (df["label_type"].map(params["height_by_type_m"])
+            .fillna(params["height_fallback_m"]).to_numpy(float))
+
+
 def _predict_blend(params: dict, dep: np.ndarray, types: np.ndarray | None = None) -> np.ndarray:
+    """The C1 blend: cotangent above ``blend_deg``, its matched tangent line below.
+
+    The tail is evaluated at ``max(dep, 0)``, so the form's largest possible answer is its
+    value at the horizon (~28 m) rather than a linear runaway to the 50 m cap. Clicks above the
+    horizon are unplaceable by definition — 0.16% of the test split — and clamping them to the
+    horizon's answer is what makes this rung's boundedness structural rather than a claim about
+    where the data happened to sit (see ``structural_max_m``)."""
     if "height_by_type_m" in params:
-        h = pd.Series(types).map(params["height_by_type_m"]).to_numpy(float)
+        h = (pd.Series(types).map(params["height_by_type_m"])
+             .fillna(params["height_fallback_m"]).to_numpy(float))
     else:
         h = params["height_m"]
     a = params["blend_deg"]
@@ -356,14 +400,20 @@ def _predict_blend(params: dict, dep: np.ndarray, types: np.ndarray | None = Non
     v = h / np.tan(a_rad)
     slope = -h * (np.pi / 180.0) / np.sin(a_rad) ** 2  # d/d(dep_deg) of h*cot(dep) at a
     cot = h / _tan_dep(dep, 1e-9)
-    return np.clip(np.where(dep >= a, cot, v + slope * (dep - a)), 0.0, DIST_CAP_M)
+    tail = v + slope * (np.maximum(dep, 0.0) - a)
+    return np.clip(np.where(dep >= a, cot, tail), 0.0, DIST_CAP_M)
 
 
 def predict_dist(params: dict, df: pd.DataFrame) -> np.ndarray:
-    """Distance predictions for one fitted rung. Every form ends bounded in [0, DIST_CAP_M];
-    anchor_served returns NaN outside its served-height subsample."""
+    """Distance predictions for one fitted rung. Every form ends bounded in [0, DIST_CAP_M]
+    (``structural_max_m`` reports the tighter bound each form actually holds); anchor_served
+    returns NaN outside its served-height subsample, which is the one deliberate NaN here.
+
+    Per-type variants fall back to the pooled parameter for a label type the fit never saw, so
+    an unfamiliar type gets the population's answer rather than a silent NaN."""
     form = params["form"]
     dep = df["depression_deg"].to_numpy(float) if "depression_deg" in df else None
+    typed = "height_by_type_m" in params
 
     if form == "per_zoom_linear":
         d = np.empty(len(df))
@@ -375,32 +425,50 @@ def predict_dist(params: dict, df: pd.DataFrame) -> np.ndarray:
                     + c["canvas_y"] * df["canvas_y"].to_numpy(float)[i])
         return np.clip(d, 0.0, DIST_CAP_M)
     if form == "cotangent":
-        if "height_by_type_m" in params:
-            h = df["label_type"].map(params["height_by_type_m"]).to_numpy(float)
-        else:
-            h = params["height_m"]
+        h = _heights(params, df) if typed else params["height_m"]
         return np.clip(h / _tan_dep(dep, 1e-9), 0.0, DIST_CAP_M)
     if form == "cotangent_served":
         h = df["pano_id"].map(params["heights_by_pano"]).to_numpy(float)
         return np.clip(h / _tan_dep(dep, 1e-9), 0.0, DIST_CAP_M)
     if form == "floor":
-        if "height_by_type_m" in params:
-            h = df["label_type"].map(params["height_by_type_m"]).to_numpy(float)
-        else:
-            h = params["height_m"]
+        h = _heights(params, df) if typed else params["height_m"]
         return np.clip(h / _tan_dep(dep, params["dep_min_deg"]), 0.0, DIST_CAP_M)
     if form == "blend":
-        types = df["label_type"].to_numpy(str) if "height_by_type_m" in params else None
-        return _predict_blend(params, dep, types)
+        return _predict_blend(params, dep, df["label_type"].to_numpy(str) if typed else None)
     if form == "softcap":
         if "c1_by_type" in params:
-            c1 = df["label_type"].map(params["c1_by_type"]).to_numpy(float)
+            c1 = (df["label_type"].map(params["c1_by_type"])
+                  .fillna(params["c1_fallback"]).to_numpy(float))
         else:
             c1 = params["c1"]
         return np.clip(1.0 / (params["c0"] + c1 * _tan_dep(dep)), 0.0, DIST_CAP_M)
     if form == "isotonic":
-        return np.interp(dep, params["knots_dep_deg"], params["knots_dist_m"])
+        return np.clip(np.interp(dep, params["knots_dep_deg"], params["knots_dist_m"]),
+                       0.0, DIST_CAP_M)
     raise ValueError(f"unknown form {form}")
+
+
+def structural_max_m(params: dict, n: int = 72001) -> float | None:
+    """The largest distance a fitted rung can EVER return, swept over the full depression
+    domain and every label type — the bound the report's near-horizon claims mean.
+
+    This is what ``near_horizon_table``'s per-bin ``dist_pred_max_m`` is *not*: that column is
+    whatever the thin near-horizon test population happened to sample, so a form can look
+    bounded there and still run to the cap on a click the split didn't contain. Returns None
+    for the status-quo linear rung, whose answer is a function of pixels, not of depression."""
+    if params["form"] == "per_zoom_linear":
+        return None
+    dep = np.linspace(-90.0, 90.0, n)
+    frame = pd.DataFrame({"depression_deg": dep, "zoom": 1})
+    if params["form"] == "cotangent_served":
+        frame["pano_id"] = max(params["heights_by_pano"],
+                               key=params["heights_by_pano"].get)  # the tallest served camera
+        return float(np.nanmax(predict_dist(params, frame)))
+    worst = 0.0
+    for lt in LABEL_TYPES + ["__unseen__"]:  # the fallback path is part of the bound
+        frame["label_type"] = lt
+        worst = max(worst, float(np.nanmax(predict_dist(params, frame))))
+    return worst
 
 
 # ----------------------------------------------------------------------------------- scoring
@@ -411,8 +479,6 @@ def score_rungs(fits: dict, models: dict, train: pd.DataFrame, test: pd.DataFram
     its own fitted heading and the legacy ellipsoidal destination — the 1.4621 m continuity row
     — and est7_sph re-scores the same distances under the shared heading/geodesy, isolating
     what the scoring-convention switch itself is worth."""
-    from label_latlng_estimation import latlng_error_m, predict_dist_heading
-
     heading_pred, delta = heading_for_scoring(train, test)
     dist7, head7 = predict_dist_heading(models, test, "est7")
 
@@ -459,8 +525,14 @@ def _metrics(scored: pd.DataFrame, key: str) -> dict:
             "dist_p90_m": float(derr[ok].quantile(0.9))}
 
 
+EST7_N_PARAMS = 15  # 3 zooms x (intercept + sv_image_y + canvas_y) = 9 distance, + 3 x
+#                     (intercept + canvas_x) = 6 heading. The A_* rows report the distance
+#                     half alone (9) on the same convention: every coefficient counted.
+
+
 def matrix_table(scored: pd.DataFrame, fits: dict) -> dict:
-    n_params = {"est7": 12, "est7_sph": 12, **{k: v["n_params"] for k, v in fits.items()}}
+    n_params = {"est7": EST7_N_PARAMS, "est7_sph": EST7_N_PARAMS,
+                **{k: v["n_params"] for k, v in fits.items()}}
     return {k: {**_metrics(scored, k), "n_params": n_params[k]}
             for k in KEYS if f"error_{k}" in scored.columns}
 
@@ -479,9 +551,11 @@ def choose_candidate(fits: dict, train: pd.DataFrame) -> dict:
 
 def near_horizon_table(scored: pd.DataFrame, keys: list[str] | None = None) -> list[dict]:
     """Error and worst-case behavior where the ground-plane geometry degenerates. The test
-    population here is thin (GSV clicks rarely sit near the horizon), so boundedness by
-    construction — dist_pred_max — is the load-bearing column, not the error medians."""
-    keys = keys or ["est7", "A_ols", "anchor", "C_l1", "D_soft_l1", "E_l1"]
+    population here is thin (GSV clicks rarely sit near the horizon), so the error medians are
+    not the load-bearing column — but neither is ``dist_pred_max_m`` below, which is only the
+    largest answer these particular rows drew. The structural bound each form holds everywhere
+    is ``structural_max_m`` (summary key ``bounds``); read the two together."""
+    keys = keys or HEADLINE_KEYS
     bins = pd.cut(scored["depression_deg"], [-np.inf, 0.0, 2.0, 5.0], right=True)
     rows = []
     for interval, g in scored.groupby(bins, observed=True):
@@ -518,7 +592,7 @@ def noise_sweep(fits: dict, models: dict, train: pd.DataFrame, test: pd.DataFram
     exact projection, sv_image_y via the fixed-frame px/deg scale), and measure how each rung's
     error distribution degrades. The heading half stays at the unperturbed era_cal prediction:
     the sweep isolates the distance half's noise response (the heading half's was #5's §2)."""
-    keys = keys or ["est7", "A_ols", "anchor", "C_l1", "D_soft_l1", "E_l1"]
+    keys = keys or HEADLINE_KEYS
     heading_pred, _ = heading_for_scoring(train, test)
     rng = np.random.default_rng(seed)
     n = len(test)
@@ -526,7 +600,6 @@ def noise_sweep(fits: dict, models: dict, train: pd.DataFrame, test: pd.DataFram
                                 test["heading"], test["pitch"], test["zoom"])
 
     def errors(frame: pd.DataFrame) -> dict:
-        from label_latlng_estimation import predict_dist_heading
         res = {}
         for k in keys:
             if k == "est7":
@@ -547,9 +620,9 @@ def noise_sweep(fits: dict, models: dict, train: pd.DataFrame, test: pd.DataFram
         for _ in range(n_draws):
             frame = test.copy()
             frame["canvas_x"] = np.clip(test["canvas_x"].to_numpy(float)
-                                        + rng.normal(0, sigma, n), 0, 720)
+                                        + rng.normal(0, sigma, n), 0, CANVAS_W)
             frame["canvas_y"] = np.clip(test["canvas_y"].to_numpy(float)
-                                        + rng.normal(0, sigma, n), 0, 480)
+                                        + rng.normal(0, sigma, n), 0, CANVAS_H)
             _, pitch_p = pov_if_centered(frame["canvas_x"], frame["canvas_y"],
                                          frame["heading"], frame["pitch"], frame["zoom"])
             frame["depression_deg"] = -pitch_p
@@ -593,8 +666,14 @@ def fixed_frame_check(cleaned: pd.DataFrame, min_dep_deg: float = 2.0) -> dict:
     return out
 
 
-def _city_dummies(df: pd.DataFrame) -> tuple[np.ndarray, list[str]]:
-    cities = [c for c in MODERN_CITIES if (df["city"] == c).any()]
+def _city_dummies(df: pd.DataFrame,
+                  cities: list[str] | None = None) -> tuple[np.ndarray, list[str]]:
+    """City fixed effects, first city as the reference. ``cities`` MUST be passed when building
+    a test design: derived per frame, a city missing from one side would silently shift every
+    dummy column's meaning between fit and predict (they match on this data — the point is that
+    nothing enforced it)."""
+    cities = cities if cities is not None else [c for c in MODERN_CITIES
+                                                if (df["city"] == c).any()]
     return (np.column_stack([(df["city"] == c).to_numpy(float) for c in cities[1:]]),
             [f"city_{c}" for c in cities[1:]])
 
@@ -612,11 +691,14 @@ def candidate_b_checks(train: pd.DataFrame, test: pd.DataFrame) -> dict:
 
     Reported per zoom: test-subset median |dist error| per form (both losses), and the
     B_interact coefficient with its OLS standard error against the sv slope it would have to
-    match for #4765-as-written to hold on the 2021 predictor."""
-    import statsmodels.api as sm
+    match for #4765-as-written to hold on the 2021 predictor.
 
+    Restricted to the two GSV panorama heights (6656/8192) that carry the population, matching
+    fixed_frame_check and apply_path_check. The 294 cleaned rows at 1664 px are a third rig
+    whose 4x normalization factor would be the tail wagging a 0.2% dog; the count they would
+    have contributed is reported as ``n_height_1664_excluded``."""
     def prep(df: pd.DataFrame) -> pd.DataFrame:
-        d = df[df["pano_height"].notna()].copy()
+        d = df[df["pano_height"].isin([6656, 8192])].copy()
         h = d["pano_height"].astype(float)
         d["sv_norm"] = d["sv_image_y"] * (6656.0 / h)
         d["log_h"] = np.log(h / 6656.0)
@@ -629,12 +711,14 @@ def candidate_b_checks(train: pd.DataFrame, test: pd.DataFrame) -> dict:
              "B_log": ["sv_image_y", "canvas_y", "log_h"],
              "B_interact": ["sv_image_y", "canvas_y", "sv_interact"]}
     out: dict = {"n_train": len(tr), "n_test": len(te),
-                 "n_height_1664": int((tr["pano_height"] == 1664).sum())}
+                 "n_height_1664_excluded": int((train["pano_height"] == 1664).sum()
+                                               + (test["pano_height"] == 1664).sum())}
 
     for z in (1, 2, 3):
         trz, tez = tr[tr["zoom"] == z], te[te["zoom"] == z]
-        fe_tr, fe_names = _city_dummies(trz)
-        fe_te, _ = _city_dummies(tez)
+        cities = [c for c in MODERN_CITIES if (trz["city"] == c).any()]
+        fe_tr, fe_names = _city_dummies(trz, cities)
+        fe_te, _ = _city_dummies(tez, cities)  # same columns, same reference, by construction
         row: dict = {"n_train": len(trz), "n_test": len(tez)}
         for name, terms in forms.items():
             Xtr = np.column_stack([np.ones(len(trz))] +
@@ -779,9 +863,13 @@ def quantile_bands(train: pd.DataFrame, test: pd.DataFrame) -> dict:
 
 # ----------------------------------------------------------------------------------- summary
 
-def build_summary(scored: pd.DataFrame, fits: dict, chosen: dict, checks: dict) -> dict:
+def build_summary(scored: pd.DataFrame, fits: dict, chosen: dict, checks: dict,
+                  keys: list[str] | None = None,
+                  near_horizon_keys: list[str] | None = None) -> dict:
     """Assemble data/distance-refit-summary.json. ``checks`` carries the pieces the runner
-    computed: fixed_frame, candidate_b, apply_path, noise, riders, quantiles, meta extras."""
+    computed: fixed_frame, candidate_b, apply_path, noise, riders, quantiles, meta extras.
+    ``keys``/``near_horizon_keys`` select the rungs the by-group and near-horizon tables carry
+    (the runner swaps the chosen rung into both); everything else is ladder-wide."""
     params = {}
     for key, p in fits.items():
         q = {k: v for k, v in p.items() if k != "heights_by_pano"}  # 200+ pano ids stay out
@@ -798,9 +886,10 @@ def build_summary(scored: pd.DataFrame, fits: dict, chosen: dict, checks: dict) 
                                            - matrix["est7"]["latlng_median_m"])},
         "matrix": matrix,
         "params": params,
-        "by_zoom": by_group_table(scored, "zoom"),
-        "by_label_type": by_group_table(scored, "label_type"),
-        "near_horizon": near_horizon_table(scored),
+        "bounds": {k: structural_max_m(p) for k, p in fits.items()},
+        "by_zoom": by_group_table(scored, "zoom", keys=keys),
+        "by_label_type": by_group_table(scored, "label_type", keys=keys),
+        "near_horizon": near_horizon_table(scored, keys=near_horizon_keys),
         "zoom_residual_chosen": zoom_residual_check(scored, chosen["rung"]),
         "fixed_frame_check": checks["fixed_frame"],
         "candidate_b": {"fixed_frame_forms": checks["candidate_b"],
@@ -812,6 +901,10 @@ def build_summary(scored: pd.DataFrame, fits: dict, chosen: dict, checks: dict) 
     ch = fits[chosen["rung"]]
     summary["provisional_coefficients"] = {
         "form": ch["form"], "rung": chosen["rung"], "params": params[chosen["rung"]],
+        "max_answer_m": structural_max_m(ch),
+        "unseen_label_type": "use height_fallback_m (the pooled fit); the seven fitted types "
+                             "are every type the 2017-2020 population contains, and a modern "
+                             "caller WILL meet others",
         "geodesy": "spherical (turf destination), matching production toLatLng",
         "heading": "exact POV inversion (pov_if_centered), zero parameters; the era_cal "
                    "constant is a property of the 2017-2020 ground truth and must NOT be "
@@ -824,6 +917,8 @@ def build_summary(scored: pd.DataFrame, fits: dict, chosen: dict, checks: dict) 
             "open item G: 6.6% of stored distances sampled a rotated depth column (p95 4.1 m)",
             "float32 storage grid: 0.21-0.42 m lat / 0.57-0.80 m lng resolution floor",
             "stored bearings carry +0.72 deg bias, handled at score time only",
+            "per-type heights are fitted on GSV car geometry; a non-GSV rig needs a per-source "
+            "base height with these per-type offsets kept (Stage 3)",
         ],
     }
     return summary

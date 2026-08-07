@@ -19,8 +19,6 @@ import os
 import sys
 import time
 
-import pandas as pd
-
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from label_latlng_estimation import (  # noqa: E402
     add_heading_diff, clean_data, fit_models, load_data, split_from_fixtures,
@@ -72,12 +70,10 @@ def main() -> None:
     checks = {"meta": {"n_train": int(len(train))}, "fixed_frame": fixed_frame,
               "candidate_b": cand_b, "apply_path": apply_path, "noise": noise,
               "riders": riders, "quantiles": quantiles}
-    summary = dr.build_summary(scored, fits, chosen, checks)
-    summary["by_zoom"] = dr.by_group_table(scored, "zoom", keys=headline)
-    summary["by_label_type"] = dr.by_group_table(scored, "label_type", keys=headline)
-    summary["near_horizon"] = dr.near_horizon_table(
-        scored, keys=["est7", "A_ols", "anchor", "C_l1", "D_soft_l1", chosen["rung"], "E_l1"])
-    summary["noise_sweep"] = noise
+    summary = dr.build_summary(
+        scored, fits, chosen, checks, keys=headline,
+        near_horizon_keys=["est7", "A_ols", "anchor", "C_l1", "D_soft_l1", chosen["rung"],
+                           "E_l1"])
 
     # ------------------------------------------------------------------ report to stdout
     m = summary["matrix"]
@@ -111,12 +107,19 @@ def main() -> None:
               f"h6656 {r['h6656']['signed_median_m']:+.4f} m (n={r['h6656']['n']}), "
               f"h8192 {r['h8192']['signed_median_m']:+.4f} m (n={r['h8192']['n']})")
 
-    print("\nNear-horizon bins (latlng med / p95 / max; max predicted dist):")
+    print("\nNear-horizon bins (latlng med / p95 / max; max predicted dist in that bin):")
     for row in summary["near_horizon"]:
         print(f"  dep {row['bin_deg']:<14} n={row['n']:>6}")
         for k, v in row["per_rung"].items():
             print(f"    {k:<16}{v['latlng_median_m']:>9.2f}{v['latlng_p95_m']:>9.2f}"
                   f"{v['latlng_max_m']:>9.2f}   pred<= {v['dist_pred_max_m']:.1f} m")
+
+    print("\nStructural bounds (largest answer each form can EVER return, swept over the full "
+          "depression domain):")
+    for k, v in summary["bounds"].items():
+        if v is not None:
+            print(f"  {k:<18}{v:>8.2f} m" + ("  <- the 50 m cap, not saturation"
+                                             if v >= dr.DIST_CAP_M - 1e-9 else ""))
 
     print("\nClick-noise sweep (delta median latlng error vs unperturbed, m):")
     print(f"  {'rung':<18}" + "".join(f"{s:>10}" for s in noise["sigmas_px"]))

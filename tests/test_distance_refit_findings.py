@@ -5,6 +5,8 @@ Convention (mirrors test_pov_inversion_findings.py): the fast tests assert what 
 summary regenerates offline and deterministically with
 `python python/run_distance_refit.py --write`, and one session-scoped test below re-derives
 the headline numbers in-process so the committed JSON cannot drift from the code.
+The invariants that must hold for *any* refit — solver exactness, boundedness, monotonicity,
+the fallback path — live next door in test_distance_refit_contract.py.
 
 Headline findings (reports/2026-08-07-distance-refit.md):
 
@@ -104,17 +106,30 @@ def test_apply_path_normalization_backfires(summary):
 
 def test_in_frame_height_term_rejects_normalization(summary):
     """The sharp version: a normalized predictor requires the sv x (6656/height - 1)
-    interaction to equal the sv slope itself; the fitted coefficient is nowhere near it at
-    any zoom (and B_norm scores worse than the plain fit on the same subset)."""
+    interaction to equal the sv slope itself. Measured, it has the OPPOSITE sign and sits
+    20-70 standard errors below that value at every zoom (and B_norm scores worse than the
+    plain fit on the same subset, under both losses)."""
     forms = summary["candidate_b"]["fixed_frame_forms"]
     for z in (1, 2, 3):
         iv = forms[f"zoom{z}"]["interact_vs_norm_prediction"]
-        assert iv["sv_slope_it_would_have_to_match"] > 0.01, z
-        assert abs(iv["interact_coef"]) < 0.5 * iv["sv_slope_it_would_have_to_match"], z
+        required = iv["sv_slope_it_would_have_to_match"]
+        assert required > 0.01, z
+        assert iv["interact_coef"] < 0, z  # normalization needs it strongly positive
+        assert (required - iv["interact_coef"]) / iv["interact_se"] > 10, z
         for loss in ("ols", "l1"):
             a = forms[f"zoom{z}"]["A_sub"]["test_dist_median_m"][loss]
             b = forms[f"zoom{z}"]["B_norm"]["test_dist_median_m"][loss]
             assert b > a, (z, loss)
+
+
+def test_candidate_b_is_measured_on_the_two_gsv_heights_only(summary):
+    """The third rig (294 rows at 1664 px) carries a 4x normalization factor, i.e. 16x the
+    leverage of an 8192-px row on the interaction term. It is excluded, like it is in the
+    fixed-frame and apply-path checks, and the count it would have contributed is reported."""
+    forms = summary["candidate_b"]["fixed_frame_forms"]
+    assert forms["n_height_1664_excluded"] == 294
+    assert forms["n_train"] + forms["n_test"] == 162846
+    assert summary["candidate_b"]["apply_path"]["n"] == forms["n_test"]
 
 
 # ------------------------------------------------------------------ the ladder
@@ -145,18 +160,49 @@ def test_fitted_heights_are_physical(summary):
     assert ch["n_served"] == 214
 
 
+def test_every_per_type_fit_publishes_a_fallback_parameter(summary):
+    """A modern caller will meet label types this 2017-2020 population never contained, so
+    every per-type rung ships the pooled fit alongside the table. It must be a real pooled
+    fit, which is to say inside the spread of the per-type values it stands in for."""
+    typed = [k for k, p in summary["params"].items()
+             if "height_by_type_m" in p or "c1_by_type" in p]
+    assert len(typed) == 8  # C, D_floor, D_blend, D_soft x two losses
+    for key in typed:
+        p = summary["params"][key]
+        table = p.get("height_by_type_m") or p["c1_by_type"]
+        fallback = p.get("height_fallback_m", p.get("c1_fallback"))
+        assert set(table) == {"CurbRamp", "NoCurbRamp", "NoSidewalk", "Obstacle",
+                              "Occlusion", "Other", "SurfaceProblem"}, key
+        assert min(table.values()) <= fallback <= max(table.values()), key
+
+
 def test_chosen_candidate_and_headline(summary):
     """The recommendation was selected on train loss before test scoring (the honesty
     gate) and cuts the published median error by about a third."""
     chosen = summary["meta"]["chosen"]
     assert chosen["rung"] == CHOSEN
     assert chosen["chosen_on"].startswith("train")
+    assert chosen["rung"] == min(chosen["train_median_abs_dist_error_m"],
+                                 key=chosen["train_median_abs_dist_error_m"].get)
     m = summary["matrix"]
-    assert m[CHOSEN]["latlng_median_m"] == pytest.approx(0.9336, abs=0.005)
-    assert m[CHOSEN]["latlng_p90_m"] == pytest.approx(4.478, abs=0.02)
+    assert m[CHOSEN]["latlng_median_m"] == pytest.approx(0.9335, abs=0.005)
+    assert m[CHOSEN]["latlng_p90_m"] == pytest.approx(4.4755, abs=0.02)
     assert m[CHOSEN]["latlng_median_m"] < m["est7"]["latlng_median_m"] - 0.5
     assert m[CHOSEN]["latlng_p90_m"] < m["est7"]["latlng_p90_m"]
     assert m[CHOSEN]["n_params"] == 8
+
+
+def test_parameter_counts_use_one_consistent_rule(summary):
+    """Every coefficient counted, everywhere: est7 is 3 zooms x 3 distance + 3 x 2 heading =
+    15, the status-quo distance half alone is 9, and the recommendation replaces them with
+    7 camera heights plus a blend angle. (A '12' here would be distance slopes without their
+    intercepts plus the full heading half — two rules in one column.)"""
+    m = summary["matrix"]
+    assert m["est7"]["n_params"] == m["est7_sph"]["n_params"] == 15
+    assert m["A_ols"]["n_params"] == m["A_l1"]["n_params"] == 9
+    assert m["anchor"]["n_params"] == 0
+    assert m["C_l1"]["n_params"] == 1 and m["C_type_l1"]["n_params"] == 7
+    assert m[CHOSEN]["n_params"] == 8 < m["A_ols"]["n_params"]
 
 
 def test_l1_earns_its_place(summary):
@@ -180,7 +226,8 @@ def test_isotonic_confirms_the_parametric_shape(summary):
 
 def test_near_horizon_stays_bounded(summary):
     """The load-bearing D property: where the raw cotangent runs to the 50 m cap, the
-    saturating forms answer in the 20s, and no rung can exceed the training-domain cap."""
+    saturating forms answer in the 20s — and no rung's answer anywhere in either near-horizon
+    bin may exceed the structural bound it publishes."""
     nh = {row["bin_deg"]: row for row in summary["near_horizon"]}
     assert [nh[b]["n"] for b in ("(-inf, 0.0]", "(0.0, 2.0]", "(2.0, 5.0]")] == [128, 300, 2299]
     bin02 = nh["(0.0, 2.0]"]["per_rung"]
@@ -189,9 +236,58 @@ def test_near_horizon_stays_bounded(summary):
     assert bin02["E_l1"]["dist_pred_max_m"] < 25.0
     for row in summary["near_horizon"]:
         for key, v in row["per_rung"].items():
-            assert v["dist_pred_max_m"] <= summary["meta"]["dist_cap_m"], (row["bin_deg"], key)
+            bound = summary["bounds"].get(key) or summary["meta"]["dist_cap_m"]
+            assert v["dist_pred_max_m"] <= bound + 1e-6, (row["bin_deg"], key)
     # and the saturating forms actually help there, vs the diverging cotangent
     assert bin02[CHOSEN]["latlng_median_m"] < 0.5 * bin02["C_l1"]["latlng_median_m"]
+
+
+def test_the_recommendation_is_bounded_above_the_horizon_too(summary):
+    """Regression test for the PR #12 review finding. The 128 test rows at or above the
+    horizon are the degenerate case the D family exists for: before the tail was clamped at
+    dep = 0, the chosen blend answered them with a linear runaway that reached the 50 m cap —
+    exactly the behaviour it was recommended over. It now answers <= 28.4 m there, and that
+    is a property of the form, not of these 128 rows (see the contract suite)."""
+    above = {row["bin_deg"]: row for row in summary["near_horizon"]}["(-inf, 0.0]"]
+    per_rung = above["per_rung"]
+    assert above["n"] == 128
+    assert per_rung[CHOSEN]["dist_pred_max_m"] == pytest.approx(
+        summary["bounds"][CHOSEN], abs=1e-6)
+    assert per_rung[CHOSEN]["dist_pred_max_m"] < 29.0
+    # the unbounded rungs are still unbounded there, which is what makes this a real contrast
+    for key in ("anchor", "C_l1", "D_soft_l1"):
+        assert per_rung[key]["dist_pred_max_m"] == 50.0, key
+    assert per_rung[CHOSEN]["latlng_median_m"] < 0.5 * per_rung["C_l1"]["latlng_median_m"]
+
+
+def test_structural_bounds_are_published_for_every_rung(summary):
+    """`bounds` is the largest answer each form can EVER return, swept over the whole
+    depression domain — the number the report's '<= N m' claims mean. The per-bin
+    dist_pred_max_m above is only what those rows happened to draw."""
+    b = summary["bounds"]
+    assert set(b) == set(summary["params"])
+    assert b["A_ols"] is None and b["A_l1"] is None  # a pixel-domain form, not a dep one
+    for key in ("anchor", "C_l1", "C_type_l1", "D_soft_l1", "D_soft_type_l1"):
+        assert b[key] == pytest.approx(summary["meta"]["dist_cap_m"]), key
+    assert b["D_floor_l1"] == pytest.approx(21.94, abs=0.05)
+    assert b["D_floor_type_l1"] == pytest.approx(22.53, abs=0.05)
+    assert b[CHOSEN] == pytest.approx(28.35, abs=0.05)
+    assert b["E_l1"] == pytest.approx(24.62, abs=0.05)
+    # the floor twin is the tighter bound; that is the trade it makes for its p90
+    assert b["D_floor_type_l1"] < b[CHOSEN] < summary["meta"]["dist_cap_m"]
+
+
+def test_the_soft_caps_bound_is_the_clip_not_saturation(summary):
+    """D_soft's selling point was a bound at 1/c0 by construction. Measured: the c0 >= 1/cap
+    constraint is active in all four variants, so 1/c0 IS the 50 m cap and the rung buys no
+    saturation at all — one of the reasons floor/blend win."""
+    for key in ("D_soft_ols", "D_soft_l1", "D_soft_type_ols", "D_soft_type_l1"):
+        p = summary["params"][key]
+        assert p["c0"] == pytest.approx(1.0 / summary["meta"]["dist_cap_m"], rel=1e-9), key
+        assert summary["bounds"][key] == pytest.approx(summary["meta"]["dist_cap_m"]), key
+        assert p["c1_floored"] is False, key  # no fitted slope ever needed the sign floor
+    assert summary["params"]["D_soft_l1"]["projected"] is True
+    assert summary["params"]["D_soft_ols"]["projected"] is False  # lsq_linear bounds instead
 
 
 def test_click_noise_sensitivity_comparable_to_status_quo(summary):
@@ -237,6 +333,11 @@ def test_provisional_coefficients_carry_the_conventions(summary):
     assert "NOT" in pc["heading"]
     assert "Stage 3" in pc["status"]
     assert len(pc["caveats"]) >= 5
+    # the hand-off states what it can answer at worst and what to do with an unfamiliar type,
+    # so neither has to be rediscovered by whoever ports this to JS
+    assert pc["max_answer_m"] == pytest.approx(summary["bounds"][CHOSEN], abs=1e-9)
+    assert "height_fallback_m" in pc["unseen_label_type"]
+    assert "height_fallback_m" in pc["params"]
 
 
 # ------------------------------------------------------------------ code <-> summary
@@ -263,6 +364,10 @@ def test_summary_reproduces_from_code(raw_data, summary):
     for lt, h in summary["params"][CHOSEN]["height_by_type_m"].items():
         assert fits[CHOSEN]["height_by_type_m"][lt] == pytest.approx(h, rel=1e-9), lt
     assert fits[CHOSEN]["blend_deg"] == summary["params"][CHOSEN]["blend_deg"]
+    assert fits[CHOSEN]["height_fallback_m"] == pytest.approx(
+        summary["params"][CHOSEN]["height_fallback_m"], rel=1e-9)
+    assert dr.structural_max_m(fits[CHOSEN]) == pytest.approx(
+        summary["bounds"][CHOSEN], abs=1e-6)
 
     scored = dr.score_rungs(fits, models, train, test)
     assert scored.attrs["era_cal_delta_deg"] == pytest.approx(
@@ -272,3 +377,11 @@ def test_summary_reproduces_from_code(raw_data, summary):
         for metric in ("latlng_median_m", "latlng_p90_m", "dist_median_m", "dist_p90_m"):
             assert fresh[key][metric] == pytest.approx(
                 summary["matrix"][key][metric], rel=1e-6), (key, metric)
+    # and the committed near-horizon row for the chosen rung re-derives too, which is the
+    # row the boundedness claim is read off
+    fresh_nh = {r["bin_deg"]: r for r in dr.near_horizon_table(scored, keys=[CHOSEN])}
+    for bin_deg, row in fresh_nh.items():
+        want = {r["bin_deg"]: r for r in summary["near_horizon"]}[bin_deg]
+        assert row["n"] == want["n"], bin_deg
+        assert row["per_rung"][CHOSEN]["dist_pred_max_m"] == pytest.approx(
+            want["per_rung"][CHOSEN]["dist_pred_max_m"], rel=1e-9), bin_deg

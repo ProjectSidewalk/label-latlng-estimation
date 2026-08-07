@@ -4,7 +4,7 @@
 
 | | |
 |---|---|
-| **0.93 m** | median lat/lng error of the chosen candidate on the published 79,029-row test split — the 2021 baseline is **1.46 m**, so −36% with 8 physical parameters in place of 12 fitted ones |
+| **0.93 m** | median lat/lng error of the chosen candidate on the published 79,029-row test split — the 2021 baseline is **1.46 m**, so −36% with 8 physical parameters in place of the pipeline's 15 fitted coefficients (9 of them the distance half this replaces) |
 | **0.99 m** | the **zero-parameter** anchor, `2.6 m / tan(depression)`: pure geometry already beats every fitted coefficient the estimator has |
 | **≈0.97 / ≈0.97** | implied/exact depression ratio for 6656-px and 8192-px panoramas: `sv_image_y` is stored in a **fixed frame**, so #4765's resolution defect is not in the 2021 fit |
 | **−0.39 m → +1.70 m** | what #4765's one-line normalization would do to the deployed bias on 8192-px GSV panos if applied without a refit: the raw-pixel apply path currently survives on two errors cancelling |
@@ -15,6 +15,7 @@
 > python python/run_distance_refit.py --write   # the ladder, the checks, data/distance-refit-summary.json
 > python python/distance_refit_figures.py       # figures 14-16
 > pytest tests/test_distance_refit_findings.py  # the findings, locked
+> pytest tests/test_distance_refit_contract.py  # the invariants behind them
 > ```
 
 ## §1 · The data, the ladder, and the harness
@@ -71,11 +72,14 @@ half, reproduced exactly); **anchor** `2.6/tan(dep)` with zero fitted parameters
 `fromContainerPixelToLatLng`; a variant uses the per-pano camera height GSV itself serves, on the
 214 panos the #4 pilot measured); **C** the cotangent with a fitted camera height (optionally per
 label type — amendment 4); **D** the saturating cotangents, three forms × optional per-type
-heights (a hard angle floor; a C1 blend into a linear tail; a disparity-space soft cap
-`1/(c0 + c1·tan)`, bounded at `1/c0` by construction); **E** a monotone-decreasing isotonic fit
-compressed to 23 piecewise-linear knots (JS-viable, bounded by its first knot). Every rung's
-output is clipped to the 50 m training-domain cap. Candidate **B** (the pano-height term) has no
-DC coverage and is handled separately in §2.
+heights (a hard angle floor; a C1 blend into a linear tail, held flat above the horizon; a
+disparity-space soft cap `1/(c0 + c1·tan)`, nominally bounded at `1/c0` — §4 measures that
+bound landing on the cap); **E** a monotone-decreasing isotonic fit compressed to 23
+piecewise-linear knots (JS-viable, bounded by its first knot). Every rung's output is also
+clipped to the 50 m training-domain cap, but the clip is a floor on honesty, not the point:
+what each form can answer at worst is computed structurally (`structural_max_m`, the `bounds`
+key, the §4 table's bound column). Candidate **B** (the pano-height term) has no DC coverage
+and is handled separately in §2.
 
 **The honesty gate:** the recommended form was selected among the D family on the *train* median
 absolute distance error, recorded in the summary before test scoring; all variants' test numbers
@@ -103,8 +107,12 @@ Three consequences, each measured in `candidate_b` of the summary:
 
 - **B(i), the height term as written, is rejected in-frame.** `sv_image_y · 6656/pano_height`
   scores *worse* than the plain fit on the same modern-city subset at every zoom and under both
-  losses (zoom 1: 1.44 m vs 1.18 m OLS). A `log(pano_height)` level term helps a little — it
-  absorbs a rig/era confound, which is what fig 6 was actually showing.
+  losses (zoom 1: 1.39 m vs 1.18 m OLS), and the interaction a normalized predictor would need
+  comes back with the *opposite* sign, 20–70 standard errors away, at every zoom. A
+  `log(pano_height)` level term helps a little — it absorbs a rig/era confound, which is what
+  fig 6 was actually showing. (These fits use the two GSV heights that carry the population;
+  the 294 cleaned rows from a third rig at 1664 px would each carry 16× an 8192-px row's
+  leverage on that interaction, so they are excluded and counted.)
 - **B(ii), the deployed path, is quantified on ground truth for the first time:** raw
   +0.20 m (6656) / −0.39 m (8192) signed bias; normalized +0.20 m / **+1.70 m**. The resolution
   dependence #4765 measured is real — it flips with pano height — but on GSV the raw path is
@@ -138,26 +146,31 @@ error by true distance — the geometry rungs win everywhere outside est7's 10�
 close. Right: est7's signed compression bias (the fig 4 curve: too far in the near field, too
 near beyond ~15 m) is flat under the chosen form until the weak-truth far field.*
 
-Test split, n = 79,029; heading half identical everywhere; params counts the distance half only
-(est7 = the full 2021 pipeline, legacy scoring — the continuity row):
+Test split, n = 79,029; heading half identical everywhere. **params** counts every fitted
+coefficient of the distance half, intercepts included; est7's 15 is its full 2021 pipeline
+(3 zooms × 3 distance coefficients = 9, plus 3 × 2 heading = 6) because it is the continuity
+row, and its distance half alone is the 9 that rung A reports. The **bound** column is each
+form's *structural* maximum — the largest answer it can return anywhere in the depression
+domain, swept in `structural_max_m` and published as `bounds` in the summary; 50 m means the
+form has no bound of its own and simply meets the training-domain clip.
 
-| rung | params | lat/lng med (m) | p90 | dist med (m) | p90 |
-|---|---:|---:|---:|---:|---:|
-| est7 (2021, legacy scoring) | 12 | 1.4621 | 5.155 | 1.3955 | 5.139 |
-| est7 under shared conventions | 12 | 1.4438 | 5.155 | 1.3955 | 5.139 |
-| A ols / **l1** (status quo form) | 9 | 1.4438 / 1.2740 | 5.155 / 5.447 | 1.3955 / 1.2327 | 5.139 / 5.429 |
-| anchor (2.6 m, zero params) | 0 | 0.9910 | 4.624 | 0.9394 | 4.602 |
-| anchor, served heights (n=56) | 0 | 0.8389 | 4.026 | 0.8010 | 4.016 |
-| C ols / l1 | 1 | 1.0141 / 0.9731 | 4.538 / 4.901 | 0.9614 / 0.9180 | 4.504 / 4.877 |
-| C per-type ols / l1 | 7 | 1.0012 / 0.9387 | 4.526 / 4.894 | 0.9480 / 0.8824 | 4.500 / 4.870 |
-| D floor ols / l1 | 2 | 1.0129 / 0.9708 | 4.376 / 4.596 | 0.9584 / 0.9142 | 4.347 / 4.552 |
-| D floor per-type ols / l1 | 8 | 0.9988 / 0.9343 | 4.384 / 4.595 | 0.9438 / 0.8762 | 4.354 / 4.573 |
-| D blend ols / l1 | 2 | 0.9939 / 0.9741 | 4.381 / 4.478 | 0.9398 / 0.9142 | 4.359 / 4.453 |
-| **D blend per-type l1 (chosen)** | **8** | **0.9336** | **4.478** | **0.8714** | **4.455** |
-| D blend per-type ols | 8 | 0.9784 | 4.382 | 0.9206 | 4.352 |
-| D soft ols / l1 | 2 | 1.0989 / 1.0046 | 5.003 / 4.713 | 1.0363 / 0.9433 | 4.987 / 4.692 |
-| D soft per-type ols / l1 | 8 | 1.1001 / 0.9877 | 4.967 / 4.683 | 1.0387 / 0.9219 | 4.950 / 4.663 |
-| E isotonic ols / l1 (23 knots) | 23 | 0.9710 / 0.9920 | 4.382 / 4.386 | 0.9146 / 0.9338 | 4.361 / 4.358 |
+| rung | params | bound | lat/lng med (m) | p90 | dist med (m) | p90 |
+|---|---:|---:|---:|---:|---:|---:|
+| est7 (2021, legacy scoring) | 15 | 50 (clip) | 1.4621 | 5.155 | 1.3955 | 5.139 |
+| est7 under shared conventions | 15 | 50 (clip) | 1.4438 | 5.155 | 1.3955 | 5.139 |
+| A ols / **l1** (status quo form) | 9 | 50 (clip) | 1.4438 / 1.2740 | 5.155 / 5.447 | 1.3955 / 1.2327 | 5.139 / 5.429 |
+| anchor (2.6 m, zero params) | 0 | 50.0 | 0.9910 | 4.624 | 0.9394 | 4.602 |
+| anchor, served heights (n=56) | 0 | 50.0 | 0.8389 | 4.026 | 0.8010 | 4.016 |
+| C ols / l1 | 1 | 50.0 | 1.0141 / 0.9731 | 4.538 / 4.901 | 0.9614 / 0.9180 | 4.504 / 4.877 |
+| C per-type ols / l1 | 7 | 50.0 | 1.0012 / 0.9387 | 4.526 / 4.894 | 0.9480 / 0.8824 | 4.500 / 4.870 |
+| D floor ols / l1 | 2 | 23.4 / 21.9 | 1.0129 / 0.9708 | 4.376 / 4.596 | 0.9584 / 0.9142 | 4.347 / 4.552 |
+| D floor per-type ols / l1 | 8 | 24.4 / 22.5 | 0.9988 / 0.9343 | 4.384 / 4.595 | 0.9438 / 0.8762 | 4.354 / 4.573 |
+| D blend ols / l1 | 2 | 28.9 / 27.7 | 0.9938 / 0.9741 | 4.362 / 4.476 | 0.9401 / 0.9142 | 4.340 / 4.452 |
+| **D blend per-type l1 (chosen)** | **8** | **28.4** | **0.9335** | **4.476** | **0.8713** | **4.453** |
+| D blend per-type ols | 8 | 30.0 | 0.9784 | 4.379 | 0.9206 | 4.351 |
+| D soft ols / l1 | 2 | 50.0 | 1.0989 / 1.0046 | 5.003 / 4.713 | 1.0363 / 0.9433 | 4.987 / 4.692 |
+| D soft per-type ols / l1 | 8 | 50.0 | 1.1001 / 0.9877 | 4.967 / 4.683 | 1.0387 / 0.9219 | 4.950 / 4.663 |
+| E isotonic ols / l1 (23 knots) | 23 | 24.9 / 24.6 | 0.9710 / 0.9920 | 4.382 / 4.386 | 0.9146 / 0.9338 | 4.361 / 4.358 |
 
 What the table settles:
 
@@ -171,9 +184,11 @@ What the table settles:
 - **The L1 column earns its keep ladder-wide** (rider 1): on the median metric it beats OLS for
   every functional form; OLS keeps the better p90. The published metric is a median, so the
   matrix reports both and the choice is explicit rather than accidental.
-- **The soft cap loses mid-field.** Its disparity intercept pins at the boundary in every
-  variant and bends the whole curve, not just the horizon end — amendment 2 floated it; the
-  measurement retires it in favor of floor/blend, which modify only the degenerate region.
+- **The soft cap loses mid-field, and its bound is not its own.** Its disparity intercept pins
+  at the `c0 ≥ 1/50` boundary in all four variants, so the "bounded at `1/c0` by construction"
+  that motivated it *is* the 50 m clip — it buys no saturation, while bending the whole curve
+  rather than just the horizon end. Amendment 2 floated it; the measurement retires it in
+  favour of floor/blend, which modify only the degenerate region and hold real bounds.
 - **E confirms the shape is captured**: a free monotone fit lands within 5 cm of the cotangent
   family, so the closed form isn't leaving structure on the table (the gap #6's GBM will bound
   from above is interactions, not shape).
@@ -189,18 +204,25 @@ What the table settles:
 ![Fig 15 — saturation and noise](../figures/fig15-horizon-saturation.png)
 
 *Fig 15 — Left: below ~6° the raw cotangent runs to the 50 m cap; floor, blend, and isotonic
-saturate in the low 20s, where the data actually lives. Middle: the 0–2° test bin (n=300,
-0.38% of test) — the saturating forms match est7's median where C answers 28 m; the right edge
-lists each form's largest possible answer, which is the load-bearing column: the near-horizon
-population is too thin to score, but boundedness holds by construction. Right: click-noise
-degradation per rung.*
+saturate in the 20s, where the data actually lives, and stay there above the horizon too.
+Middle: the 0–2° test bin (n=300, 0.38% of test) — the saturating forms match est7's median
+where C answers 28 m; the right edge lists each form's **structural** bound, the largest answer
+it can return anywhere, which is the load-bearing column: the near-horizon population is too
+thin to score, so what matters is what the form can do, not what these rows drew. Right:
+click-noise degradation per rung.*
 
 - **Near the horizon** (unplaceable clicks included: 128 test rows sit at or above it), the
   bounded forms answer 22–28 m worst-case where the raw cotangent hits the cap. This is the
   status quo's one genuine virtue — a linear fit can only return 0–65 m — kept deliberately.
-  The blend's linear tail keeps *growing* above the horizon (toward the cap by −2°); the floor
-  variant hard-limits at 21.9 m even there, which is why it remains the conservative twin
-  despite losing the train selection by 0.3 mm.
+  Those numbers are structural, not observed: the blend's linear tail is evaluated at
+  `max(dep, 0)`, so a click above the horizon gets the horizon's answer (28.4 m) instead of a
+  runaway extrapolation that would reach the cap by about −17°. *(That clamp came out of the
+  PR #12 review, which caught the tail unclamped: on the 128 above-horizon rows the chosen
+  form was answering the full 50 m — precisely the behaviour it was recommended over. Clamping
+  costs nothing on placeable clicks: every test median in §4 moves by under a tenth of a
+  millimetre, the p90 improves by 2 mm, and that bin's median error falls 16.25 → 13.90 m.)*
+  The floor twin is tighter still — a hard 22.5 m everywhere — which is why it remains the
+  conservative alternative despite losing the train selection by 2.3 mm.
 - **The click-noise sweep** makes the 2016 objection quantitative: perturb every click by
   Gaussian pixel noise, re-derive every click-dependent input, re-score. At σ = 2 px every rung
   loses < 1 cm of median accuracy; at 5 px, < 5 cm; at 10 px the chosen form degrades 0.145 m
@@ -244,8 +266,12 @@ depression_deg = (pano_y - height/2) * 180 / height        # exact, resolution-i
 a = 11.25 deg
 h = {CurbRamp: 2.783, NoCurbRamp: 2.556, NoSidewalk: 2.682, Obstacle: 2.693,
      Occlusion: 2.723, Other: 2.742, SurfaceProblem: 2.499}   # meters
+h_fallback = 2.715                       # any label type not in the table above
 dist(dep, t) = dep >= a : h[t] / tan(dep)
-               dep <  a : clamp(h[t]/tan(a) + h[t]*(pi/180)/sin(a)^2 * (a - dep), 0, 50)
+               dep <  a : clamp(h[t]/tan(a) + h[t]*(pi/180)/sin(a)^2 * (a - max(dep, 0)),
+                                0, 50)
+                          # max(dep, 0): above the horizon the answer is the horizon's,
+                          # so the largest value this can EVER return is 28.4 m
 heading: exact POV inversion (#5), zero parameters, NO era constant
 geodesy: spherical (turf destination) — matches production and how these were scored
 ```
@@ -268,7 +294,10 @@ Reading the pieces:
   exactly as ground contact predicts, and it is the same signal est3 (median-by-type)
   proved in 2021, re-expressed as geometry: worth ~4 cm of median error over one shared
   height. All seven values bracket what GSV actually serves for the camera (median 2.37 m
-  measured, 2.6 m the ecosystem constant).
+  measured, 2.6 m the ecosystem constant). **Seven is every type this population contains,
+  and a modern caller will meet others** (the schema has grown since 2020), so the table
+  ships with `h_fallback` — the pooled fit over all rows, 2.715 m — and the code fills it in
+  rather than returning a NaN that would place a label nowhere. Any port must do the same.
 - **`a = 11.25°` — fit, not chosen.** The blend angle was profiled over a 1–12° grid
   (0.25° steps), re-fitting the heights at each candidate and scoring the full train set's
   mean absolute error in meters; 11.25° is the interior minimum. Its physical reading:
@@ -276,10 +305,12 @@ Reading the pieces:
   geometry is the best available model. Beyond it — where sightlines stop being flat open
   ground, a fraction of a degree of click noise moves the answer by meters, and the depth
   truth is itself weakest — the linear tail continues the cotangent with matched value and
-  slope (that is all the `sin²` term is: the cotangent's derivative at `a`), reaching at
-  most ~28 m at the horizon instead of diverging. The floor twin makes the opposite
-  trade: same heights, a hard clamp at `h/tan(7.0°) ≈ 21.9 m` that also holds *above* the
-  horizon, for 0.0007 m of test median.
+  slope (that is all the `sin²` term is: the cotangent's derivative at `a`) and is held flat
+  from the horizon down, so **28.4 m is the largest number this form can produce**, for any
+  input, rather than the largest one this test split happened to draw. The floor twin makes
+  the same promise 6 m tighter — same heights, a hard clamp at `h/tan(7.0°) ≤ 22.5 m` — for
+  0.0007 m of test median and 0.12 m of p90; if a deployment prefers the tightest possible
+  worst case over the best p90, that is the swap to make, and it needs no other change.
 
 Applies to all labels (the §5 noise result); recomputing stored labels is a separate decision
 (#3 Stage 4 note — `lat`/`lng` are computed at insert time). What Stage 3 must check before any
@@ -295,7 +326,8 @@ generalization.
 pip install -r python/requirements.txt
 python python/run_distance_refit.py --write   # ~1 minute, offline, deterministic (byte-identical)
 python python/distance_refit_figures.py       # figs 14-16
-pytest tests/test_distance_refit_findings.py  # 18 findings, incl. an in-process re-derivation
+pytest tests/test_distance_refit_findings.py  # 24 findings, incl. an in-process re-derivation
+pytest tests/test_distance_refit_contract.py  # 55 invariants that must hold for ANY refit
 ```
 
 No network anywhere: the run consumes the committed CSVs, the R-fixture split, and two committed
