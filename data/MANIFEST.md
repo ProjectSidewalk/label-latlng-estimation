@@ -217,3 +217,43 @@ Two test files stand behind it: `tests/test_distance_refit_findings.py` locks wh
 measured, and `tests/test_distance_refit_contract.py` locks what must hold for *any* refit —
 solver exactness, boundedness and monotonicity of every form, the unseen-label-type fallback,
 and the harness properties the ladder's comparisons rest on.
+
+# Falsification and GBM-ceiling summaries (issue #3 Stage 3, issue #6)
+
+`falsification-summary.json` (census + the two scale-free diagnostics + per-sequence camera
+heights with the held-out seed sweep; report `reports/2026-08-07-mapillary-falsification.md`)
+and `gbm-ceiling-summary.json` (the LightGBM benchmark matrix, ablation, importances and the
+shared noise sweep; report `reports/2026-08-07-gbm-ceiling.md`) are the committed outputs of
+`python python/run_mapillary_falsification.py --write` and `python python/run_gbm_ceiling.py
+--write` respectively — both deterministic from committed inputs (byte-identical across
+reruns), both locked by their `tests/test_*_findings.py`.
+
+# Modern-truth validation set (issue #3, absolute-scale close-out)
+
+The `modern-truth-*` files are the absolute check the Mapillary falsification could not do:
+post-2021 human labels (whose stored `pano_x`/`pano_y` replay the front-end projection
+exactly) scored against fresh GSV depth fetched by pano id on 2026-08-07. Report:
+`reports/2026-08-07-modern-truth.md`.
+
+- `modern-truth-payloads.jsonl.gz` — verbatim base64 depth payloads, one line per pano that
+  resolved and served depth (1,106 unique; ~5 MB). Same preservation principle as the
+  depth-pilot payloads: the evidence, not a pointer to it.
+- `modern-truth-panos.csv.gz` — one row per **attempted** pano (1,911): fetch status
+  (`ok`/`gone`/`parse_error`), stratum, fresh pose/position/capture date, camera-height QC
+  (including the exactly-2.50 m pinned-plane flag), and the origin drift vs the extraction's
+  `pano_data` position.
+- `modern-truth-labels.csv.gz` — one row per frame-gated label on an ok pano (3,332): the
+  extraction columns, the depth hit (class, ray, horizontal truth, neighbourhood ratio),
+  truth gates, all four model predictions, and the era-aware circularity-guard fields.
+- `modern-truth-summary.json` — the findings `tests/test_modern_truth_findings.py` locks:
+  fetch/gate censuses, the two-era guard, the model matrix by stratum, near-horizon bins,
+  implied per-type heights, frame-control sweep, and the held-out remedy check.
+
+The sampling frame is the (uncommitted, regenerable) all-city extraction under
+`modern-extraction/` — `scripts/extraction/extract-modern-labels.sh` rebuilds it read-only
+from production; per-city population censuses live in its `extraction-metadata.txt`. The
+fetch cache (`modern-truth-cache/`) is gitignored; `python python/run_modern_truth.py build
+--write` replays offline from the cache, and the findings tests re-derive the headline
+numbers from the committed payloads + labels, so the artifacts and the code cannot drift
+apart. **Regenerate by intent only**: a refetch observes a different GSV state (panos die,
+depth planes get re-measured), so drift in a fresh fetch is expected rather than an error.
