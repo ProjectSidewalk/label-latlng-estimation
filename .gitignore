@@ -18,6 +18,12 @@ __pycache__/
 # and every downstream stage replay offline without it.
 data/depth-validation-cache/
 
+# Modern-truth working data (issue #3): the raw all-city extraction (~1.2M rows, regenerable
+# via scripts/extraction/extract-modern-labels.sh) and the photometa fetch cache. Only the
+# sampled subset is committed, as data/modern-truth-*.gz; see data/MANIFEST.md.
+data/modern-extraction/
+data/modern-truth-cache/
+
 # The overlay gallery is generated from the committed tiles by `run_depth_validation.py
 # gallery`; 8 MB of regenerable HTML does not belong in history.
 figures/depth-overlay-gallery.html

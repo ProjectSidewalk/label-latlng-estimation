@@ -291,18 +291,20 @@ class LabelHit:
     neighbourhood_range_ratio: float  # range / median range of the 3x3 around it
 
 
-def classify_label_hit(
+def classify_depth_pixel(
     payload: gd.DepthPayload,
-    sv_image_x: float,
-    sv_image_y: float,
+    col: int,
+    row: int,
     camera_height: float,
     geometry: PayloadGeometry | None = None,
 ) -> LabelHit:
-    """Classify the depth hit for one stored label, using the v6 pixel lookup.
+    """Classify the depth hit at one raster cell (payload x order, unmirrored).
 
-    The pixel is chosen exactly as ``gsv_depth.v6_to_latlng`` chooses it (the same
-    ``ceil`` and the same seam-wrap behaviour), so this describes the pixel that
-    actually produced the stored coordinate.
+    The post-pixel-lookup core shared by ``classify_label_hit`` (legacy v6 lookup) and
+    the modern-truth lookup (``modern_truth.classify_modern_label``). ``col`` is
+    deliberately NOT clamped: the v6 seam-wrap quirk (col == 512 silently reads the
+    next row) must survive the legacy path bit-for-bit, so bounds are checked on the
+    flat index exactly as ``gsv_depth.v6_to_latlng`` checks them.
 
     The point cloud, tilt table and ground plane are properties of the payload, not the
     label; pass ``payload_geometry(payload)`` when classifying many labels on one
@@ -310,19 +312,21 @@ def classify_label_hit(
     """
     h, w = payload.height, payload.width
     geom = geometry if geometry is not None else payload_geometry(payload)
-    out = gd.v6_to_latlng(sv_image_x, sv_image_y, 0.0, 0.0, geom.cloud)
     nan = float("nan")
 
-    if out.out_of_bounds:
+    flat_index = col + w * row
+    if flat_index < 0 or 3 * flat_index + 2 >= geom.cloud.shape[0]:
         return LabelHit(-1, "out_of_bounds", nan, nan, nan, nan, nan, nan)
 
-    flat_index = out.ceil_px + w * out.ceil_py
     plane_idx = int(payload.indices[flat_index])
     if plane_idx == 0:
         return LabelHit(0, "sky", nan, nan, nan, nan, nan, nan)
 
-    rng = math.sqrt(out.dx ** 2 + out.dy ** 2 + out.dz ** 2)
-    horiz = math.hypot(out.dx, out.dy)
+    dx = float(geom.cloud[3 * flat_index])
+    dy = float(geom.cloud[3 * flat_index + 1])
+    dz = float(geom.cloud[3 * flat_index + 2])
+    rng = math.sqrt(dx ** 2 + dy ** 2 + dz ** 2)
+    horiz = math.hypot(dx, dy)
 
     tilt = float(geom.plane_tilt[plane_idx])
     ground_idx = geom.ground_idx
@@ -336,15 +340,15 @@ def classify_label_hit(
         hit_class = "oblique"
 
     # The flat-earth counterfactual for this exact ray.
-    depr = float(geom.depression[min(out.ceil_py, h - 1)])
+    depr = float(geom.depression[min(row, h - 1)])
     if depr > math.radians(1.0) and math.isfinite(camera_height):
         flat = camera_height / math.tan(depr)
     else:
         flat = nan
 
     t = geom.depth_t
-    y0, y1 = max(out.ceil_py - 1, 0), min(out.ceil_py + 2, h)
-    x0, x1 = max(out.ceil_px - 1, 0), min(out.ceil_px + 2, w)
+    y0, y1 = max(row - 1, 0), min(row + 2, h)
+    x0, x1 = max(col - 1, 0), min(col + 2, w)
     window = t[y0:y1, x0:x1]
     finite = window[np.isfinite(window)]
     ratio = float(rng / np.median(finite)) if finite.size else nan
@@ -354,11 +358,30 @@ def classify_label_hit(
         hit_class=hit_class,
         range_m=rng,
         horizontal_m=horiz,
-        height_above_ground_m=camera_height - out.dz,
+        height_above_ground_m=camera_height - dz,
         flat_earth_m=flat,
         flat_earth_excess_m=(horiz - flat) if math.isfinite(flat) else nan,
         neighbourhood_range_ratio=ratio,
     )
+
+
+def classify_label_hit(
+    payload: gd.DepthPayload,
+    sv_image_x: float,
+    sv_image_y: float,
+    camera_height: float,
+    geometry: PayloadGeometry | None = None,
+) -> LabelHit:
+    """Classify the depth hit for one stored label, using the v6 pixel lookup.
+
+    The pixel is chosen exactly as ``gsv_depth.v6_to_latlng`` chooses it (the same
+    ``ceil``, the same rounded-1/26 multiply, and the same seam-wrap behaviour), so
+    this describes the pixel that actually produced the stored coordinate.
+    """
+    px = sv_image_x * gd.SV_IMAGE_SCALE
+    py = (gd.SV_IMAGE_Y_ORIGIN - sv_image_y) * gd.SV_IMAGE_SCALE
+    return classify_depth_pixel(payload, math.ceil(px), math.ceil(py),
+                                camera_height, geometry)
 
 
 def curb_height_bias_m(distance_m: float, camera_height: float, curb_m: float = 0.15) -> float:
