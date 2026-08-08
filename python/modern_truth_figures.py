@@ -107,7 +107,7 @@ def fig20(human, labels):
            "deployed linear model bends across the diagonal — #4766's compression against absolute "
            "truth. Middle: the blend has the right shape but runs ~13% far — its heights carry the era "
            "truth's pinned-plane scale. Right: one global height rescale, fitted on the other half of "
-           "the panos, puts it on the diagonal at 0.43 m median error.", wrap=128)
+           "the panos, puts it on the diagonal at 0.44 m median error.", wrap=128)
     fig.subplots_adjust(top=0.72, wspace=0.07)
     _save(fig, "fig20-modern-truth-pred-vs-truth.png")
 
@@ -195,7 +195,7 @@ def fig22(human, panos):
            "Effective camera height each type's modern truth implies (dep ≥ 5°, human labels) against "
            "the blend's fitted heights (hollow diamonds; Crosswalk and Signal were never fitted and "
            "score through height_fallback_m). Every implied height lands in the measured rig band "
-           "(2.35 m), flat across types: the fitted table's extra 0.15–0.45 m is the era truth's "
+           "(2.35 m), flat across types: the fitted table's extra 0.20–0.45 m is the era truth's "
            "pinned-plane scale plus its terrain bias, not label-click geometry.", wrap=118)
     fig.subplots_adjust(top=0.80)
     _save(fig, "fig22-modern-truth-implied-heights.png")

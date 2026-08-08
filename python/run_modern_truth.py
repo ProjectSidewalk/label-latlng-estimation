@@ -191,7 +191,7 @@ def analyze_modern_pano(pano_id, resp, labels, stratum):
                                            r.pano_height, cam_h, geom, control)
             if control == "identity":
                 label_rows.append({
-                    "label_id": r.label_id,
+                    "label_uid": r.label_uid,  # (city, label_id); label_id alone collides
                     "hit_class": hit.hit_class,
                     "plane_idx": hit.plane_idx,
                     "truth_m": hit.horizontal_m,
@@ -201,7 +201,7 @@ def analyze_modern_pano(pano_id, resp, labels, stratum):
                     "neighbourhood_range_ratio": hit.neighbourhood_range_ratio,
                 })
             control_rows.append({
-                "label_id": r.label_id,
+                "label_uid": r.label_uid,
                 "control": control,
                 "hit_class": hit.hit_class,
                 "truth_m": hit.horizontal_m,
@@ -210,12 +210,15 @@ def analyze_modern_pano(pano_id, resp, labels, stratum):
 
 
 def control_sweep(control_rows: pd.DataFrame, labels: pd.DataFrame) -> dict:
-    """Per frame control: blend-D error against that control's truth, same gates.
+    """Per frame control: blend-D error against that control's truth.
 
     The prediction never changes — only which raster cell "truth" is read from — so a
-    wrong frame must lose on error and on the share of rays that even land on ground."""
+    wrong frame must lose on error and on the share of rays that even land on ground.
+    Gated here on hit class and the truth cap only: the neighbourhood-ratio gate is a
+    property of the identity read and re-deriving it per control would change what the
+    controls are being compared on."""
     merged = control_rows.merge(
-        labels[["label_id", "D_blend", "is_ai"]], on="label_id", how="inner")
+        labels[["label_uid", "D_blend"]], on="label_uid", how="inner")
     out = {}
     for control, sub in merged.groupby("control"):
         gated = sub[sub["hit_class"].isin(["ground", "terrain"])
@@ -267,7 +270,9 @@ def cmd_build(args):
     ok_ids = {p["pano_id"] for p in payload_lines}
     labels = frame[frame["pano_id"].isin(ok_ids)].copy()
     labels["stratum"] = labels["pano_id"].map(stratum_of)
-    labels = labels.merge(truth, on="label_id", how="inner")
+    # label_uid, never label_id: the latter is a per-schema serial and joining on it
+    # cross-joins same-numbered labels between cities, pairing each with the other's truth
+    labels = labels.merge(truth, on="label_uid", how="inner", validate="one_to_one")
     labels = mt.model_predictions(labels, blend_params)
     labels = mt.guard_frame(labels)  # needs time_created as datetime (era split)
     labels, gate_census = mt.truth_gates(labels)
@@ -283,7 +288,7 @@ def cmd_build(args):
                    ("\n".join(json.dumps(d) for d in payload_lines) + "\n").encode())
     write_csv_gz(panos.sort_values("pano_id"),
                  os.path.join(out_dir, "modern-truth-panos.csv.gz"))
-    write_csv_gz(labels.sort_values("label_id"),
+    write_csv_gz(labels.sort_values("label_uid"),  # label_id ties across cities
                  os.path.join(out_dir, "modern-truth-labels.csv.gz"))
     if args.write:
         out = os.path.join(out_dir, "modern-truth-summary.json")

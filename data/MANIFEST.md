@@ -242,18 +242,25 @@ exactly) scored against fresh GSV depth fetched by pano id on 2026-08-07. Report
   (`ok`/`gone`/`parse_error`), stratum, fresh pose/position/capture date, camera-height QC
   (including the exactly-2.50 m pinned-plane flag), and the origin drift vs the extraction's
   `pano_data` position.
-- `modern-truth-labels.csv.gz` — one row per frame-gated label on an ok pano (3,332): the
+- `modern-truth-labels.csv.gz` — one row per frame-gated label on an ok pano (3,286): the
   extraction columns, the depth hit (class, ray, horizontal truth, neighbourhood ratio),
   truth gates, all four model predictions, and the era-aware circularity-guard fields.
+  **Keyed by `label_uid` (`city:label_id`), never `label_id`** — that column is a
+  per-schema serial and 76% of the extraction's rows share one with another city, so a join
+  on it alone silently pairs a label with a different city's depth truth.
 - `modern-truth-summary.json` — the findings `tests/test_modern_truth_findings.py` locks:
-  fetch/gate censuses, the two-era guard, the model matrix by stratum, near-horizon bins,
-  implied per-type heights, frame-control sweep, and the held-out remedy check.
+  fetch/gate censuses (including realized per-type label delivery against the quota, and how
+  many cities cleared the by-city minimum), the two-era guard, the model matrix by stratum,
+  near-horizon bins, implied per-type heights, frame-control sweep, and the held-out remedy
+  check with the deployed model scored on the same rows.
 
 The sampling frame is the (uncommitted, regenerable) all-city extraction under
 `modern-extraction/` — `scripts/extraction/extract-modern-labels.sh` rebuilds it read-only
 from production; per-city population censuses live in its `extraction-metadata.txt`. The
 fetch cache (`modern-truth-cache/`) is gitignored; `python python/run_modern_truth.py build
---write` replays offline from the cache, and the findings tests re-derive the headline
-numbers from the committed payloads + labels, so the artifacts and the code cannot drift
+--write` replays offline from the cache (byte-identical across reruns), and the findings
+tests re-derive the headline numbers from the committed payloads + labels — every truth
+value on a 250-pano slice by default, and on **all** 3,286 rows under `RUN_SLOW=1`
+(`pytest tests/test_modern_truth_findings.py`), so the artifacts and the code cannot drift
 apart. **Regenerate by intent only**: a refetch observes a different GSV state (panos die,
 depth planes get re-measured), so drift in a fresh fetch is expected rather than an error.

@@ -45,6 +45,51 @@ def synthetic_payload(ground_height=2.5, half_ground=False):
                            was_compressed=False)
 
 
+# ---------------------------------------------------------------------------- extraction
+
+EXTRACT_COLS = ("label_id,label_type,lat,lng,canvas_x,canvas_y,heading,pitch,zoom,"
+                "pano_x,pano_y,computation_method,pano_id,time_created,is_ai,pano_width,"
+                "pano_height,pano_lat,pano_lng,camera_heading,camera_pitch,camera_roll,"
+                "capture_date,pano_source")
+
+
+def _write_city(tmp_path, city, rows):
+    path = os.path.join(tmp_path, f"modern-labels-{city}.csv.gz")
+    with gzip.open(path, "wt", encoding="utf-8", newline="\n") as f:
+        f.write(EXTRACT_COLS + "\n")
+        for label_id, is_ai in rows:
+            f.write(f"{label_id},CurbRamp,47.6,-122.3,100,240,180,0,1,4096,5000,"
+                    f"approximation2,PANO{label_id:018d},2024-01-01 00:00:00+00,{is_ai},"
+                    "16384,8192,47.6,-122.3,180,0,0,2023-05-01,gsv\n")
+    return path
+
+
+def test_load_extraction_keys_on_city_not_the_per_schema_label_id(tmp_path):
+    """label_id restarts at 1 in every city schema, so it is NOT a key across the
+    concatenated frame. Joining on it would pair a label with another city's row."""
+    _write_city(tmp_path, "seattle", [(1, "f"), (2, "f")])
+    _write_city(tmp_path, "chicago", [(1, "f"), (2, "t")])
+    df = mt.load_extraction(str(tmp_path))
+
+    assert len(df) == 4
+    assert not df["label_id"].is_unique          # the trap
+    assert df["label_uid"].is_unique             # the key
+    assert set(df["label_uid"]) == {"chicago:1", "chicago:2", "seattle:1", "seattle:2"}
+    assert list(df.loc[df["is_ai"], "label_uid"]) == ["chicago:2"]
+
+    # a self-join on label_id doubles the frame; on label_uid it does not
+    assert len(df.merge(df, on="label_id")) == 8
+    assert len(df.merge(df, on="label_uid")) == 4
+
+
+def test_load_extraction_rejects_an_unparseable_is_ai_flag(tmp_path):
+    """A silent .astype(bool) would read every unmapped value as an AI label, quietly
+    moving human clicks out of the headline population."""
+    _write_city(tmp_path, "seattle", [(1, "f"), (2, "TRUE")])
+    with pytest.raises(ValueError, match="is_ai"):
+        mt.load_extraction(str(tmp_path))
+
+
 # ---------------------------------------------------------------------------- pixel math
 
 def test_modern_col_row_formula():

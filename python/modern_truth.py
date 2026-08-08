@@ -91,7 +91,13 @@ MODEL_KEYS = ["A_deployed", "B_normalized", "C_anchor", "D_blend"]
 # ---------------------------------------------------------------------------- extraction
 
 def load_extraction(extract_dir: str) -> pd.DataFrame:
-    """All modern-labels-*.csv.gz as one frame, with a city column and typed flags."""
+    """All modern-labels-*.csv.gz as one frame, with a city column and typed flags.
+
+    ``label_id`` is a PER-SCHEMA serial: each city's ``label`` table numbers from 1, so
+    concatenating 49 cities collides 76% of the rows (up to 33 ways on one id). Joining
+    on it alone cross-joins labels between cities and pairs a label with another city's
+    depth truth. ``label_uid`` is the real key and is what every downstream join uses.
+    """
     paths = sorted(glob.glob(os.path.join(extract_dir, "modern-labels-*.csv.gz")))
     if not paths:
         raise FileNotFoundError(f"no modern-labels-*.csv.gz under {extract_dir}; "
@@ -103,7 +109,13 @@ def load_extraction(extract_dir: str) -> pd.DataFrame:
         df["city"] = city
         frames.append(df)
     df = pd.concat(frames, ignore_index=True)
-    df["is_ai"] = df["is_ai"].map({"t": True, "f": False}).astype(bool)
+    is_ai = df["is_ai"].map({"t": True, "f": False})
+    if is_ai.isna().any():  # a silent .astype(bool) would read every NaN as an AI label
+        raise ValueError(f"{int(is_ai.isna().sum())} rows carry an unparseable is_ai flag")
+    df["is_ai"] = is_ai.astype(bool)
+    df["label_uid"] = df["city"] + ":" + df["label_id"].astype(str)
+    if not df["label_uid"].is_unique:
+        raise ValueError("label_uid is not unique — (city, label_id) is no longer a key")
     df["time_created"] = pd.to_datetime(df["time_created"], utc=True, format="mixed")
     df["capture_date"] = pd.to_datetime(df["capture_date"])
     return df
@@ -142,6 +154,9 @@ def frame_census(df: pd.DataFrame) -> tuple[pd.DataFrame, dict]:
         "stored_latlng_absurd": int((~finite).sum()),
         "over_pano_cap": int(overloaded.sum()),
         "max_labels_per_pano": int(MAX_LABELS_PER_PANO),
+        # why label_uid exists: label_id is a per-schema serial, so this many rows share
+        # one with another city and any join keyed on it alone would cross-join them
+        "rows_sharing_a_label_id": int(len(df) - df["label_id"].nunique()),
         "kept_rows": int(keep.sum()),
         "kept_panos": int(df.loc[keep, "pano_id"].nunique()),
         "ai_rows": int(df.loc[keep, "is_ai"].sum()),
@@ -271,8 +286,8 @@ def classify_modern_label(payload: gd.DepthPayload, pano_x, pano_y, pano_width,
 # PanoDataService.scala (LATLNG_ESTIMATION_PARAMS; selected there by round(zoom)).
 # mapillary_falsification carries only the zoom-1 triple because the auto-labeler
 # always submits at zoom 1; human labels use all three, and the circularity guard
-# proves the selection empirically (a zoom-1-only recompute leaves 1.0 m / 2.2 m
-# median residuals on the zoom-2/3 populations; per-zoom collapses them).
+# proves the selection empirically (a zoom-1-only recompute leaves 0.90 m / 2.79 m
+# median residuals on the zoom-2/3 populations; per-zoom collapses them to 0.16/0.15).
 DEPLOYED_DIST_COEF = {
     1: (18.6051843, 0.0138947, 0.0011023),
     2: (20.8794248, 0.0184087, 0.0022135),
@@ -485,14 +500,15 @@ def implied_heights(scored: pd.DataFrame, blend_params: dict,
     return out
 
 
-def curb_sensitivity(scored: pd.DataFrame, curb_m: float = 0.15,
-                     camera_height_m: float = 2.37) -> dict:
+def curb_sensitivity(scored: pd.DataFrame, camera_height_m: float,
+                     curb_m: float = 0.15) -> dict:
     """Blend bias on CurbRamp rows with and without the curb-height truth correction.
 
     The depth model represents the road surface, so a ray at a curb ramp's lip lands
     ~curb*d/h too far (depth_validation.curb_height_bias_m); correcting the truth down
-    by that bias asks whether the fitted CurbRamp height already absorbs it. 2.37 m is
-    the pilot's measured modern median camera height."""
+    by that bias asks whether the fitted CurbRamp height already absorbs it.
+    ``camera_height_m`` is THIS fetch's measured rig median, not a carried-over constant,
+    so the correction is scaled by the same cameras the truth came from."""
     sub = scored[scored["label_type"] == "CurbRamp"]
     if not len(sub):
         return {"n": 0}
@@ -549,11 +565,13 @@ def remedy_check(labels: pd.DataFrame, blend_params: dict, seed: int = SEED,
     flat = {"form": "blend", "blend_deg": blend_params["blend_deg"],
             "height_m": flat_h}
 
-    def score(params):
-        err = predict_dist(params, test) - test["truth_m"].to_numpy(float)
+    def stats(err):
         return {"median_abs_m": float(np.median(np.abs(err))),
                 "signed_median_m": float(np.median(err)),
                 "p90_abs_m": float(np.percentile(np.abs(err), 90))}
+
+    def score(params):
+        return stats(predict_dist(params, test) - test["truth_m"].to_numpy(float))
 
     return {
         "split": {"n_train_rows": int(len(train)), "n_test_rows": int(len(test)),
@@ -561,6 +579,10 @@ def remedy_check(labels: pd.DataFrame, blend_params: dict, seed: int = SEED,
         "k_rescale": k,
         "flat_height_m": flat_h,
         "test_half": {
+            # the deployed model on the SAME disjoint rows, so the remedy's headline
+            # number has an apples-to-apples reference instead of a pooled-column one
+            "A_deployed": stats(test["A_deployed"].to_numpy(float)
+                                - test["truth_m"].to_numpy(float)),
             "D_blend_as_shipped": score(blend_params),
             "D_rescaled": score(rescaled),
             "D_flat": score(flat),
@@ -590,6 +612,11 @@ def build_summary(frame_census: dict, panos: pd.DataFrame, labels: pd.DataFrame,
     heights = panos.loc[panos["status"] == "ok"]
     pinned = heights["ground_d_exactly_2p5"].fillna(True).astype(bool)
     measured = heights.loc[~pinned, "ground_height_m"].astype(float)
+    measured_median = float(measured.median()) if len(measured) else None
+
+    n_ok = int((panos["status"] == "ok").sum())
+    n_resolved = int((panos["status"] != "gone").sum())
+    city_n = human["city"].value_counts()
 
     return {
         "meta": {
@@ -613,12 +640,20 @@ def build_summary(frame_census: dict, panos: pd.DataFrame, labels: pd.DataFrame,
         "fetch": {
             "status": {str(k): int(v) for k, v in status.items()},
             "resolve_rate": float((panos["status"] != "gone").mean()),
-            "depth_rate_among_resolved": float(
-                (heights["status"] == "ok").sum()
-                / max(int((panos["status"] != "gone").sum()), 1)),
+            # among panos whose id still resolves, the share that yielded a usable
+            # payload; the shortfall is metadata that streetlevel's parser rejects
+            # (status 'parse_error'), which is why this is not a pure depth-service rate
+            "usable_rate_among_resolved": n_ok / max(n_resolved, 1),
             "by_stratum_ok": {str(k): int(v) for k, v in
                               panos.loc[panos["status"] == "ok",
                                         "stratum"].value_counts().items()},
+            # the type strata are LABEL-count budgets, not pano-count ones, so whether
+            # they were met is a property of the delivered labels rather than of
+            # by_stratum_ok. Recorded per type so a shortfall cannot pass unnoticed.
+            "type_label_coverage": {
+                str(t): {"n_labels_on_ok_panos": int(n),
+                         "quota": TYPE_LABEL_QUOTA, "met": bool(n >= TYPE_LABEL_QUOTA)}
+                for t, n in labels["label_type"].value_counts().sort_index().items()},
         },
         "gates": gate_census,
         "guard": guard_summary(labels),
@@ -631,16 +666,25 @@ def build_summary(frame_census: dict, panos: pd.DataFrame, labels: pd.DataFrame,
         "by_label_type": by_group_metrics(human, "label_type"),
         "implied_heights": implied_heights(human, blend_params),
         "by_city": by_group_metrics(human, "city", min_n=50),
+        # by_city reports only cities clearing min_n; the rest are too thin to read a
+        # median from, and saying so here keeps "every scoreable city" honest about
+        # how many cities that phrase covers
+        "by_city_coverage": {
+            "min_n": 50,
+            "n_cities_with_scored_human_rows": int(len(city_n)),
+            "n_cities_scored": int((city_n >= 50).sum()),
+            "rows_in_cities_below_min_n": int(city_n[city_n < 50].sum()),
+        },
         "by_capture_year": by_group_metrics(human, "capture_year", min_n=50),
         "by_label_year": by_group_metrics(human, "label_year", min_n=50),
         "camera_heights": {
             "n_ok_panos": int(len(heights)),
             "pinned_2p5_frac": float(pinned.mean()) if len(heights) else None,
-            "measured_median_m": float(measured.median()) if len(measured) else None,
+            "measured_median_m": measured_median,
             "measured_iqr_m": [float(measured.quantile(0.25)),
                                float(measured.quantile(0.75))] if len(measured) else None,
         },
         "frame_controls": frame_controls,
-        "curb_sensitivity": curb_sensitivity(human),
+        "curb_sensitivity": curb_sensitivity(human, measured_median),
         "remedies": remedy_check(labels, blend_params),
     }
