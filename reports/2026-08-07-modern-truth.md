@@ -79,6 +79,8 @@ anywhere in the main comparison**: blend D is scored exactly as committed in
   fitted on half the panos, scored on the disjoint half) takes the blend from 1.28 m to
   **0.41 m** median and +1.09 to −0.16 m bias; a global rescale of the whole table
   (k = 0.865) does the same (0.44 m) — the per-type table earns nothing on modern truth.
+  **Decision recorded 2026-08-07: the flat height ships**; §9 articulates what that
+  trades away.
 
 ## §3 · Dataset
 
@@ -291,17 +293,71 @@ the finding: **the per-type table buys nothing on modern truth** (it bought 4 cm
 median: 0.9335 vs 0.9741). The residual −0.16 m and the surviving p90 tail are the honest
 remainder: near-horizon undershoot plus whatever the modern terrain model still overstates.
 
-**What this means for the Stage 4 coefficients — a decision, deliberately not made here.**
-The evidence says the blend's functional form ships as-is, and its height scale should be
-the modern measured one; the two concrete options are (a) multiply the committed height
-table and fallback by 0.865, or (b) replace the table with a single 2.34 m height (simpler,
-same accuracy, abandons structure modern truth cannot support — at a known 4 cm era-side
-cost). One honest limit travels with either: "modern truth" is still Google's own depth
-model, now with measured rather than defaulted planes; its internal consistency is strong
-(the 15 mm Crosswalk check), but no external geodetic reference has been consulted —
-bearing-only triangulation (#7) remains the independent path if one is wanted. The
-SidewalkWebpage integration currently in flight consumes the provisional (unrescaled)
-coefficients; it should not merge ahead of this call.
+### The decision (recorded 2026-08-07): the flat height ships
+
+Both remedies fix the scale; choosing between them is a judgment about what deserves to
+survive, so the tradeoffs are stated in full rather than implied.
+
+**What the flat height gives up.**
+
+- *The per-type structure the era fit chose.* On the era-frame test it was worth 4 cm of
+  median (0.9335 vs 0.9741) — but this report shows that frame's scale is inflated by the
+  pinned planes, and the two frames cannot both be satisfied. The per-type table remains on
+  record as the era fit's own answer (`era_fit_coefficients` in
+  `distance-refit-summary.json`); it stops being a production artifact.
+- *A physically-plausible story.* "Obstacles are clicked above their ground contact" was a
+  reasonable mechanism for the era spread (est3 seemed to corroborate it). Modern truth had
+  the power to see it: a rescaled table would assert a 0.246 m spread against per-type
+  bootstrap CIs of ±0.018–0.045. What it measured is 0.098 m, under half of that — and,
+  more damning for the mechanism than the magnitude, in the *wrong order*: Spearman ρ = 0.46
+  (p = 0.29) against the fitted heights, with CurbRamp dropping from the table's tallest to
+  4th of 7. A mechanism that only appears under the payload generation with defaulted planes
+  was the payload generation, not the clicks.
+
+**What the flat height buys.**
+
+- Held-out accuracy at least as good as the rescale (0.41 vs 0.44 m median; both −0.16 m
+  bias). The two are within noise of each other; the flat variant is not worse.
+- A two-parameter model: one height, one blend angle. Every shipped number is now a
+  physical quantity a future analysis can re-measure.
+- `label_type` leaves the distance path entirely — and with it the **unseen-type fallback
+  rule**, the shipped table's least-evidenced policy. A modern caller meets label types the
+  2017–2020 population never contained (this dataset scored 433 of them — Crosswalk and
+  Signal); under the flat height they need no rule at all, and the server/client ports lose
+  a table, a lookup, and a failure mode.
+- Nothing modern truth cannot support ships. The rescale would preserve structure at
+  exactly the confidence level this report just measured to be absent.
+
+**What either option accepts, stated once.** The calibration target is Google's *measured*
+ground planes — internally consistent to 15 mm (the Crosswalk check) and free of the
+documented default-plane artifact, but not anchored to any external geodetic reference;
+bearing-only triangulation (#7) remains the independent path if one is wanted. The −0.17 m
+residual (the modern terrain model's remaining overshoot) rides along, as does a
+by-construction ~4 cm degradation on era-frame metrics. And shipping *as-is* was rejected
+on the same grounds either remedy is accepted: a +1.09 m uniform bias with a one-constant
+fix is not a defensible thing to deploy.
+
+**The shipped constants** (committed as `final_coefficients` in
+`modern-truth-summary.json`; the full-sample height — the held-out check's train-half value
+is 2.3416, under half a centimetre away, and the disjoint-half 0.41 m is the honest error
+estimate):
+
+```
+height_m   = 2.341219672825709      # median(truth·tan(dep)), 2,488 human rows, dep ≥ 5°
+blend_deg  = 11.25                  # unchanged; joint now at h/tan(11.25°) ≈ 11.8 m
+max answer = 23.848261259830384 m   # the tail's structural bound (was 28.35)
+clip 0–50 m; tail evaluated at max(dep, 0); spherical geodesy; exact POV heading;
+no label_type input; no era constant
+```
+
+The height is fitted on the pooled human rows rather than the representative stratum alone.
+The quota strata pull it by 5 mm (2.3412 vs 2.3357 representative-only) and the pooled value
+scores marginally *better* on the representative stratum, so pooling is the larger sample at
+no measurable cost — but it is a pooled median, and that is why it is stated here.
+
+The SidewalkWebpage integration
+([#4819](https://github.com/ProjectSidewalk/SidewalkWebpage/pull/4819)) consumes these in
+place of the per-type table.
 
 ## §10 · Deliberately not claimed
 
