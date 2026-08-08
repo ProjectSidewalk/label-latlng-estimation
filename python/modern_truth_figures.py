@@ -64,21 +64,18 @@ def fig20(human, labels):
 
     params = mt.load_blend_params(DATA)
     remedy = mt.remedy_check(labels, params)
-    k = remedy["k_rescale"]
+    flat_h = remedy["flat_height_m"]  # the train half's value; the disjoint half scores it
     rng = np.random.default_rng(mt.SEED)
     panos = np.sort(human["pano_id"].unique())
     train_ids = set(rng.choice(panos, len(panos) // 2, replace=False))
     test = human[~human["pano_id"].isin(train_ids)].copy()
-    rescaled = dict(params,
-                    height_by_type_m={t: k * h for t, h in
-                                      params["height_by_type_m"].items()},
-                    height_fallback_m=k * params["height_fallback_m"])
-    test["D_rescaled"] = mt.predict_dist(rescaled, test)
+    flat = {"form": "blend", "blend_deg": params["blend_deg"], "height_m": flat_h}
+    test["D_flat"] = mt.predict_dist(flat, test)
 
     panels = [
         (human, MODELS[0][0], MODELS[0][1], MODELS[0][2]),
-        (human, "D_blend", "D blend as shipped", C_GEOM),
-        (test, "D_rescaled", f"D × {k:.3f} (held-out half)", "#0d6b4a"),
+        (human, "D_blend", "D blend, era per-type heights", C_GEOM),
+        (test, "D_flat", f"D flat {flat_h:.2f} m (held-out half)", "#0d6b4a"),
     ]
     fig, axes = plt.subplots(1, 3, figsize=(13.6, 4.9), sharex=True, sharey=True)
     edges = np.arange(0, 51, 2)
@@ -106,8 +103,9 @@ def fig20(human, labels):
            "cities (gated rows; colored line = per-2 m binned median, gray diagonal = truth). Left: the "
            "deployed linear model bends across the diagonal — #4766's compression against absolute "
            "truth. Middle: the blend has the right shape but runs ~13% far — its heights carry the era "
-           "truth's pinned-plane scale. Right: one global height rescale, fitted on the other half of "
-           "the panos, puts it on the diagonal at 0.44 m median error.", wrap=128)
+           "truth's pinned-plane scale. Right: one flat modern-calibrated height, fitted on the other "
+           "half of the panos, puts it on the diagonal at 0.41 m median error — the shipped fix.",
+           wrap=128)
     fig.subplots_adjust(top=0.72, wspace=0.07)
     _save(fig, "fig20-modern-truth-pred-vs-truth.png")
 

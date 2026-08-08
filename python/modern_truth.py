@@ -329,10 +329,16 @@ def anchor_distance(dep_deg) -> np.ndarray:
 
 
 def load_blend_params(data_dir: str = os.path.join(ROOT, "data")) -> dict:
-    """Blend D's committed coefficients — the exact dict the refit published."""
+    """The ERA fit's committed coefficients — the candidate this module validates.
+
+    Deliberately the era fit, not the calibrated production constants: D_blend is scored
+    exactly as the refit shipped it, and ``final_coefficients`` is derived here FROM that
+    comparison (scoring the calibrated form against the truth that calibrated it would be
+    circular as a validation, so it appears only in the remedy/final blocks)."""
     with open(os.path.join(data_dir, "distance-refit-summary.json"), encoding="utf-8") as f:
         summary = json.load(f)
-    key = "final_coefficients" if "final_coefficients" in summary else "provisional_coefficients"
+    key = ("era_fit_coefficients" if "era_fit_coefficients" in summary
+           else "provisional_coefficients")
     return summary[key]["params"]
 
 
@@ -590,6 +596,63 @@ def remedy_check(labels: pd.DataFrame, blend_params: dict, seed: int = SEED,
     }
 
 
+FINAL_MIN_DEP_DEG = 5.0  # implied-height stability floor, same as implied_heights
+
+
+def final_coefficients(labels: pd.DataFrame, blend_params: dict) -> dict:
+    """The Stage 4 production constants: the blend form with ONE flat camera height,
+    calibrated to modern measured-plane truth.
+
+    Decision recorded 2026-08-07 (the tradeoffs are articulated in
+    reports/2026-08-07-modern-truth.md §9): the flat variant over the global rescale —
+    same held-out accuracy, two physical parameters, and it removes label_type (and with
+    it the unseen-type fallback rule) from the distance path entirely. The held-out
+    remedy check (``remedies``) validates the calibration on a disjoint pano half; the
+    shipped constant itself is then the full-sample median implied height."""
+    from distance_refit import structural_max_m
+
+    human = labels[labels["gate_ok"] & ~labels["is_ai"]]
+    sub = human[human["depression_deg"] >= FINAL_MIN_DEP_DEG]
+    implied = (sub["truth_m"].to_numpy(float)
+               * np.tan(np.radians(sub["depression_deg"].to_numpy(float))))
+    h = float(np.median(implied))
+    params = {"form": "blend", "height_m": h, "blend_deg": blend_params["blend_deg"]}
+    err = predict_dist(params, human) - human["truth_m"].to_numpy(float)
+    return {
+        "form": "blend",
+        "params": {"height_m": h, "blend_deg": params["blend_deg"], "n_params": 2},
+        "max_answer_m": structural_max_m(params),
+        "derived_from": f"median(truth x tan(depression)) over the {len(sub)} gated human "
+                        f"rows at depression >= {FINAL_MIN_DEP_DEG} deg; the disjoint-half "
+                        "remedy check is the unbiased error estimate",
+        "replaces": "the era fit's per-type height table (era_fit_coefficients in "
+                    "distance-refit-summary.json): its 2.50-2.78 m scale is the era "
+                    "truth's pinned-plane artifact, and its per-type spread does not "
+                    "replicate on modern truth",
+        "in_sample_human": {
+            "median_abs_m": float(np.median(np.abs(err))),
+            "signed_median_m": float(np.median(err)),
+            "p90_abs_m": float(np.percentile(np.abs(err), 90)),
+        },
+        "no_label_type_input": "the flat height removes label_type from the distance "
+                               "path entirely, and with it the unseen-type fallback rule",
+        "geodesy": "spherical (turf destination), matching production toLatLng",
+        "heading": "exact POV inversion (pov_if_centered), zero parameters; no era "
+                   "constant on post-evolution-179 data",
+        "caveats": [
+            "the absolute reference is Google's measured ground planes - internally "
+            "consistent (Crosswalk vs measured rig: 15 mm) but externally unanchored; "
+            "bearing-only triangulation (#7) is the independent path",
+            "residual signed median ~-0.17 m: the modern terrain model's remaining "
+            "overshoot, inside the truth budget",
+            "near-horizon clicks (<2 deg) stay undershot by every bounded model; the "
+            "tail's structural max is max_answer_m",
+            "era-truth metrics live in the inflated frame: this calibration scores ~4 cm "
+            "worse there by construction - the two frames cannot both be satisfied",
+        ],
+    }
+
+
 # ---------------------------------------------------------------------------- summary
 
 def build_summary(frame_census: dict, panos: pd.DataFrame, labels: pd.DataFrame,
@@ -687,4 +750,5 @@ def build_summary(frame_census: dict, panos: pd.DataFrame, labels: pd.DataFrame,
         "frame_controls": frame_controls,
         "curb_sensitivity": curb_sensitivity(human, measured_median),
         "remedies": remedy_check(labels, blend_params),
+        "final_coefficients": final_coefficients(labels, blend_params),
     }

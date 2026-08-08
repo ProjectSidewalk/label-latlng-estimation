@@ -262,6 +262,28 @@ def test_locked_remedies(summary):
     assert t["D_flat"]["median_abs_m"] < t["A_deployed"]["median_abs_m"]
 
 
+def test_final_coefficients_are_the_flat_calibration(summary, labels):
+    """The Stage 4 decision, locked: blend form, ONE flat height, no label_type input."""
+    import modern_truth as mt
+
+    fc = summary["final_coefficients"]
+    assert fc["form"] == "blend"
+    assert fc["params"]["n_params"] == 2
+    assert fc["params"]["blend_deg"] == 11.25
+    assert fc["params"]["height_m"] == pytest.approx(2.3412, abs=2e-3)
+    assert fc["max_answer_m"] == pytest.approx(23.848, abs=2e-2)
+    assert fc["in_sample_human"]["median_abs_m"] == pytest.approx(0.4444, abs=2e-3)
+    assert abs(fc["in_sample_human"]["signed_median_m"]) < 0.3
+    assert "label_type" in fc["no_label_type_input"]
+    # the calibrated height sits in the measured-rig band
+    assert abs(fc["params"]["height_m"]
+               - summary["camera_heights"]["measured_median_m"]) < 0.05
+    # and re-derives from the committed labels + the committed era params
+    rederived = mt.final_coefficients(labels, mt.load_blend_params())
+    assert rederived["params"]["height_m"] == pytest.approx(
+        fc["params"]["height_m"], abs=1e-12)
+
+
 def test_modern_truth_does_not_carry_the_era_curb_overshoot(summary):
     c = summary["curb_sensitivity"]
     # applying the classic curb correction to modern truth WORSENS the bias
@@ -279,8 +301,7 @@ def test_near_horizon_the_blend_beats_the_deployed_model_and_is_bounded(summary)
     assert abs(abs(nh["D_blend"]["signed_median_m"])
                - abs(nh["C_anchor"]["signed_median_m"])) < 1.0
     # what actually separates them: the cotangent runs to the 50 m clip, the blend cannot
-    with open(os.path.join(DATA, "distance-refit-summary.json"), encoding="utf-8") as f:
-        assert json.load(f)["provisional_coefficients"]["max_answer_m"] < 30.0
+    assert summary["final_coefficients"]["max_answer_m"] < 30.0
     # and where the sample IS thick, the blend is the flattest of the four
     thick = summary["near_horizon"]["(11.25, 90]"]
     assert thick["n"] > 1000

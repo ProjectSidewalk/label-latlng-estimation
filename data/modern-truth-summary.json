@@ -1523,5 +1523,30 @@
         "p90_abs_m": 3.5530967657875805
       }
     }
+  },
+  "final_coefficients": {
+    "form": "blend",
+    "params": {
+      "height_m": 2.341219672825709,
+      "blend_deg": 11.25,
+      "n_params": 2
+    },
+    "max_answer_m": 23.848261259830384,
+    "derived_from": "median(truth x tan(depression)) over the 2488 gated human rows at depression >= 5.0 deg; the disjoint-half remedy check is the unbiased error estimate",
+    "replaces": "the era fit's per-type height table (era_fit_coefficients in distance-refit-summary.json): its 2.50-2.78 m scale is the era truth's pinned-plane artifact, and its per-type spread does not replicate on modern truth",
+    "in_sample_human": {
+      "median_abs_m": 0.44443758404288936,
+      "signed_median_m": -0.17173267395583292,
+      "p90_abs_m": 4.127288404049622
+    },
+    "no_label_type_input": "the flat height removes label_type from the distance path entirely, and with it the unseen-type fallback rule",
+    "geodesy": "spherical (turf destination), matching production toLatLng",
+    "heading": "exact POV inversion (pov_if_centered), zero parameters; no era constant on post-evolution-179 data",
+    "caveats": [
+      "the absolute reference is Google's measured ground planes - internally consistent (Crosswalk vs measured rig: 15 mm) but externally unanchored; bearing-only triangulation (#7) is the independent path",
+      "residual signed median ~-0.17 m: the modern terrain model's remaining overshoot, inside the truth budget",
+      "near-horizon clicks (<2 deg) stay undershot by every bounded model; the tail's structural max is max_answer_m",
+      "era-truth metrics live in the inflated frame: this calibration scores ~4 cm worse there by construction - the two frames cannot both be satisfied"
+    ]
   }
 }

@@ -909,7 +909,7 @@ def build_summary(scored: pd.DataFrame, fits: dict, chosen: dict, checks: dict,
         "quantiles": checks["quantiles"],
     }
     ch = fits[chosen["rung"]]
-    summary["provisional_coefficients"] = {
+    summary["era_fit_coefficients"] = {
         "form": ch["form"], "rung": chosen["rung"], "params": params[chosen["rung"]],
         "max_answer_m": structural_max_m(ch),
         "unseen_label_type": "use height_fallback_m (the pooled fit); the seven fitted types "
@@ -919,16 +919,20 @@ def build_summary(scored: pd.DataFrame, fits: dict, chosen: dict, checks: dict,
         "heading": "exact POV inversion (pov_if_centered), zero parameters; the era_cal "
                    "constant is a property of the 2017-2020 ground truth and must NOT be "
                    "applied to post-evolution-179 data",
-        "status": "provisional pending Stage 3 (Mapillary falsification; inputs live in "
-                  "sidewalk-auto-labeler)",
+        "status": "era fit, final in form: Stage 3 (the Mapillary falsification) certified "
+                  "the shape scale-free, and the modern-truth check calibrated the height "
+                  "scale to modern measured planes. Production constants live in "
+                  "modern-truth-summary.json final_coefficients (one flat height; these "
+                  "per-type heights carry the era truth's pinned-plane scale and their "
+                  "spread does not replicate on modern truth)",
         "caveats": [
             "truth is model-derived: GSV's terrain model, curb-height bias ~0.48 m systematic",
             "occlusion outliers are clustered, which is why the L1 column exists",
             "open item G: 6.6% of stored distances sampled a rotated depth column (p95 4.1 m)",
             "float32 storage grid: 0.21-0.42 m lat / 0.57-0.80 m lng resolution floor",
             "stored bearings carry +0.72 deg bias, handled at score time only",
-            "per-type heights are fitted on GSV car geometry; a non-GSV rig needs a per-source "
-            "base height with these per-type offsets kept (Stage 3)",
+            "per-type heights are fitted on GSV car geometry; a non-GSV rig needs a "
+            "per-source base height (the falsification's per-sequence recipe)",
         ],
     }
     return summary
