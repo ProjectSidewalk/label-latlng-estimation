@@ -10,7 +10,7 @@ In August 2026 the repo grew from a frozen methods record into a full investigat
 input data was reconstructed from production, the analysis was ported to Python, the estimator
 was refit as geometry, and the refit was validated against imagery and human clicks it was
 never fit on. The result ships as `final_coefficients` in
-`data/modern-truth-summary.json` ([#3](https://github.com/ProjectSidewalk/label-latlng-estimation/issues/3)).
+`data/modern-truth-summary.json` ([#3](https://github.com/ProjectSidewalk/label-latlng-estimation/issues/3)), and has since been checked against an anchor that uses no depth data at all ([#7](https://github.com/ProjectSidewalk/label-latlng-estimation/issues/7)).
 
 **Contents:** [The estimator](#the-published-estimator-unchanged-in-production-since-2021) ·
 [Quick start](#quick-start) · [Reports](#reports--the-2026-investigation) ·
@@ -43,7 +43,8 @@ see the notes in `python/label_latlng_estimation.py`. The 2026-08-07 refit picke
 pip install -r python/requirements.txt
 python python/run_analysis.py        # seven-estimator comparison + coefficients vs published 2021
 python python/run_distance_refit.py  # the issue #3 candidate ladder vs the 2021 distance half
-pytest                               # 357 tests — see "Tests" below
+python python/run_triangulation.py build  # the issue #7 depth-free bearing anchor
+pytest                               # 407 tests — see "Tests" below
 ```
 
 The R side needs R ≥ 4.x with readr/dplyr/tidyr/tibble/purrr/geosphere/lme4/jsonlite
@@ -69,6 +70,7 @@ ones before it.
 | 2026-08-07 | [Mapillary falsification](reports/2026-08-07-mapillary-falsification.md) | The refit scored on imagery it was never fit on: compression gone on both Mapillary cities, most of the height residual traced to per-rig camera heights that transfer to held-out sites, and the deployed model's clovis compression measured at −1.40 m/m. ([#3](https://github.com/ProjectSidewalk/label-latlng-estimation/issues/3) Stage 3) |
 | 2026-08-07 | [GBM ceiling](reports/2026-08-07-gbm-ceiling.md) | A LightGBM benchmark on the same split bounds the refit from above: how much accuracy the closed form leaves on the table. ([#6](https://github.com/ProjectSidewalk/label-latlng-estimation/issues/6)) |
 | 2026-08-07 | [Modern truth](reports/2026-08-07-modern-truth.md) | The absolute check self-consistency provably could not do: post-2021 human clicks in 49 city schemas against fresh GSV depth. The blend's geometry survives; its *scale* is the era fleet's (a uniform +13%, traced to the era payloads' pinned 2.50 m ground planes), one held-out constant fixes it to 0.41 m median error, and the decision — a single flat 2.34 m height, tradeoffs in §9 — ships as `final_coefficients`. Stored positions are the estimator's own echo in both front-end eras. ([#3](https://github.com/ProjectSidewalk/label-latlng-estimation/issues/3) close-out) |
+| 2026-08-08 | [Bearing-only triangulation](reports/2026-08-08-bearing-only-triangulation.md) | The external anchor `final_coefficients` asked for: object positions fixed by the *intersection of bearings*, using no vertical model, no camera height, no depth and no resolution. The ecosystem's assumed 2.6 m camera height is too tall on all six auto-labeler runs; the shipped 2.3412 m is bracketed to ~8% but not confirmed more tightly; and depth and bearings disagree by 13.8% at identical pixels - recorded as open. ([#7](https://github.com/ProjectSidewalk/label-latlng-estimation/issues/7)) |
 
 ## Repository layout
 
@@ -99,6 +101,7 @@ JSON to `data/`:
 | `run_mapillary_falsification.py` (+ `mapillary_falsification.py`) | Stage 3 falsification: Mapillary metadata census, #4766's scale-free diagnostics reimplemented, per-sequence camera heights. | [#3](https://github.com/ProjectSidewalk/label-latlng-estimation/issues/3) |
 | `run_gbm_ceiling.py` | Benchmark-only LightGBM accuracy ceiling on the refit's split. | [#6](https://github.com/ProjectSidewalk/label-latlng-estimation/issues/6) |
 | `run_modern_truth.py` (+ `modern_truth.py`) | The absolute close-out: stratified modern-label sample, heading-centred depth lookup (shared bit-for-bit with the legacy path via `depth_validation.classify_depth_pixel`), era-aware circularity guard, held-out remedy check. | [#3](https://github.com/ProjectSidewalk/label-latlng-estimation/issues/3) |
+| `run_triangulation.py` (+ `triangulation.py`, `triangulation_depth.py`) | Bearing-only triangulation: leave-one-out ray intersection as a depth-free range truth, its error budget and bias validation, and the same-pixel depth cross-check. | [#7](https://github.com/ProjectSidewalk/label-latlng-estimation/issues/7) |
 
 ## Data & provenance
 
@@ -116,13 +119,15 @@ provenance, caveats, and regeneration instructions: **`data/MANIFEST.md`**.
 | `data/depth-validation-*` | Depth validation evidence ([#9](https://github.com/ProjectSidewalk/label-latlng-estimation/issues/9)): **verbatim GSV imagery tiles** for 60 panoramas, per-panorama yaw and road-link bearings, registration scores, label hits, cross-vintage pairs, and the hand occlusion adjudication. Everything after `fetch` replays these bytes offline. |
 | `data/falsification-*` | Stage 3 inputs ([#3](https://github.com/ProjectSidewalk/label-latlng-estimation/issues/3)): the auto-labeler's fused multi-view curb-ramp sites and per-pano Mapillary/GSV metadata for six cities — gitignored artifacts in their home repo, preserved here. |
 | `data/modern-truth-*` | Modern-truth evidence ([#3](https://github.com/ProjectSidewalk/label-latlng-estimation/issues/3)): verbatim depth payloads for 1,106 modern panos, per-pano fetch status + camera-height QC, and per-label truth/gates/predictions/guard for 3,286 post-2021 labels. Everything after `fetch` replays these bytes offline. |
+| `data/triangulation-*` | Bearing-only triangulation evidence ([#7](https://github.com/ProjectSidewalk/label-latlng-estimation/issues/7)): the summary over six auto-labeler runs, plus verbatim depth payloads for 480 GSV panoramas and their fetch metadata for the same-pixel anchor. Everything after `fetch` replays these bytes offline. |
 | `data/*-summary.json` | Each investigation's machine-readable results, including `final_coefficients` in `modern-truth-summary.json`. |
 
 ## Tests
 
-`pytest` runs 357 tests: data contract, R↔Python equivalence, findings-vs-published, depth
+`pytest` runs 407 tests: data contract, R↔Python equivalence, findings-vs-published, depth
 pilot, depth validation, coordinate conventions, POV inversion, distance refit (findings +
-invariants), Mapillary falsification, GBM ceiling, and modern truth (findings + invariants).
+invariants), Mapillary falsification, GBM ceiling, modern truth (findings + invariants), and
+bearing-only triangulation (estimator invariants on known geometry + findings).
 
 `RUN_SLOW=1 pytest` additionally re-derives the coordinate-conventions evidence in full from
 the committed bytes.

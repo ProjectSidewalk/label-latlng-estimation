@@ -270,3 +270,43 @@ value on a 250-pano slice by default, and on **all** 3,286 rows under `RUN_SLOW=
 (`pytest tests/test_modern_truth_findings.py`), so the artifacts and the code cannot drift
 apart. **Regenerate by intent only**: a refetch observes a different GSV state (panos die,
 depth planes get re-measured), so drift in a fresh fetch is expected rather than an error.
+
+---
+
+# Bearing-only triangulation artifacts (issue #7)
+
+Written by `python python/run_triangulation.py`. The inputs are the **already-committed**
+auto-labeler multi-view runs (`falsification-sites-*.jsonl.gz`, `falsification-panos-*.csv.gz`,
+imported for issue #3 Stage 3) — no new extraction and no database. The only stage that
+touches the network is `fetch`, and its payloads are committed verbatim, so `build`,
+the figures and the tests all replay from a fresh checkout.
+
+- `triangulation-summary.json` — the findings `tests/test_triangulation_findings.py` locks:
+  per-run applicability and intersection-angle conditioning, the converged noise budget
+  (σ_bearing / σ_panorama-position, with the iteration trace and the binned regression the
+  split comes from), synthetic **and** real-geometry bias validation, the implied camera
+  height by two estimators with site-bootstrap intervals, the robustness sweeps (conditioning
+  gate, site size, fuse-gate selection probe, and the **rejected** camera-tilt hypothesis
+  under all four sign conventions), every distance model scored against the triangulated
+  truth, split-half precision, the fitted global bearing offset, cross-source absolute rig
+  heights, and the same-pixel `depth_anchor`.
+- `triangulation-depth-payloads.jsonl.gz` — verbatim base64 depth payloads for 480 GSV
+  panoramas (120 per GSV run; ~3 MB), fetched 2026-08-08. Same preservation principle as the
+  depth-pilot and modern-truth payloads: the evidence, not a pointer to it.
+- `triangulation-depth-panos.csv.gz` — one row per attempted pano (480, all `ok`): fetch
+  status plus the fresh photometa pose, position and capture date. The position column is
+  what proves the auto-labeler's stored panorama positions are Google's own (median drift
+  0.000 m), which is load-bearing because triangulated range scales with the baseline.
+
+**What the truth here does and does not depend on.** It uses panorama positions, panorama
+headings and the horizontal detection angle. It uses **no** vertical click angle, camera
+height, ground-plane assumption, depth data or panorama resolution — that is the entire
+point, and `test_declared_inputs_exclude_every_vertical_and_depth_quantity` pins the claim.
+Two properties are inherited rather than established here and are stated in the report:
+cluster membership comes from the auto-labeler's fuse (which assumed a 2.6 m camera height;
+the selection probe tests whether that biased the answer, and finds it did not), and the
+whole chain still rests on the camera positions Google and Mapillary report — a weaker
+dependency than trusting their depth planes, but not none.
+
+Regenerating: `python python/run_triangulation.py build --write` (~12 min, offline). A
+re-`fetch` observes a different GSV state and will drift; regenerate by intent only.
