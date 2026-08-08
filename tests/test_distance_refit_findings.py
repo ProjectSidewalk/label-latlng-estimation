@@ -324,14 +324,16 @@ def test_quantile_bands(summary):
     assert q["interval_width_p90_m"] == pytest.approx(3.48, abs=0.05)
 
 
-def test_provisional_coefficients_carry_the_conventions(summary):
+def test_era_fit_coefficients_carry_the_conventions(summary):
     """Rider 2: the hand-off states its geodesy, keeps the era constant out of production,
-    and stays provisional until Stage 3 (Mapillary) runs."""
-    pc = summary["provisional_coefficients"]
+    and — since the modern-truth check — points at the calibrated production constants
+    rather than presenting its own scale as shippable."""
+    pc = summary["era_fit_coefficients"]
     assert pc["rung"] == CHOSEN
     assert "spherical" in pc["geodesy"]
     assert "NOT" in pc["heading"]
-    assert "Stage 3" in pc["status"]
+    assert "modern-truth" in pc["status"] and "final_coefficients" in pc["status"]
+    assert "pinned-plane" in pc["status"]  # names the scale artifact, not just a pointer
     assert len(pc["caveats"]) >= 5
     # the hand-off states what it can answer at worst and what to do with an unfamiliar type,
     # so neither has to be rediscovered by whoever ports this to JS

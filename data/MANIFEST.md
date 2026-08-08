@@ -63,9 +63,11 @@ Columns 23–27 are extras that did not exist in the 2021 CSVs, appended so both
    marks pre-column DC rows) — that is what makes the cleaned row count land exactly on the
    published 395,147. The `python/diagnose_post_cutoff.py` diagnostic shows those 5,606 rows
    are **not** echoes of the deployed estimator (median residual ~1.2 m from the published
-   formula, matching genuine depth rows; ~1% within 5 cm), so they appear to be real depth
-   estimates that continued to trickle in during 2021 — usable as bonus data in a refit, just
-   not part of the 2021 dataset.
+   formula, matching genuine depth rows; ~1% within 5 cm) — they are genuine depth. An earlier
+   revision of this caveat called them "usable as bonus data in a refit"; **they are not**:
+   verified against production 2026-08-07, every one of them is a `tutorial` label (the
+   tutorial runs on a fixed legacy pano, which is why depth kept serving it), so the standard
+   tutorial filter removes them from any analysis population.
 2. `tutorial` uses the 2021-faithful definition (the boolean flag; DC via
    `gsv_onboarding_pano` membership). Today's application additionally excludes labels by
    tutorial street edge, which the 2021 analysis did not.
@@ -210,8 +212,10 @@ its headline numbers in-process from the same code. Contents: the full rung × l
 depression domain, which is what the report's near-horizon claims mean, as opposed to the largest
 one the thin near-horizon test slice happened to draw), the fixed-frame and #4765 apply-path
 checks, near-horizon and click-noise robustness tables, per-type camera heights with the pooled
-fallback for unseen label types, riders, and the provisional production coefficients (Stage 3,
-the Mapillary falsification, remains open).
+fallback for unseen label types, riders, and the era fit's coefficient hand-off
+(`era_fit_coefficients` — final in *form*, but its height scale carries the era truth's
+pinned-plane artifact; the calibrated production constants live in
+`modern-truth-summary.json` `final_coefficients`).
 
 Two test files stand behind it: `tests/test_distance_refit_findings.py` locks what this run
 measured, and `tests/test_distance_refit_contract.py` locks what must hold for *any* refit —
@@ -251,8 +255,10 @@ exactly) scored against fresh GSV depth fetched by pano id on 2026-08-07. Report
 - `modern-truth-summary.json` — the findings `tests/test_modern_truth_findings.py` locks:
   fetch/gate censuses (including realized per-type label delivery against the quota, and how
   many cities cleared the by-city minimum), the two-era guard, the model matrix by stratum,
-  near-horizon bins, implied per-type heights, frame-control sweep, and the held-out remedy
-  check with the deployed model scored on the same rows.
+  near-horizon bins, implied per-type heights, frame-control sweep, the held-out remedy check
+  with the deployed model scored on the same rows, and **`final_coefficients`** — the Stage 4
+  production constants (the blend form with one flat 2.34 m height; decision and tradeoffs in
+  the report's §9).
 
 The sampling frame is the (uncommitted, regenerable) all-city extraction under
 `modern-extraction/` — `scripts/extraction/extract-modern-labels.sh` rebuilds it read-only
