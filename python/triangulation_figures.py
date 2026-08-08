@@ -288,14 +288,15 @@ def fig27(s):
 
     handles = [plt.Line2D([], [], color=MODEL_COLOR[k], lw=2, marker="o", ms=4,
                           label=MODEL_LABEL[k]) for k in MODEL_LABEL]
-    axes[0][ncol - 1].legend(handles=handles, loc="upper right", fontsize=8)
+    fig.legend(handles=handles, loc="upper right", ncol=2, fontsize=8.5,
+               bbox_to_anchor=(0.995, 0.982), columnspacing=1.4)
 
     _title(fig, "Fig 27 - Every distance model against triangulated truth",
            "Signed error (predicted minus triangulated) by true range. A model with the "
            "right shape is flat; one that is compressive slopes down. This is an absolute "
            "score on imagery none of these models was fit on - including the two Mapillary "
-           "cities, where no depth ground truth exists or ever will.")
-    fig.tight_layout(rect=[0, 0, 1, 1 - 0.09 / nrow])
+           "cities, where no depth ground truth exists or ever will.", wrap=78)
+    fig.tight_layout(rect=[0, 0, 1, 1 - 0.66 / (3.5 * nrow)])
     _save(fig, "fig27-triangulation-model-scoring.png")
 
 
