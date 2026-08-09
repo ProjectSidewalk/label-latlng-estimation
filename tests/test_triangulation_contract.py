@@ -114,6 +114,27 @@ def test_triangulate_is_translation_and_rotation_equivariant():
     assert np.allclose(pt, t_rot, atol=1e-8)
 
 
+def test_triangulate_is_blind_to_radial_aim_error():
+    """Pull every camera's aim point toward that camera along its own line of sight; no
+    bearing changes, so the intersection must still land on the true object position.
+
+    This is the geometric fact behind §8's candidate analysis: a detector centroid that
+    sits on the *near face* of a fixed-size object (displaced radially toward each viewer)
+    cannot bias the triangulated range at all — it can only enter the same-pixel
+    comparison through the depth side, whose raster is read at the displaced point.
+    """
+    pe = np.array([-10.0, -4.0, 3.0, 9.0])
+    pn = np.array([0.0, 1.0, -1.0, 0.5])
+    target = np.array([1.0, 12.0])
+    bearings = []
+    for x, y in zip(pe, pn):
+        v = target - np.array([x, y])
+        aim = target - 0.6 * v / np.hypot(*v)     # 0.6 m toward this camera: a ramp face
+        bearings.append(_bearings_to(np.array([x]), np.array([y]), *aim)[0])
+    pt, _ = tg.triangulate(pe, pn, np.array(bearings))
+    assert np.allclose(pt, target, atol=1e-9)
+
+
 def test_triangulate_rejects_parallel_rays():
     """Perfectly collinear rays are singular and must raise, not return a silent answer."""
     with pytest.raises(np.linalg.LinAlgError):
@@ -364,6 +385,18 @@ def test_blend_matches_the_shipped_parameters_and_is_continuous():
     dep = np.array([15.0, 30.0, 45.0])
     assert np.allclose(tg._blend(dep, p["height_m"], a),
                        p["height_m"] / np.tan(np.radians(dep)))
+
+
+def test_blend_matches_the_canonical_refit_implementation():
+    """``tg._blend`` is a reimplementation of ``distance_refit._predict_blend`` (the third
+    C1 blend in the repo); the two must agree everywhere, or the scoring here silently
+    drifts from the refit the shipped parameters came out of."""
+    import distance_refit as dr
+    p = tg.load_shipped_blend()["params"]
+    dep = np.linspace(-5.0, 60.0, 1301)
+    ours = tg._blend(dep, p["height_m"], p["blend_deg"])
+    theirs = dr._predict_blend({"height_m": p["height_m"], "blend_deg": p["blend_deg"]}, dep)
+    assert np.allclose(ours, theirs, atol=1e-9)
 
 
 def test_cotangent_reproduces_the_stored_auto_labeler_range():

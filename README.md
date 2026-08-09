@@ -44,7 +44,7 @@ pip install -r python/requirements.txt
 python python/run_analysis.py        # seven-estimator comparison + coefficients vs published 2021
 python python/run_distance_refit.py  # the issue #3 candidate ladder vs the 2021 distance half
 python python/run_triangulation.py build  # the issue #7 depth-free bearing anchor
-pytest                               # 407 tests — see "Tests" below
+pytest                               # 412 tests — see "Tests" below
 ```
 
 The R side needs R ≥ 4.x with readr/dplyr/tidyr/tibble/purrr/geosphere/lme4/jsonlite
@@ -70,7 +70,7 @@ ones before it.
 | 2026-08-07 | [Mapillary falsification](reports/2026-08-07-mapillary-falsification.md) | The refit scored on imagery it was never fit on: compression gone on both Mapillary cities, most of the height residual traced to per-rig camera heights that transfer to held-out sites, and the deployed model's clovis compression measured at −1.40 m/m. ([#3](https://github.com/ProjectSidewalk/label-latlng-estimation/issues/3) Stage 3) |
 | 2026-08-07 | [GBM ceiling](reports/2026-08-07-gbm-ceiling.md) | A LightGBM benchmark on the same split bounds the refit from above: how much accuracy the closed form leaves on the table. ([#6](https://github.com/ProjectSidewalk/label-latlng-estimation/issues/6)) |
 | 2026-08-07 | [Modern truth](reports/2026-08-07-modern-truth.md) | The absolute check self-consistency provably could not do: post-2021 human clicks in 49 city schemas against fresh GSV depth. The blend's geometry survives; its *scale* is the era fleet's (a uniform +13%, traced to the era payloads' pinned 2.50 m ground planes), one held-out constant fixes it to 0.41 m median error, and the decision — a single flat 2.34 m height, tradeoffs in §9 — ships as `final_coefficients`. Stored positions are the estimator's own echo in both front-end eras. ([#3](https://github.com/ProjectSidewalk/label-latlng-estimation/issues/3) close-out) |
-| 2026-08-08 | [Bearing-only triangulation](reports/2026-08-08-bearing-only-triangulation.md) | The external anchor `final_coefficients` asked for: object positions fixed by the *intersection of bearings*, using no vertical model, no camera height, no depth and no resolution. The ecosystem's assumed 2.6 m camera height is too tall on all six auto-labeler runs; the shipped 2.3412 m is bracketed to ~8% but not confirmed more tightly; and depth and bearings disagree by 13.8% at identical pixels - recorded as open. ([#7](https://github.com/ProjectSidewalk/label-latlng-estimation/issues/7)) |
+| 2026-08-08 | [Bearing-only triangulation](reports/2026-08-08-bearing-only-triangulation.md) | The external anchor `final_coefficients` asked for: object positions fixed by the *intersection of bearings*, using no vertical model, no camera height, no depth and no resolution. The ecosystem's assumed 2.6 m camera height is too tall on all six auto-labeler runs; the shipped 2.3412 m is bracketed to ~8% but not confirmed more tightly; and depth and bearings disagree by 13.8% at identical pixels — a multiplicative gap whose shape points at the depth model's scale, not adjudicated absolutely. ([#7](https://github.com/ProjectSidewalk/label-latlng-estimation/issues/7)) |
 
 ## Repository layout
 
@@ -124,7 +124,7 @@ provenance, caveats, and regeneration instructions: **`data/MANIFEST.md`**.
 
 ## Tests
 
-`pytest` runs 407 tests: data contract, R↔Python equivalence, findings-vs-published, depth
+`pytest` runs 412 tests: data contract, R↔Python equivalence, findings-vs-published, depth
 pilot, depth validation, coordinate conventions, POV inversion, distance refit (findings +
 invariants), Mapillary falsification, GBM ceiling, modern truth (findings + invariants), and
 bearing-only triangulation (estimator invariants on known geometry + findings).

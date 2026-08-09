@@ -105,9 +105,9 @@ def fig24(s):
                         for r in runs], fontsize=8.5)
     ax.set_ylim(-1.15, len(runs) - 0.35)
     ax.set_xlim(shipped - 0.06, assumed + 0.055)
-    ax.text(shipped, -1.08, f"shipped 2.341 m\n(depth, human clicks)", color=C_SHIPPED,
+    ax.text(shipped, -1.08, "shipped 2.341 m\n(depth, human clicks)", color=C_SHIPPED,
             fontsize=8.5, va="bottom", ha="center")
-    ax.text(assumed, -1.08, f"assumed 2.6 m\n(auto-labeler)", color=C_ASSUMED,
+    ax.text(assumed, -1.08, "assumed 2.6 m\n(auto-labeler)", color=C_ASSUMED,
             fontsize=8.5, va="bottom", ha="center")
     ax.text(0.5, -0.055, "every run lands inside this band", transform=ax.transAxes,
             ha="center", va="top", fontsize=8.5, color=MUTED)

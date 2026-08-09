@@ -232,8 +232,6 @@ def site_frame(run: str, data_dir: Path = DATA_DIR,
     lng0 = float(f["pano_lng"].mean())
     f["pano_e"], f["pano_n"] = local_en(f["pano_lat"], f["pano_lng"], lat0, lng0)
     f["bearing_deg"] = f["bearing_deg"] + bearing_offset_deg
-    f.attrs["origin"] = (lat0, lng0)
-    f.attrs["run"] = run
 
     weighted = sigma_bearing_deg is not None and sigma_pos_m is not None
     if weighted:
@@ -409,6 +407,10 @@ def fit_noise(run: str, data_dir: Path = DATA_DIR, frame: pd.DataFrame | None = 
         f = site_frame(run, data_dir, sigma_bearing_deg=sb, sigma_pos_m=max(sp, 1e-3),
                        frame=base)
         vc = variance_components(f)
+        if vc["sigma_bearing_deg"] is None:
+            # the reweighted population fell below the decomposition's minimum (possible
+            # on a tiny --runs subset); keep the last resolvable sigmas rather than crash
+            break
         nb = damping * sb + (1 - damping) * vc["sigma_bearing_deg"]
         npos = damping * sp + (1 - damping) * vc["sigma_pos_m"]
         trace.append({"iter": i, "sigma_bearing_deg": round(nb, 4),
@@ -561,16 +563,18 @@ def parametric_bootstrap_bias(f: pd.DataFrame, sigma_bearing_deg: float,
 
     recovered, recovered_raw = [], []
     for _ in range(n_rep):
+        # the depression a camera at exactly height_m would see at the true range
+        dep = np.degrees(np.arctan2(height_m, r_true))
         sim = pd.DataFrame({
             "site_id": base["site_id"].to_numpy(),
             "pano_id": base["pano_id"].to_numpy(),
             "pano_e": pe0 + rng.normal(0, sigma_pos_m, m),
             "pano_n": pn0 + rng.normal(0, sigma_pos_m, m),
             "bearing_deg": true_bearing + rng.normal(0, sigma_bearing_deg, m),
-            # the depression a camera at exactly height_m would see at the true range
-            "dep_deg": np.degrees(np.arctan2(height_m, r_true)),
-            "range_m": r_true,
-            "pano_height": base["pano_height"].to_numpy(),
+            "dep_deg": dep,
+            # exactly what the real frame carries — the 2.6 m cotangent range, not r_true —
+            # so the weights below are the same function of the observables as site_frame's
+            "range_m": COT_CAMERA_HEIGHT / np.tan(np.radians(dep)),
         })
         sim["w"] = 1.0 / ((sim["range_m"] * np.radians(sigma_bearing_deg)) ** 2
                           + sigma_pos_m ** 2)
@@ -714,10 +718,13 @@ def fit_model_scale(f: pd.DataFrame, sigma_gate_m: float = SIGMA_R_GATE_M,
 
     ks = np.arange(lo, hi + 1e-9, step)
     losses = np.array([scatter(k) for k in ks])
-    k_best = float(ks[int(np.argmin(losses))])
+    i_best = int(np.argmin(losses))
+    k_best = float(ks[i_best])
     out = {
         "n": int(len(d)), "n_sites": int(d["site_id"].nunique()), "loss": loss,
         "k": round(k_best, 4),
+        # a minimum pinned to the sweep boundary is a clamp, not an estimate
+        "at_grid_edge": bool(i_best in (0, len(ks) - 1)),
         "height_m": round(k_best * COT_CAMERA_HEIGHT, 4),
         "scatter_at_best_m": round(float(losses.min()), 4),
         "scatter_at_2p6_m": round(float(scatter(1.0)), 4),

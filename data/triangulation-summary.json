@@ -500,6 +500,72 @@
         "n": 2595
       }
     },
+    "gap_by_capture_year": {
+      "(2007, 2016]": {
+        "median_diff_m": 1.6429,
+        "median_ratio": 1.2316,
+        "n": 96
+      },
+      "(2016, 2020]": {
+        "median_diff_m": 1.1056,
+        "median_ratio": 1.1312,
+        "n": 153
+      },
+      "(2020, 2023]": {
+        "median_diff_m": 1.1055,
+        "median_ratio": 1.1356,
+        "n": 293
+      },
+      "(2023, 2027]": {
+        "median_diff_m": 1.1518,
+        "median_ratio": 1.1352,
+        "n": 2097
+      }
+    },
+    "gap_range_profile": {
+      "(1, 5]": {
+        "median_diff_m": 0.3559,
+        "median_h_depth_m": 2.266,
+        "median_r_tri_m": 4.262,
+        "median_ratio": 1.0937,
+        "n": 169
+      },
+      "(11, 14]": {
+        "median_diff_m": 1.2896,
+        "median_h_depth_m": 2.2871,
+        "median_r_tri_m": 12.432,
+        "median_ratio": 1.1179,
+        "n": 458
+      },
+      "(14, 18]": {
+        "median_diff_m": 1.7691,
+        "median_h_depth_m": 2.2666,
+        "median_r_tri_m": 15.988,
+        "median_ratio": 1.1313,
+        "n": 570
+      },
+      "(18, 25]": {
+        "median_diff_m": 2.4413,
+        "median_h_depth_m": 2.2621,
+        "median_r_tri_m": 19.641,
+        "median_ratio": 1.1339,
+        "n": 318
+      },
+      "(5, 8]": {
+        "median_diff_m": 0.8053,
+        "median_h_depth_m": 2.2653,
+        "median_r_tri_m": 6.745,
+        "median_ratio": 1.1455,
+        "n": 537
+      },
+      "(8, 11]": {
+        "median_diff_m": 1.2695,
+        "median_h_depth_m": 2.2708,
+        "median_r_tri_m": 9.478,
+        "median_ratio": 1.1624,
+        "n": 583
+      }
+    },
     "height_gap_m": 0.253,
     "implied_height_from_bearings_m": 2.5237,
     "implied_height_from_depth_m": 2.2708,
@@ -514,6 +580,34 @@
       "median_signed_diff_m": -1.1608,
       "n": 2639,
       "p90_abs_diff_m": 3.3775
+    },
+    "position_drift": {
+      "max_m": 0.1017,
+      "median_m": 0.0,
+      "n": 480,
+      "p99_m": 0.0786,
+      "per_run": {
+        "bend": {
+          "max_m": 0.0914,
+          "median_m": 0.0,
+          "n": 120
+        },
+        "gainesville": {
+          "max_m": 0.0782,
+          "median_m": 0.0,
+          "n": 120
+        },
+        "paterson": {
+          "max_m": 0.0445,
+          "median_m": 0.0,
+          "n": 120
+        },
+        "sao_paulo": {
+          "max_m": 0.1017,
+          "median_m": 0.0,
+          "n": 120
+        }
+      }
     },
     "runs": {
       "bend": {
@@ -2501,6 +2595,7 @@
   },
   "scale_global": {
     "bend": {
+      "at_grid_edge": false,
       "ci95_m": [
         2.457,
         2.457
@@ -2514,6 +2609,7 @@
       "scatter_at_best_m": 1.1496
     },
     "clovis": {
+      "at_grid_edge": false,
       "ci95_m": [
         2.353,
         2.392
@@ -2527,6 +2623,7 @@
       "scatter_at_best_m": 1.7991
     },
     "gainesville": {
+      "at_grid_edge": false,
       "ci95_m": [
         2.327,
         2.353
@@ -2540,6 +2637,7 @@
       "scatter_at_best_m": 1.4215
     },
     "paterson": {
+      "at_grid_edge": false,
       "ci95_m": [
         2.366,
         2.379
@@ -2553,6 +2651,7 @@
       "scatter_at_best_m": 1.3714
     },
     "richmond": {
+      "at_grid_edge": false,
       "ci95_m": [
         2.457,
         2.509
@@ -2566,6 +2665,7 @@
       "scatter_at_best_m": 2.1485
     },
     "sao_paulo": {
+      "at_grid_edge": false,
       "ci95_m": [
         2.548,
         2.574
@@ -2868,12 +2968,12 @@
   "validation": {
     "real_geometry": {
       "bend": {
-        "bias_factor": 0.9998,
+        "bias_factor": 0.9997,
         "bias_factor_uncorrected": 1.0001,
         "n_rep": 3,
         "n_sites": 9413,
         "planted_height_m": 2.341219672825709,
-        "recovered_height_m": 2.3407,
+        "recovered_height_m": 2.3406,
         "recovered_height_uncorrected_m": 2.3415
       },
       "clovis": {
@@ -2882,44 +2982,44 @@
         "n_rep": 3,
         "n_sites": 995,
         "planted_height_m": 2.341219672825709,
-        "recovered_height_m": 2.3402,
-        "recovered_height_uncorrected_m": 2.341
+        "recovered_height_m": 2.3401,
+        "recovered_height_uncorrected_m": 2.3409
       },
       "gainesville": {
-        "bias_factor": 0.9984,
+        "bias_factor": 0.998,
         "bias_factor_uncorrected": 1.0002,
         "n_rep": 3,
         "n_sites": 2048,
         "planted_height_m": 2.341219672825709,
-        "recovered_height_m": 2.3375,
-        "recovered_height_uncorrected_m": 2.3418
+        "recovered_height_m": 2.3365,
+        "recovered_height_uncorrected_m": 2.3416
       },
       "paterson": {
-        "bias_factor": 0.9997,
-        "bias_factor_uncorrected": 1.0005,
+        "bias_factor": 0.9996,
+        "bias_factor_uncorrected": 1.0004,
         "n_rep": 3,
         "n_sites": 4458,
         "planted_height_m": 2.341219672825709,
-        "recovered_height_m": 2.3406,
+        "recovered_height_m": 2.3403,
         "recovered_height_uncorrected_m": 2.3423
       },
       "richmond": {
-        "bias_factor": 0.9997,
-        "bias_factor_uncorrected": 1.0009,
+        "bias_factor": 0.9996,
+        "bias_factor_uncorrected": 1.001,
         "n_rep": 3,
         "n_sites": 844,
         "planted_height_m": 2.341219672825709,
-        "recovered_height_m": 2.3405,
+        "recovered_height_m": 2.3403,
         "recovered_height_uncorrected_m": 2.3434
       },
       "sao_paulo": {
-        "bias_factor": 0.9989,
-        "bias_factor_uncorrected": 1.0004,
+        "bias_factor": 0.9986,
+        "bias_factor_uncorrected": 1.0003,
         "n_rep": 3,
         "n_sites": 2602,
         "planted_height_m": 2.341219672825709,
-        "recovered_height_m": 2.3386,
-        "recovered_height_uncorrected_m": 2.3421
+        "recovered_height_m": 2.3378,
+        "recovered_height_uncorrected_m": 2.342
       }
     },
     "synthetic": {

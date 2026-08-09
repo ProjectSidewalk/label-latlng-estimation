@@ -34,8 +34,9 @@ import triangulation_depth as td  # noqa: E402
 OUT = tg.DATA_DIR / "triangulation-summary.json"
 
 #: The modern GSV rig height measured from depth on human clicks (modern-truth close-out).
-#: Used only as a *comparand* — nothing here is fit to it.
-SHIPPED_HEIGHT_M = 2.341219672825709
+#: Used only as a *comparand* — nothing here is fit to it. Read from the shipped artifact
+#: itself so the two cannot drift; the findings tests pin the value.
+SHIPPED_HEIGHT_M = float(tg.load_shipped_blend()["params"]["height_m"])
 
 
 def build(data_dir: Path = tg.DATA_DIR, runs=None, quick: bool = False) -> dict:
@@ -105,9 +106,10 @@ def build(data_dir: Path = tg.DATA_DIR, runs=None, quick: bool = False) -> dict:
 
     out["cross_source"] = cross_source(out, runs)
     # The depth anchor replays committed payloads; absent them it records why it is absent
-    # rather than silently omitting the section.
+    # rather than silently omitting the section. It reuses the frames fitted above rather
+    # than fitting its own.
     print("  depth anchor ...", flush=True)
-    out["depth_anchor"] = td.anchor(data_dir)
+    out["depth_anchor"] = td.anchor(data_dir, frames=frames)
     return out
 
 

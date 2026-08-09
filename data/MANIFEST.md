@@ -289,14 +289,17 @@ the figures and the tests all replay from a fresh checkout.
   gate, site size, fuse-gate selection probe, and the **rejected** camera-tilt hypothesis
   under all four sign conventions), every distance model scored against the triangulated
   truth, split-half precision, the fitted global bearing offset, cross-source absolute rig
-  heights, and the same-pixel `depth_anchor`.
+  heights, and the same-pixel `depth_anchor` — including the position-drift check (stored
+  vs freshly fetched panorama positions) and the gap's range and capture-era profiles,
+  which separate the §8 candidates by shape.
 - `triangulation-depth-payloads.jsonl.gz` — verbatim base64 depth payloads for 480 GSV
   panoramas (120 per GSV run; ~3 MB), fetched 2026-08-08. Same preservation principle as the
   depth-pilot and modern-truth payloads: the evidence, not a pointer to it.
 - `triangulation-depth-panos.csv.gz` — one row per attempted pano (480, all `ok`): fetch
   status plus the fresh photometa pose, position and capture date. The position column is
   what proves the auto-labeler's stored panorama positions are Google's own (median drift
-  0.000 m), which is load-bearing because triangulated range scales with the baseline.
+  0.000 m, computed as `depth_anchor.position_drift` and locked by the findings tests),
+  which is load-bearing because triangulated range scales with the baseline.
 
 **What the truth here does and does not depend on.** It uses panorama positions, panorama
 headings and the horizontal detection angle. It uses **no** vertical click angle, camera

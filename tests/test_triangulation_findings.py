@@ -117,6 +117,8 @@ def test_the_assumed_2p6_m_is_too_tall_on_every_run(summary):
         # and the fit is genuinely better than assuming 2.6 m
         g = summary["scale_global"][run]
         assert g["scatter_at_best_m"] < g["scatter_at_2p6_m"], run
+        # an interior minimum: none of these k values is a clamp at the sweep boundary
+        assert g["at_grid_edge"] is False, run
 
 
 def test_implied_heights_bracket_the_shipped_constant(summary):
@@ -317,6 +319,56 @@ def test_row_flipped_depth_lookup_finds_no_ground(summary):
     c = summary["depth_anchor"]["frame_controls"]
     assert c["row_flip"]["n"] < 0.05 * c["identity"]["n"]
     assert c["rotate_180"]["n"] < 0.05 * c["identity"]["n"]
+
+
+def test_panorama_positions_did_not_drift(summary):
+    """The baselines triangulation stands on are the positions Google serves today: the
+    auto-labeler's stored panorama positions match the freshly fetched photometa
+    essentially exactly. Load-bearing — triangulated range scales with the baseline —
+    and previously asserted only in prose; now computed and locked."""
+    d = summary["depth_anchor"]["position_drift"]
+    assert d["n"] == 480
+    assert set(d["per_run"]) == set(GSV)
+    assert d["median_m"] <= 0.001
+    assert d["max_m"] < 0.15
+
+
+def test_the_gap_is_a_scale_not_an_offset(summary):
+    """The discriminating shape test between §8's two candidate causes.
+
+    A detector centroid displaced toward the camera on a fixed-size object is an
+    *additive* error: capped by the object's extent (a curb ramp is ~1-2 m), so the ratio
+    would fall toward 1 with range — and the contract tests prove a radial displacement
+    cannot bias the triangulated range at all. A depth model restating its own assumed
+    ground plane is a *multiplicative* error: flat ratio, metre gap growing in proportion.
+    The data is unambiguous: the ratio is flat from 4 m to 20 m while the metre gap grows
+    to well past any ramp's extent, and the depth side's implied height is the same
+    constant in every bin. What survives of the centroid candidate is only a
+    proportional-in-range displacement, which a fixed-size object cannot produce."""
+    prof = summary["depth_anchor"]["gap_range_profile"]
+    rows = sorted(prof.values(), key=lambda v: v["median_r_tri_m"])
+    assert len(rows) >= 5
+    ratios = [v["median_ratio"] for v in rows]
+    diffs = [v["median_diff_m"] for v in rows]
+    assert all(1.05 < x < 1.20 for x in ratios), ratios
+    assert max(ratios) - min(ratios) < 0.08, ratios
+    assert diffs[0] < 0.6 and diffs[-1] > 2.0, diffs
+    heights = [v["median_h_depth_m"] for v in rows]
+    assert max(heights) - min(heights) < 0.05, heights
+
+
+def test_the_gap_is_not_an_old_imagery_artifact(summary):
+    """The bulk of the anchor sample is modern imagery and carries the full gap, so the
+    13.8% is not inherited from the era-dependent plane scale the modern-truth close-out
+    documented on old payloads (though the small pre-2016 stratum does run hotter, in the
+    direction that history predicts)."""
+    by = summary["depth_anchor"]["gap_by_capture_year"]
+    assert by, "era stratification missing"
+    bulk = max(by.values(), key=lambda v: v["n"])
+    pooled = summary["depth_anchor"]["pooled"]["median_ratio_tri_over_depth"]
+    assert bulk["n"] > 1000
+    assert bulk["median_ratio"] == pytest.approx(pooled, abs=0.02)
+    assert all(v["median_ratio"] > 1.05 for v in by.values())
 
 
 # ======================================================================================

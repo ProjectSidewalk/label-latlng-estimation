@@ -53,6 +53,7 @@ import pandas as pd
 
 import depth_validation as dv
 import gsv_depth as gd
+import mapillary_falsification as mf
 import modern_truth as mt
 import triangulation as tg
 
@@ -183,13 +184,23 @@ def depth_ranges(run: str, frame: pd.DataFrame, payloads: dict[str, str],
     return pd.DataFrame(rows)
 
 
-def anchor(data_dir: Path = DATA_DIR, runs=None) -> dict:
+def _comparable(c: pd.DataFrame) -> pd.DataFrame:
+    """The population both systems can score: a ground-family depth hit with a real range."""
+    return c[(c["hit_class"].isin(("ground", "terrain"))) & np.isfinite(c["r_depth"])
+             & (c["r_depth"] > 1.0)]
+
+
+def anchor(data_dir: Path = DATA_DIR, runs=None,
+           frames: dict[str, pd.DataFrame] | None = None) -> dict:
     """Compare the two independent range measurements, and solve for the click offset.
 
     Because both measurements are taken at the *same* pixel, the detector's click offset
     ``delta`` is common to them and cancels in their ratio. What the ratio measures is
     therefore the disagreement between Google's modelled ground surface and the bearings'
     intersection — with no free parameters anywhere.
+
+    ``frames`` accepts the noise-fitted member frames the build already holds, keyed by
+    run; any run not supplied is fitted here (several minutes each on the larger cities).
     """
     payloads = load_payloads()
     panos = load_panos()
@@ -198,17 +209,18 @@ def anchor(data_dir: Path = DATA_DIR, runs=None) -> dict:
                 "note": "run `python python/run_triangulation.py fetch` first"}
 
     runs = list(runs or tg.GSV_RUNS)
-    frames, per_run, pooled = {}, {}, []
+    fitted, per_run, pooled = {}, {}, []
     for run in runs:
         if run not in set(panos["run"]):
             continue
-        fit = tg.fit_noise(run, data_dir)
-        frames[run] = fit["frame"]
-        cmp_ = depth_ranges(run, fit["frame"], payloads, panos)
+        f = (frames or {}).get(run)
+        if f is None:
+            f = tg.fit_noise(run, data_dir)["frame"]
+        fitted[run] = f
+        cmp_ = depth_ranges(run, f, payloads, panos)
         if cmp_.empty:
             continue
-        g = cmp_[(cmp_["hit_class"].isin(("ground", "terrain")))
-                 & np.isfinite(cmp_["r_depth"]) & (cmp_["r_depth"] > 1.0)]
+        g = _comparable(cmp_)
         if len(g) < 30:
             continue
         pooled.append(g)
@@ -218,16 +230,21 @@ def anchor(data_dir: Path = DATA_DIR, runs=None) -> dict:
         return {"available": False, "note": "no comparable detections"}
     allg = pd.concat(pooled, ignore_index=True)
 
-    # frame controls: the right lookup must beat every wrong one, decisively
-    controls = {}
-    for control in FRAME_CONTROLS:
-        parts = [depth_ranges(r, frames[r], payloads, panos, control) for r in frames]
-        parts = [p for p in parts if not p.empty]
-        if not parts:
-            continue
-        c = pd.concat(parts, ignore_index=True)
-        c = c[(c["hit_class"].isin(("ground", "terrain"))) & np.isfinite(c["r_depth"])
-              & (c["r_depth"] > 1.0)]
+    # Frame controls: the right lookup must beat every wrong one, decisively. The identity
+    # numbers are read off the population above, and the wrong frames re-run the lookup
+    # over exactly the runs that population came from, so all four are scored on one
+    # footing (previously the controls pooled every fetched run while the headline gated
+    # per run at n >= 30 — identical today, divergent the day a run slips under the gate).
+    controls = {"identity": {
+        "n": int(len(allg)),
+        "median_abs_disagreement_m": round(
+            float(np.median(np.abs(allg["r_depth"] - allg["r_tri"]))), 4),
+    }}
+    for control in FRAME_CONTROLS[1:]:
+        parts = [depth_ranges(r, fitted[r], payloads, panos, control) for r in per_run]
+        parts = [_comparable(p) for p in parts if not p.empty]
+        c = (pd.concat(parts, ignore_index=True) if parts
+             else pd.DataFrame(columns=["r_depth", "r_tri"]))
         if len(c) < 30:
             controls[control] = {"n": int(len(c))}
             continue
@@ -255,7 +272,96 @@ def anchor(data_dir: Path = DATA_DIR, runs=None) -> dict:
             "detector's click offset cancels: the gap is a disagreement between the two "
             "measurement systems, not a convention difference."),
         "frame_controls": controls,
+        "position_drift": position_drift(panos, data_dir),
+        "gap_range_profile": gap_range_profile(allg),
+        "gap_by_capture_year": gap_by_capture_year(allg, panos),
     }
+
+
+def position_drift(panos: pd.DataFrame, data_dir: Path = DATA_DIR) -> dict:
+    """Stored auto-labeler panorama positions against the freshly fetched photometa.
+
+    Load-bearing for the whole report: triangulated range scales with the baseline, so if
+    Google had re-estimated these camera positions between the auto-labeler's crawl and
+    this fetch, every range would silently inherit the drift. Computed and committed here
+    (and locked by the findings tests) rather than asserted in prose.
+    """
+    per_run, alld = {}, []
+    for run, g in panos.groupby("run"):
+        g = g[np.isfinite(g["lat"]) & np.isfinite(g["lng"])]
+        stored = mf.load_panos(run, data_dir)[["pano_id", "lat", "lng"]]
+        m = g.merge(stored, on="pano_id", suffixes=("_fresh", "_stored"))
+        if m.empty:
+            continue
+        lat0, lng0 = float(m["lat_stored"].mean()), float(m["lng_stored"].mean())
+        e1, n1 = tg.local_en(m["lat_fresh"], m["lng_fresh"], lat0, lng0)
+        e0, n0 = tg.local_en(m["lat_stored"], m["lng_stored"], lat0, lng0)
+        d = np.hypot(e1 - e0, n1 - n0)
+        alld.append(d)
+        per_run[run] = {"n": int(len(m)), "median_m": round(float(np.median(d)), 4),
+                        "max_m": round(float(np.max(d)), 4)}
+    if not alld:
+        return {}
+    d = np.concatenate(alld)
+    return {"per_run": per_run, "n": int(len(d)),
+            "median_m": round(float(np.median(d)), 4),
+            "p99_m": round(float(np.percentile(d, 99)), 4),
+            "max_m": round(float(np.max(d)), 4)}
+
+
+#: Range-bin edges for the gap profile. The last committed bin (18, 25] still carries
+#: ~300 detections; past 25 m the population is single digits and says nothing.
+GAP_RANGE_BINS = (1, 5, 8, 11, 14, 18, 25)
+
+
+def gap_range_profile(allg: pd.DataFrame, bins=GAP_RANGE_BINS, min_n: int = 40) -> dict:
+    """Is the disagreement a constant *ratio* or a constant *offset*? They differ in range.
+
+    The two candidate causes predict different shapes. A depth model whose scale is set by
+    its own assumed ground plane is wrong *multiplicatively*: the ratio is flat in range
+    and the metre gap grows in proportion. A detector centroid displaced toward the camera
+    on a fixed-size object is wrong *additively*: the metre gap is capped by the object's
+    extent and the ratio must fall toward 1 as range grows. (A radial displacement also
+    leaves every bearing unchanged — the contract tests prove the ray intersection cannot
+    see it — so it could only enter this comparison through the depth side's pixel.)
+    """
+    k = pd.cut(allg["r_tri"], bins=list(bins))
+    out = {}
+    for key, g in allg.groupby(k, observed=True):
+        if len(g) < min_n:
+            continue
+        out[str(key)] = {
+            "n": int(len(g)),
+            "median_r_tri_m": round(float(np.median(g["r_tri"])), 3),
+            "median_diff_m": round(float(np.median(g["r_tri"] - g["r_depth"])), 4),
+            "median_ratio": round(float(np.median(g["r_tri"] / g["r_depth"])), 4),
+            "median_h_depth_m": round(float(np.median(
+                g["r_depth"] * np.tan(np.radians(g["dep_deg"])))), 4),
+        }
+    return out
+
+
+def gap_by_capture_year(allg: pd.DataFrame, panos: pd.DataFrame,
+                        edges=(2007, 2016, 2020, 2023, 2027), min_n: int = 40) -> dict:
+    """The gap stratified by capture era.
+
+    The modern-truth close-out measured the depth planes' scale to be era-dependent (the
+    era fleet's pinned 2.50 m planes). If the same pathology drove this gap, the ratio
+    would track capture era; a flat profile across the modern bulk says the headline is
+    not an old-imagery artifact.
+    """
+    e = allg.merge(panos[["pano_id", "capture_year"]], on="pano_id", how="left")
+    k = pd.cut(e["capture_year"], bins=list(edges))
+    out = {}
+    for key, g in e.groupby(k, observed=True):
+        if len(g) < min_n:
+            continue
+        out[str(key)] = {
+            "n": int(len(g)),
+            "median_ratio": round(float(np.median(g["r_tri"] / g["r_depth"])), 4),
+            "median_diff_m": round(float(np.median(g["r_tri"] - g["r_depth"])), 4),
+        }
+    return out
 
 
 def _pair_stats(g: pd.DataFrame) -> dict:

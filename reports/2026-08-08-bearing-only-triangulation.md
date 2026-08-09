@@ -10,7 +10,7 @@ follows the [modern-truth close-out](2026-08-07-modern-truth.md) and the
 | **0.898–0.984** | the scale on the ecosystem's assumed 2.6 m camera height that makes multi-view ray geometry self-consistent — **below 1.0 on all six runs**, GSV and Mapillary alike. Measured with no vertical model, no camera height, no ground plane, no depth and no panorama resolution |
 | **2.335 / 2.376 m** | what the bearings imply for gainesville and paterson, against the shipped **2.3412 m**. bend (2.460) and sao_paulo (2.558) sit 5–9% above. The anchor confirms the shipped scale to ~8% and rejects 2.6 m outright — it does not confirm it to better than that |
 | **0.998–1.000** | planted-height recovery: plant a known height on each run's *own* site geometry, re-apply that run's *measured* noise, run the identical pipeline. It returns what it was given, so the spread above is rigs and detector, not method |
-| **1.138** | triangulated range ÷ depth-derived range **at the very same detection pixels** (2,639 detections, 480 panoramas, four GSV cities). Systematic — it survives every quality gate. **The central open finding of this report** |
+| **1.138** | triangulated range ÷ depth-derived range **at the very same detection pixels** (2,639 detections, 480 panoramas, four GSV cities). Systematic — it survives every quality gate — and **multiplicative**: the ratio is flat in range while the metre gap grows to 2.4 m, which excludes a fixed-extent detector-centroid cause and is the signature of a depth model restating its own ground plane. **The central finding of this report; not adjudicated absolutely (§8)** |
 | **4.80 m → 1.47 m** | clovis median distance error, deployed 2021 linear model → shipped blend, scored against a truth built from bearings. [#4765](https://github.com/ProjectSidewalk/SidewalkWebpage/issues/4765)'s sign-flip measured against *absolute* truth on imagery no candidate was fit on |
 
 > Reproduce every number here. Only `fetch` touches the network, and its 480 depth
@@ -60,7 +60,8 @@ and much weaker dependency, but not zero. §11 keeps that distinction.
   implied height climbs with depression angle on every run. Four candidate explanations
   are tested; three are killed, one survives and is not resolved here.
 - **Q5 — Do bearings and depth agree on the same pixels?** → **§8**: they disagree by
-  13.8%, consistently, in all four GSV cities.
+  13.8%, consistently, in all four GSV cities — and the disagreement is *multiplicative*
+  (a scale, not a click offset), which points at the depth side.
 - **Q6 — How do the distance models score against this truth?** → **§9**: absolute scoring
   on imagery none of them was fit on, *including the two Mapillary cities where no depth
   ground truth exists or ever will*.
@@ -115,7 +116,7 @@ Four checks, in increasing strength (`tests/test_triangulation_contract.py`):
 That last row is the one the report stands on. For each run: take every site, plant an
 object at its own leave-one-out consensus, give it depressions implied by a *known* camera
 height, corrupt the panorama positions and bearings at that run's *measured* noise, and run
-the identical pipeline. It returns 2.338–2.341 m from a planted 2.3412 m.
+the identical pipeline. It returns 2.337–2.341 m from a planted 2.3412 m.
 
 So the estimator does not manufacture camera height, and the between-run spread in §6 is
 not an artefact of the method. Fig 24 (right panel) shows this alongside the headline.
@@ -276,18 +277,51 @@ Two supporting facts:
   human clicks, in the direction a detector clicking slightly above ground contact predicts.
 - **The panorama positions are not the culprit.** The auto-labeler's stored positions match
   freshly fetched photometa to a median of **0.000 m** (max 0.10 m) across all 480, so the
-  baselines triangulation stands on are the ones Google serves.
+  baselines triangulation stands on are the ones Google serves. Computed as
+  `depth_anchor.position_drift` and locked by the findings tests.
 
-Which side is wrong is **not resolved here**, and it would be dishonest to pick one. Two
-candidates, neither excluded:
+**A discriminating test: is the gap a ratio or an offset?** The two candidate causes make
+different predictions across range. A detector centroid that corresponds to different
+physical points from different viewpoints is an *additive* error on a fixed-size object —
+capped by the object's extent (a curb ramp is ~1–2 m), and a *radial* displacement (each
+camera seeing the object's near face) cannot bias the triangulated range at all, because
+it leaves every bearing unchanged (proven as a contract test). A depth model whose scale
+is set by its own assumed ground plane is a *multiplicative* error: flat ratio, metre gap
+growing in proportion. `depth_anchor.gap_range_profile`:
 
-1. Google's depth is a coarse *model* — terrain plus building footprints, near-flat-earth
-   under a label ([depth validation](2026-08-06-depth-validation.md)). Its implied height
-   is close to a restatement of its own assumed ground plane, so it is weaker evidence
-   about *shape* than its precision suggests.
-2. The detector's centroid may correspond to different physical points from different
-   viewpoints, which would bias a ray intersection in a way that per-observation residual
-   gating cannot see.
+| r_tri bin | n | median gap (m) | ratio | depth-implied height (m) |
+|---|---:|---:|---:|---:|
+| 1–5 m | 169 | 0.36 | 1.094 | 2.266 |
+| 5–8 m | 537 | 0.81 | 1.145 | 2.265 |
+| 8–11 m | 583 | 1.27 | 1.162 | 2.271 |
+| 11–14 m | 458 | 1.29 | 1.118 | 2.287 |
+| 14–18 m | 570 | 1.77 | 1.131 | 2.267 |
+| 18–25 m | 318 | 2.44 | 1.134 | 2.262 |
+
+The shape is unambiguous: the **ratio is flat** from 4 m to 20 m while the **metre gap
+grows in proportion to range**, ending at 2.4 m — larger than the objects themselves. The
+depth side's implied height is the same constant in every bin, which is exactly what a
+near-flat model restating its own plane produces (its flatness is a property of the model,
+not evidence about the world). A capture-era cut (`depth_anchor.gap_by_capture_year`) adds
+that the modern bulk of the sample carries the full ratio while the small pre-2016 stratum
+runs hotter — the direction the modern-truth close-out's era-dependent plane scale
+predicts — so the gap is not inherited from old imagery either.
+
+The two candidates are therefore no longer symmetric:
+
+1. **Google's depth is a coarse *model*** — terrain plus building footprints,
+   near-flat-earth under a label ([depth validation](2026-08-06-depth-validation.md)) —
+   and **every shape diagnostic lands on this side**: multiplicative gap, flat per-bin
+   implied height, era dependence in the direction already documented.
+2. **A viewpoint-dependent detector centroid** survives only in a proportional-in-range
+   form: the centroid would have to sit ~12% of the range in front of the object at
+   *every* range — 2.4 m at 20 m, beyond the physical object — and its fixed-extent form
+   is excluded twice over, by the flat ratio and by the bearings' proven blindness to
+   radial displacement.
+
+What this stops short of is absolute adjudication: there is no survey-grade control
+anywhere in this chain, and "the depth model's scale is ~14% short at these pixels" is an
+inference from shape, not from an external standard.
 
 **A caveat on the frame controls.** The wrong-frame controls behave asymmetrically: a
 row-flipped or 180°-rotated lookup reads sky and loses >99.9% of the population, but the
@@ -362,6 +396,10 @@ It does not replace the closed form; it audits it.
 - **Three candidate artefacts killed**: fuse-gate selection, norm-convexity under-correction,
   and uncorrected camera tilt. The tilt result is the surprising one and is committed as a
   negative finding rather than dropped.
+- **The §8 gap is multiplicative, not additive** — a scale disagreement, not a
+  click-geometry offset. The fixed-extent detector-centroid explanation is excluded on
+  shape (flat ratio), on magnitude (a 2.4 m gap at 20 m exceeds the objects), and on
+  geometry (bearings are provably blind to radial displacement).
 - **Pose quality is per-rig, not per-source**, contradicting the natural assumption.
 
 **Deliberately not claimed:**
@@ -369,9 +407,11 @@ It does not replace the closed form; it audits it.
 - **That the shipped 2.3412 m is confirmed to better than ~8%.** bend and sao_paulo sit
   5–9% above it and that spread is real. A single pooled number would be a nicer headline
   and would misrepresent the evidence.
-- **That either measurement system is right where they disagree.** §8's 13.8% is stated as
-  an open finding with two live candidate causes. It bounds the error of both at once,
-  which is what #7 promised; it does not adjudicate.
+- **That either measurement system is absolutely right where they disagree.** §8's shape
+  evidence — flat ratio, proportional metre gap, flat depth-side implied height — points
+  at the depth model's scale, and the fixed-extent centroid alternative is excluded. But
+  that is an inference from shape, not from an external standard; absolute adjudication
+  still needs survey truth.
 - **That the flat-ground cotangent's shape is vindicated.** §7 says the opposite — the
   implied height climbs with depression on every run — with the surviving explanation being
   a detector-borne click convention that bearings alone cannot separate from camera height.
