@@ -146,8 +146,10 @@ thead th{background:var(--tile); font-weight:600}
   detection by assuming a 2.6&nbsp;m camera — drag the height slider and watch the placements
   slide along their rays: they only converge at one height, and it is not 2.6. Violet squares
   are Google's depth read at the very same detection pixels — consistently short of the
-  intersection. Drag to orbit, scroll to zoom, <b>click a camera to see its actual pixels</b>
-  below — juxtaposed with Google's depth model rendered over the identical window.</p>
+  intersection. The scene stands on the site's own aerial imagery, so the corner the rays
+  converge on is a corner you can see. Drag to orbit, scroll to zoom, <b>click a camera to
+  see its actual pixels</b> below — juxtaposed with Google's depth model rendered over the
+  identical window. Cameras carry the letters they have in the strip beneath.</p>
   <div class="panel survey">
     <canvas id="scene" aria-label="Interactive 3D view of a triangulated site"></canvas>
     <div class="rail">
@@ -170,6 +172,8 @@ thead th{background:var(--tile); font-weight:600}
           <span class="key" style="background:var(--bearing); border-radius:0; transform:rotate(45deg)"></span>triangulated intersection</label>
         <label class="toggle"><input type="checkbox" id="t-depth" checked>
           <span class="key" style="background:var(--depth); border-radius:0"></span>depth reads (same pixels)</label>
+        <label class="toggle"><input type="checkbox" id="t-base" checked>
+          <span class="key" style="background:linear-gradient(135deg,#6b7a5e,#9a8f7a); border-radius:0"></span>aerial ground</label>
       </div>
       <div class="readout" id="sitemeta"></div>
     </div>
@@ -265,17 +269,23 @@ thead th{background:var(--tile); font-weight:600}
       <div class="h">Page imagery</div>
       <div>The camera-view crops in Sheet 01 are GSV tile windows around each detection,
         fetched 2026-08-09 — context for human eyes; no number anywhere depends on them.
-        The depth panels beside them replay the committed payloads.</div>
+        The depth panels beside them replay the committed payloads. The aerial ground
+        under the scene is New&nbsp;Jersey's 2020 orthoimagery (0.11&nbsp;m/px), cut to the
+        very tangent plane the geometry is solved on — a different year to the panoramas,
+        and orientation only.</div>
       <div>Committed verbatim: <code>data/triangulation-viz-tiles.jsonl.gz</code>
-        (192 tiles, 18 panoramas, ~7&nbsp;MB) plus
+        (192 tiles, 18 panoramas, ~7&nbsp;MB) ·
         <code>data/triangulation-viz-depth-payloads.jsonl.gz</code>, the depth top-up for
-        cameras outside the §8 sample — so every view carries its model panel. This page
-        itself is committed as <code>figures/triangulation-conclusions.html</code> and
-        rebuilt offline by <code>python/triangulation_viz.py build</code>.</div>
+        cameras outside the §8 sample — so every view carries its model panel ·
+        <code>data/triangulation-viz-basemaps.jsonl.gz</code> (40 aerial tiles, 6 sites,
+        ~300&nbsp;KB). This page itself is committed as
+        <code>figures/triangulation-conclusions.html</code> and rebuilt offline by
+        <code>python/triangulation_viz.py build</code>.</div>
       <div class="h">Not used</div>
       <div>No production database. No imagery pixels — inputs are detection centroids the
-        auto-labeler produced upstream; raw tiles are not fetched or needed here. No vertical
-        click angle, camera height, ground plane, depth data or resolution enters the estimator.</div>
+        auto-labeler produced upstream; the estimator neither fetches nor needs a tile, aerial
+        or street-level. No vertical click angle, camera height, ground plane, depth data or
+        resolution enters it.</div>
       <div>Depth enters only as the <em>thing being audited</em> in Sheet 03.</div>
       <div class="h">Outputs</div>
       <div>Findings in <code>data/triangulation-summary.json</code>, figures 24–27, report
@@ -332,8 +342,84 @@ const scene = (() => {
   const cv = document.getElementById('scene');
   const ctx = cv.getContext('2d');
   const st = { yaw:-2.35, pitch:0.62, dist:46, site:0, h:2.6,
-               rays:true, tri:true, depth:true, hover:null };
+               rays:true, tri:true, depth:true, base:true, sel:0, hover:null };
   const site = () => DATA.sites[st.site];
+
+  /* The aerial patch is cut for exactly the +/-ext metres the grid covers, north-up, so
+     it lies on the ground plane by construction — the work is getting it through this
+     projection. Canvas 2D offers only affine transforms while the projection is
+     projective, and the usual dodge (a mesh of small quads, each affine) does not
+     survive here: the divide varies fourteen-fold across the scene, so even 16x16 cells
+     land ~60 px out at the default view.
+
+     So the ground is inverse-mapped instead — every canvas pixel unprojected onto the
+     plane and sampled — which is exact. It is also cheap, because the divide depends
+     only on the depth coordinate y1 and so is *constant along a screen row*: per row it
+     costs one reciprocal, and per pixel two adds. The result is cached against the view,
+     so orbiting recomputes it but the height slider and the toggles do not. */
+  const groundTex = {};
+  const gWork = document.createElement('canvas');
+  const gWorkCtx = gWork.getContext('2d', {willReadFrequently:true});
+  const gLayer = document.createElement('canvas');
+  const gLayerCtx = gLayer.getContext('2d');
+  let gKey = '', gBuf = null;
+
+  function groundTexture(s){
+    if(!s.ground) return null;
+    let g = groundTex[s.site];
+    if(g === undefined){
+      groundTex[s.site] = g = {data:null};
+      const im = new Image();
+      im.onload = () => {
+        gWork.width = im.naturalWidth; gWork.height = im.naturalHeight;
+        gWorkCtx.drawImage(im, 0, 0);
+        g.data = gWorkCtx.getImageData(0, 0, gWork.width, gWork.height).data;
+        g.w = gWork.width; g.h = gWork.height;
+        gKey = ''; draw();
+      };
+      im.src = s.ground.img;
+    }
+    return g.data ? g : null;
+  }
+  function drawGround(s, ext, r){
+    const g = groundTexture(s); if(!g) return false;
+    const Wp = Math.max(1, Math.round(r.width)), Hp = Math.max(1, Math.round(r.height));
+    const key = [s.site, st.yaw, st.pitch, st.dist, Wp, Hp].join('|');
+    if(key !== gKey){
+      gKey = key;
+      if(gLayer.width !== Wp || gLayer.height !== Hp){
+        gLayer.width = Wp; gLayer.height = Hp; gBuf = null;
+      }
+      if(!gBuf) gBuf = gLayerCtx.createImageData(Wp, Hp);
+      const o = gBuf.data, src = g.data, tw = g.w, th = g.h;
+      o.fill(0);
+      const c = Math.cos(st.yaw), sn = Math.sin(st.yaw);
+      const cp = Math.cos(st.pitch), sp = Math.sin(st.pitch);
+      const f = Math.min(r.width, 640)*0.92, X0 = r.width/2, Y0 = r.height*0.56;
+      const inv = 1/(2*ext);
+      for(let py=0; py<Hp; py++){
+        // y1 is the depth coordinate; it, and hence the divide, depend only on the row.
+        // den <= 0 is at or past the horizon — nothing of the plane is there.
+        const Q = Y0 - (py + 0.5), den = 0.42*Q*cp + sp*f;
+        if(den <= 1e-6) continue;
+        const y1 = -0.42*Q*st.dist/den, k = 0.42*st.dist*sp/den;
+        const de = c*k, dn = -sn*k, P0 = (0.5 - X0)*k;
+        let e = c*P0 + sn*y1, n = -sn*P0 + c*y1, p = py*Wp*4;
+        for(let px=0; px<Wp; px++, e+=de, n+=dn, p+=4){
+          const u = (e+ext)*inv; if(u < 0 || u >= 1) continue;
+          const v = (ext-n)*inv; if(v < 0 || v >= 1) continue;
+          const q = ((((v*th)|0)*tw) + ((u*tw)|0))*4;
+          o[p] = src[q]; o[p+1] = src[q+1]; o[p+2] = src[q+2]; o[p+3] = 255;
+        }
+      }
+      gLayerCtx.putImageData(gBuf, 0, 0);
+    }
+    ctx.save();
+    ctx.globalAlpha = 0.86;
+    ctx.drawImage(gLayer, 0, 0, r.width, r.height);
+    ctx.restore();
+    return true;
+  }
 
   function resize(){
     const r = cv.getBoundingClientRect(), dpr = devicePixelRatio || 1;
@@ -361,18 +447,18 @@ const scene = (() => {
     const T = tokens(), r = cv.getBoundingClientRect();
     ctx.clearRect(0,0,r.width,r.height);
     const s = site(); if(!s) return;
-    const ext = Math.ceil(Math.max(...s.members.map(m => Math.hypot(m.e,m.n) + 4), 12)/2)*2;
+    const ext = s.ext;            // the extent the aerial patch was cut for — see build()
 
-    // ground grid
+    // aerial ground, then the 2 m grid over it (held back where there is imagery to read)
+    const onImagery = st.base && drawGround(s, ext, r);
+    ctx.globalAlpha = onImagery ? 0.3 : 1;
     for(let g=-ext; g<=ext; g+=2){
       line(project(g,-ext,0), project(g,ext,0), T.grid, 1);
       line(project(-ext,g,0), project(ext,g,0), T.grid, 1);
     }
-    // compass: north arrow
-    const nA = project(-ext+1.2, ext-3.2, 0), nB = project(-ext+1.2, ext-0.8, 0);
-    line(nA, nB, T.muted, 1.4);
-    ctx.fillStyle = T.muted; ctx.font = '11px Consolas,monospace';
-    ctx.fillText('N', nB.x - 4, nB.y - 5);
+    ctx.globalAlpha = 1;
+    // a halo under the geometry keeps it legible over photography
+    const halo = (a, b, w) => { if(onImagery) line(a, b, T.panel, w); };
 
     const hits = [];  // hover + click targets
     const h = st.h;
@@ -388,6 +474,7 @@ const scene = (() => {
     if(st.rays) for(const m of members){
       const top = project(m.e, m.n, h);
       const hit = project(m.place.e, m.place.n, 0);
+      halo(top, hit, 3.6);
       line(top, hit, T.bearing, 1.4);
       // faint continuation to triangulated range
       const te = m.e + m.ux*m.rt, tn = m.n + m.uy*m.rt;
@@ -397,10 +484,21 @@ const scene = (() => {
     }
     members.forEach((m, mi) => {
       const base = project(m.e, m.n, 0), top = project(m.e, m.n, h);
-      line(base, top, T.ink, 2);
+      const on = mi === st.sel;                 // the camera whose pixels are shown below
+      halo(base, top, 4.5);
+      line(base, top, on ? T.bearing : T.ink, on ? 2.6 : 2);
       const p = top;
-      ctx.fillStyle = T.ink;
-      ctx.fillRect(p.x-3, p.y-3, 6, 6);
+      ctx.fillStyle = on ? T.bearing : T.ink;
+      ctx.fillRect(p.x-3.5, p.y-3.5, 7, 7);
+      if(onImagery){
+        ctx.strokeStyle = T.panel; ctx.lineWidth = 1.2;
+        ctx.strokeRect(p.x-3.5, p.y-3.5, 7, 7);
+      }
+      const lab = String.fromCharCode(97+mi);   // the same letter the strip below uses
+      ctx.font = (on ? 'bold ' : '') + '11.5px Consolas,monospace';
+      if(onImagery){ ctx.lineWidth = 3; ctx.strokeStyle = T.panel; ctx.strokeText(lab, p.x+7, p.y-5); }
+      ctx.fillStyle = on ? T.bearing : T.ink;
+      ctx.fillText(lab, p.x+7, p.y-5);
       hits.push({x:p.x, y:p.y, mi, html:
         `camera ${String.fromCharCode(97+mi)} · bearing ${fmt(m.b,1)}°, depression ${fmt(m.dep,2)}°<br>r_tri ${fmt(m.rt,2)} m` +
         (m.rd ? `<br>r_depth ${fmt(m.rd,2)} m (ratio ${fmt(m.rt/m.rd,3)})` : '') +
@@ -430,16 +528,52 @@ const scene = (() => {
       ctx.fillRect(-5.5,-5.5,11,11); ctx.strokeStyle = T.panel; ctx.lineWidth=1.8;
       ctx.strokeRect(-5.5,-5.5,11,11); ctx.restore();
       hits.push({x:p.x, y:p.y, html:'triangulated intersection (leave-one-out consensus)'});
-      ctx.fillStyle = T.muted; ctx.font = '11.5px "Segoe UI",sans-serif';
+      ctx.font = '11.5px "Segoe UI",sans-serif';
+      if(onImagery){ ctx.lineWidth = 3; ctx.strokeStyle = T.panel; ctx.strokeText('intersection', p.x + 10, p.y - 8); }
+      ctx.fillStyle = T.muted;
       ctx.fillText('intersection', p.x + 10, p.y - 8);
     }
     st.hits = hits;
 
-    // scale bar: 5 m along east at front edge
-    const a = project(ext-6, -ext+1.5, 0), b = project(ext-1, -ext+1.5, 0);
-    line(a, b, T.muted, 2);
-    ctx.fillStyle = T.muted; ctx.font = '11px Consolas,monospace';
-    ctx.fillText('5 m', (a.x+b.x)/2 - 10, a.y + 14);
+    /* Compass and scale bar live in screen space. Pinned to the ground — which is where
+       they were — they sat at the grid's far corners, and those project a few hundred
+       pixels off-canvas at the default view of every one of the six sites. */
+    const o = project(0,0,0), nd = project(0,1,0), ed = project(1,0,0);
+    let vx = nd.x - o.x, vy = nd.y - o.y;
+    const vl = Math.hypot(vx, vy) || 1; vx /= vl; vy /= vl;
+    const cx0 = r.width - 34, cy0 = 34, R = 13;
+    ctx.globalAlpha = 0.9;
+    ctx.fillStyle = T.panel; ctx.strokeStyle = T.line; ctx.lineWidth = 1;
+    ctx.beginPath(); ctx.arc(cx0, cy0, R+8, 0, 7); ctx.fill(); ctx.stroke();
+    ctx.globalAlpha = 1;
+    ctx.strokeStyle = T.muted; ctx.lineWidth = 1.5;
+    ctx.beginPath(); ctx.moveTo(cx0-vx*R, cy0-vy*R); ctx.lineTo(cx0+vx*R, cy0+vy*R); ctx.stroke();
+    ctx.fillStyle = T.ink;                     // arrowhead on the north end
+    ctx.beginPath();
+    ctx.moveTo(cx0+vx*R, cy0+vy*R);
+    ctx.lineTo(cx0+vx*(R-6) - vy*3.6, cy0+vy*(R-6) + vx*3.6);
+    ctx.lineTo(cx0+vx*(R-6) + vy*3.6, cy0+vy*(R-6) - vx*3.6);
+    ctx.closePath(); ctx.fill();
+    ctx.font = 'bold 10px Consolas,monospace'; ctx.textAlign = 'center';
+    ctx.fillText('N', cx0+vx*(R+8), cy0+vy*(R+8)+3.4);
+    ctx.textAlign = 'left';
+
+    // scale bar, from the ground scale at the scene centre — perspective means one bar
+    // cannot be right everywhere, so it says where it is right, and the grid is exact
+    const pxPerM = Math.hypot(ed.x-o.x, ed.y-o.y);
+    const L = [1,2,5,10,20,50].find(v => v*pxPerM >= 80) || 50;
+    const bx = 14, by = r.height - 24, bw = L*pxPerM;
+    const bar = () => { ctx.beginPath(); ctx.moveTo(bx, by-4); ctx.lineTo(bx, by);
+                        ctx.lineTo(bx+bw, by); ctx.lineTo(bx+bw, by-4); ctx.stroke(); };
+    const cap = L + ' m at centre · grid 2 m';
+    if(onImagery){
+      ctx.strokeStyle = T.panel; ctx.lineWidth = 4.5; bar();
+      ctx.lineWidth = 3; ctx.font = '10.5px Consolas,monospace';
+      ctx.strokeText(cap, bx, by + 13);
+    }
+    ctx.strokeStyle = T.muted; ctx.lineWidth = 2; bar();
+    ctx.fillStyle = T.muted; ctx.font = '10.5px Consolas,monospace';
+    ctx.fillText(cap, bx, by + 13);
   }
 
   /* interactions */
@@ -515,7 +649,8 @@ const scene = (() => {
     document.getElementById('sitemeta').innerHTML =
       `<b>Site ${String.fromCharCode(65+st.site)}</b> · ${s.run} · ${s.members.length} panoramas · ` +
       `${s.n_depth} depth reads · max intersection ${fmt(s.angle,0)}°<br>` +
-      `run's fitted height: <b class="mono">${fmt(s.height,3)} m</b>`;
+      `run's fitted height: <b class="mono">${fmt(s.height,3)} m</b>` +
+      (s.ground ? `<br>ground: <span class="mono">${s.ground.src}</span> aerial, z${s.ground.zoom}` : '');
   }
   function upd(){
     st.h = parseFloat(slider.value);
@@ -551,12 +686,13 @@ const scene = (() => {
     if(c && curveGeom) { c.setAttribute('x1', curveGeom.X(st.h)); c.setAttribute('x2', curveGeom.X(st.h)); }
   }
   slider.addEventListener('input', upd);
-  for(const id of ['rays','tri','depth']){
+  for(const id of ['rays','tri','depth','base']){
     document.getElementById('t-'+id).addEventListener('change', e => { st[id] = e.target.checked; draw(); });
   }
   addEventListener('resize', resize);
   meta(); curve(); upd(); resize();
-  return { redraw: () => { draw(); curve(); }, current: site };
+  return { redraw: () => { draw(); curve(); }, current: site,
+           setSel: i => { st.sel = i; draw(); } };
 })();
 
 /* ---------- SHEET 01: camera pixels gallery ---------- */
@@ -583,6 +719,7 @@ gallery = (() => {
     const s = scene.current(), T = tokens();
     sel = Math.max(0, Math.min(i, s.members.length - 1));
     const m = s.members[sel];
+    scene.setSel(sel);              // light this camera's pole up in the scene above
     img.src = m.img; overlay(ov, m, T);
     if(m.dimg){ dframe.style.display = ''; dimg.src = m.dimg; overlay(dov, m, T); }
     else { dframe.style.display = 'none'; }

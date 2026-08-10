@@ -7,10 +7,14 @@ with Google's depth model over the identical window, the per-run implied-height 
 and the §8 ratio-vs-offset adjudication. The page template lives next to this file
 (``triangulation_viz_template.html``); everything it displays comes from the repository.
 
-    python python/triangulation_viz.py fetch   # network: imagery tiles for the six sites
-                                               #   -> data/triangulation-viz-tiles.jsonl.gz
-    python python/triangulation_viz.py build   # offline (~7 min): crops, depth minis,
-                                               #   charts data -> figures/triangulation-conclusions.html
+    python python/triangulation_viz.py fetch           # network: imagery tiles for the
+                                                       #   six sites, the depth top-up and
+                                                       #   the aerial ground patches
+    python python/triangulation_viz.py fetch-basemaps  # network: aerial patches only,
+                                                       #   leaving the GSV bundles alone
+    python python/triangulation_viz.py build           # offline (~7 min): crops, depth
+                                                       #   minis, ground, charts data
+                                                       #   -> figures/triangulation-conclusions.html
 
 Per this repo's archival rule (CLAUDE.md): the tiles are committed verbatim, so ``build``
 and its page replay from a fresh checkout with no network. A re-``fetch`` observes a
@@ -49,6 +53,10 @@ TILES_BUNDLE = DATA_DIR / "triangulation-viz-tiles.jsonl.gz"
 #: bundle on purpose: the anchor population is locked by the findings tests and must not
 #: grow, while these bytes are page context whose pixels carry no committed r_depth.
 VIZ_PAYLOADS = DATA_DIR / "triangulation-viz-depth-payloads.jsonl.gz"
+#: Aerial tiles under each showcase site's ground plane — orientation context for the
+#: 3D scene, so a reader can see the corner the rays converge on. Like every other
+#: fetched byte here it is committed verbatim and carries no number.
+BASEMAPS = DATA_DIR / "triangulation-viz-basemaps.jsonl.gz"
 CACHE = DATA_DIR / "triangulation-viz-cache"
 TEMPLATE = Path(__file__).resolve().parent / "triangulation_viz_template.html"
 OUT_HTML = ROOT / "figures" / "triangulation-conclusions.html"
@@ -61,6 +69,27 @@ ZOOM, TILE, W, H = 3, 512, 4096, 2048
 COL_HALF = 32.0 / 360.0          # crop: +/-32 deg of azimuth around the detection
 ROW_LO, ROW_HI = 0.44, 0.80      # rows: elevation +10.8 deg .. -54 deg
 OUT_W = 440                      # crop resize width, px
+
+#: Aerial sources in preference order — (name, tile URL template, max zoom). The first
+#: that serves real imagery for a site wins, and which one did is recorded per site and
+#: named on the page. New Jersey's 2020 orthos are twice the ground resolution of Esri's
+#: World Imagery here (0.11 vs 0.23 m/px at this latitude) but are, of course, New
+#: Jersey only; World Imagery is the global fallback if the showcase run ever moves.
+BASEMAP_SOURCES = (
+    ("nj-orthos-2020",
+     "https://maps.nj.gov/arcgis/rest/services/Basemap/Orthos_Natural_2020_NJ_WM"
+     "/MapServer/tile/{z}/{y}/{x}", 20),
+    ("esri-world-imagery",
+     "https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery"
+     "/MapServer/tile/{z}/{y}/{x}", 19),
+)
+BASEMAP_HEADERS = {"User-Agent": "Mozilla/5.0 (label-latlng-estimation conclusions page)"}
+BASEMAP_TILE = 256               # web-mercator tile size, px
+BASEMAP_PX = 512                 # assembled patch, px per side
+#: Esri answers 200 with a uniform "map data not yet available" placeholder past its real
+#: zoom, so whether imagery exists has to be judged on the pixels, not the status code.
+#: The placeholder holds ~120 distinct colours; genuine tiles here hold 9,000–24,000.
+BASEMAP_MIN_COLOURS = 1000
 
 
 # ======================================================================================
@@ -174,11 +203,37 @@ def _members(f, cmp_):
             yield sid, m, n_depth, ang, depth_by, cf
 
 
-def fetch() -> dict:
-    """Fetch the tiles every crop needs and commit them verbatim. The only network stage."""
+def _fit_for_fetch() -> tuple:
     print(f"  [{VIZ_RUN}] fitting ...", flush=True)
     f = tg.fit_noise(VIZ_RUN)["frame"]
     cmp_ = td._comparable(td.depth_ranges(VIZ_RUN, f, td.load_payloads(), td.load_panos()))
+    return f, cmp_
+
+
+def _write_basemaps(bm: list) -> dict:
+    with gzip.open(BASEMAPS, "wt", encoding="utf-8", newline="\n") as fh:
+        for rec in bm:
+            fh.write(json.dumps(rec, sort_keys=True) + "\n")
+    return {"n_basemaps": len(bm),
+            "n_basemap_tiles": sum(len(r["tiles"]) for r in bm),
+            "basemap_sources": sorted({r["source"] for r in bm}),
+            "basemaps_bundle": str(BASEMAPS)}
+
+
+def fetch_basemaps_only() -> dict:
+    """Just the aerial patches, leaving the committed GSV bundles untouched.
+
+    Its own stage on purpose: those bundles are the evidence this page replays, and a
+    whole re-``fetch`` observes a different remote state, so adding ground context must
+    not be a reason to disturb them.
+    """
+    f, cmp_ = _fit_for_fetch()
+    return _write_basemaps(fetch_basemaps(f, cmp_, requests.Session(), _Throttle(0.12)))
+
+
+def fetch() -> dict:
+    """Fetch the tiles every crop needs and commit them verbatim. The only network stage."""
+    f, cmp_ = _fit_for_fetch()
     session = requests.Session()
     throttle = _Throttle(0.12)
     need = {}
@@ -210,9 +265,12 @@ def fetch() -> dict:
     with gzip.open(VIZ_PAYLOADS, "wt", encoding="utf-8", newline="\n") as fh:
         for p in vp:
             fh.write(json.dumps(p, sort_keys=True) + "\n")
-    return {"n_panos": len(need), "n_tiles": n, "bundle": str(TILES_BUNDLE),
-            "n_viz_payloads": len(vp), "n_missing": len(missing),
-            "payloads_bundle": str(VIZ_PAYLOADS)}
+
+    out = {"n_panos": len(need), "n_tiles": n, "bundle": str(TILES_BUNDLE),
+           "n_viz_payloads": len(vp), "n_missing": len(missing),
+           "payloads_bundle": str(VIZ_PAYLOADS)}
+    out.update(_write_basemaps(fetch_basemaps(f, cmp_, session, throttle)))
+    return out
 
 
 def load_tiles() -> dict:
@@ -261,7 +319,11 @@ def depth_crop(t_raster: np.ndarray, cf: float) -> Image.Image:
     """Google's modelled ray distance over the same heading-centred window (log 2-40 m)."""
     hd, wd = t_raster.shape
     ow = 220
-    oh = int(ow * (ROW_HI - ROW_LO) / (2 * COL_HALF) * 0.5) * 2
+    # Same aspect as the photo crop it sits beside: the window spans int(2*COL_HALF*W)
+    # equirect columns by (ROW_HI-ROW_LO)*H rows — and H = W/2, so it is very nearly
+    # square. Deriving it any other way (in azimuth/elevation fractions, say) drops or
+    # doubles that factor of two and the panel renders at the wrong height.
+    oh = int(ow * (int(ROW_HI * H) - int(ROW_LO * H)) / int(2 * COL_HALF * W))
     fx = (cf - COL_HALF + (np.arange(ow) + 0.5) / ow * 2 * COL_HALF) % 1.0
     fy = ROW_LO + (np.arange(oh) + 0.5) / oh * (ROW_HI - ROW_LO)
     cols = np.clip((fx * wd).astype(int), 0, wd - 1)
@@ -281,6 +343,121 @@ def _to_uri(img: Image.Image, fmt: str = "JPEG", q: int = 72) -> str:
 
 
 # ======================================================================================
+# Aerial basemap: one georeferenced patch per site, so the scene sits on real ground
+# ======================================================================================
+
+def _run_origin(f: "object") -> tuple[float, float]:
+    """The run's ENU origin (lat0, lng0), recovered by inverting :func:`tg.local_en`.
+
+    Read back from a row rather than recomputed as the mean of the frame's latitudes:
+    the mean is taken inside the fit, over whatever rows survived filtering there, so
+    only the inverse is guaranteed to name the origin the ``pano_e``/``pano_n`` in hand
+    were actually measured from.
+    """
+    r = f.iloc[0]
+    lat0 = float(r["pano_lat"]) - float(np.degrees(float(r["pano_n"]) / tg.EARTH_R))
+    lng0 = float(r["pano_lng"]) - float(np.degrees(
+        float(r["pano_e"]) / (tg.EARTH_R * np.cos(np.radians(lat0)))))
+    return lat0, lng0
+
+
+def site_ext_m(gg: "object", ce: float, cn: float) -> int:
+    """The scene's grid half-extent in metres. The page reads this back rather than
+    recomputing it, so the aerial texture and the geometry drawn on it cannot disagree."""
+    far = max(float(np.hypot(r.pano_e - ce, r.pano_n - cn)) for r in gg.itertuples())
+    return int(np.ceil(max(far + 4.0, 12.0) / 2.0) * 2)
+
+
+def _merc_px(lat: float, lng: float, zoom: int) -> tuple[float, float]:
+    """Web-Mercator global pixel coordinates at ``zoom``."""
+    n = BASEMAP_TILE * 2 ** zoom
+    s = np.sin(np.radians(lat))
+    return ((lng + 180.0) / 360.0 * n,
+            (0.5 - np.log((1.0 + s) / (1.0 - s)) / (4.0 * np.pi)) * n)
+
+
+def _patch_box(lat: float, lng: float, ext: float, zoom: int) -> tuple[float, float, float, float]:
+    """Global-pixel box of the ground square the scene draws — the ENU +/-``ext`` metres
+    the grid covers, carried through the very same tangent plane the geometry uses."""
+    n_lat, _ = tg.en_to_latlng(0.0, ext, lat, lng)
+    s_lat, _ = tg.en_to_latlng(0.0, -ext, lat, lng)
+    _, e_lng = tg.en_to_latlng(ext, 0.0, lat, lng)
+    _, w_lng = tg.en_to_latlng(-ext, 0.0, lat, lng)
+    x0, y0 = _merc_px(float(n_lat), float(w_lng), zoom)
+    x1, y1 = _merc_px(float(s_lat), float(e_lng), zoom)
+    return x0, y0, x1, y1
+
+
+def _is_imagery(jpg: bytes) -> bool:
+    a = np.asarray(Image.open(io.BytesIO(jpg)).convert("RGB")).reshape(-1, 3)
+    return len(np.unique(a, axis=0)) >= BASEMAP_MIN_COLOURS
+
+
+def fetch_basemaps(f: "object", cmp_: "object", session, throttle) -> list[dict]:
+    """Aerial tiles covering each showcase site's ground square, verbatim."""
+    lat0, lng0 = _run_origin(f)
+    out = []
+    for sid, gg, _, _, _ in pick_sites(f, cmp_):
+        ce, cn = float(gg["loo_e"].median()), float(gg["loo_n"].median())
+        ext = site_ext_m(gg, ce, cn)
+        lat, lng = (float(v) for v in tg.en_to_latlng(ce, cn, lat0, lng0))
+        for name, url, zoom in BASEMAP_SOURCES:
+            x0, y0, x1, y1 = _patch_box(lat, lng, ext, zoom)
+            tiles, ok = [], True
+            for tx in range(int(x0 // BASEMAP_TILE), int(x1 // BASEMAP_TILE) + 1):
+                for ty in range(int(y0 // BASEMAP_TILE), int(y1 // BASEMAP_TILE) + 1):
+                    throttle.wait()
+                    r = session.get(url.format(z=zoom, x=tx, y=ty),
+                                    headers=BASEMAP_HEADERS, timeout=30)
+                    if r.status_code != 200 or "image" not in r.headers.get("content-type", ""):
+                        ok = False
+                        break
+                    tiles.append({"x": tx, "y": ty,
+                                  "jpg_b64": base64.b64encode(r.content).decode()})
+                if not ok:
+                    break
+            if ok and all(_is_imagery(base64.b64decode(t["jpg_b64"])) for t in tiles):
+                print(f"  [basemap] site {sid}: {name} z{zoom}, {len(tiles)} tiles, "
+                      f"{2 * ext} m square", flush=True)
+                out.append({"site": str(sid), "lat": round(lat, 7), "lng": round(lng, 7),
+                            "ext": ext, "source": name, "zoom": zoom, "tiles": tiles})
+                break
+        else:
+            print(f"  [basemap] no aerial source served site {sid} — "
+                  f"the scene falls back to its bare grid", flush=True)
+    return out
+
+
+def load_basemaps() -> dict:
+    """site_id -> basemap record from the committed bundle ({} if never fetched)."""
+    if not BASEMAPS.exists():
+        return {}
+    out = {}
+    with gzip.open(BASEMAPS, "rt", encoding="utf-8") as fh:
+        for line in fh:
+            rec = json.loads(line)
+            out[rec["site"]] = rec
+    return out
+
+
+def basemap_patch(rec: dict) -> Image.Image:
+    """The site's ground square, north-up, assembled offline from committed tiles."""
+    tiles = {(t["x"], t["y"]): base64.b64decode(t["jpg_b64"]) for t in rec["tiles"]}
+    x0, y0, x1, y1 = _patch_box(rec["lat"], rec["lng"], rec["ext"], rec["zoom"])
+    tx0, ty0 = int(x0 // BASEMAP_TILE), int(y0 // BASEMAP_TILE)
+    tx1, ty1 = int(x1 // BASEMAP_TILE), int(y1 // BASEMAP_TILE)
+    canvas = Image.new("RGB", ((tx1 - tx0 + 1) * BASEMAP_TILE,
+                               (ty1 - ty0 + 1) * BASEMAP_TILE))
+    for (tx, ty), jpg in tiles.items():
+        canvas.paste(Image.open(io.BytesIO(jpg)).convert("RGB"),
+                     ((tx - tx0) * BASEMAP_TILE, (ty - ty0) * BASEMAP_TILE))
+    # a float box, so the square lands on the tangent plane to well under a pixel
+    box = (x0 - tx0 * BASEMAP_TILE, y0 - ty0 * BASEMAP_TILE,
+           x1 - tx0 * BASEMAP_TILE, y1 - ty0 * BASEMAP_TILE)
+    return canvas.resize((BASEMAP_PX, BASEMAP_PX), Image.LANCZOS, box=box)
+
+
+# ======================================================================================
 # Build
 # ======================================================================================
 
@@ -294,6 +471,7 @@ def build(quick: bool = False) -> dict:
     payloads = {**anchor_payloads, **td.load_payloads(VIZ_PAYLOADS)}
     cmp_ = td._comparable(td.depth_ranges(VIZ_RUN, f, anchor_payloads, td.load_panos()))
     tiles = load_tiles()
+    basemaps = load_basemaps()
     s = json.load(open(DATA_DIR / "triangulation-summary.json", encoding="utf-8"))
 
     rasters = {}
@@ -321,9 +499,20 @@ def build(quick: bool = False) -> dict:
                         gd.decode_depth_payload(payloads[m.pano_id]))
                 rec["dimg"] = _to_uri(depth_crop(rasters[m.pano_id], cf), "PNG")
             mem.append(rec)
-        sites.append({"run": VIZ_RUN, "site": str(sid),
-                      "height": s["scale_global"][VIZ_RUN]["height_m"],
-                      "n_depth": n_depth, "angle": ang, "members": mem})
+        rec = {"run": VIZ_RUN, "site": str(sid),
+               "height": s["scale_global"][VIZ_RUN]["height_m"],
+               "n_depth": n_depth, "angle": ang,
+               "ext": site_ext_m(gg, ce, cn), "members": mem}
+        bm = basemaps.get(str(sid))
+        if bm is not None:
+            # The patch is cut for the extent the scene draws; if a re-fetch ever moved
+            # one, the texture would silently sit at the wrong scale. Refuse instead.
+            if bm["ext"] != rec["ext"]:
+                raise SystemExit(f"site {sid}: basemap covers {bm['ext']} m but the scene "
+                                 f"draws {rec['ext']} m — re-run `fetch`")
+            rec["ground"] = {"img": _to_uri(basemap_patch(bm), "JPEG", 80),
+                             "src": bm["source"], "zoom": bm["zoom"]}
+        sites.append(rec)
     data["sites"] = sites
 
     tpl = TEMPLATE.read_text(encoding="utf-8")
@@ -332,17 +521,21 @@ def build(quick: bool = False) -> dict:
     return {"sites": len(sites),
             "crops": sum(len(x["members"]) for x in sites),
             "depth_minis": sum(1 for x in sites for m in x["members"] if "dimg" in m),
+            "basemaps": sum(1 for x in sites if "ground" in x),
             "html_kb": len(html) // 1024, "out": str(OUT_HTML)}
 
 
 def main() -> int:
     ap = argparse.ArgumentParser(description=__doc__)
-    ap.add_argument("stage", choices=["fetch", "build"], nargs="?", default="build")
+    ap.add_argument("stage", choices=["fetch", "fetch-basemaps", "build"],
+                    nargs="?", default="build")
     ap.add_argument("--quick", action="store_true",
                     help="build: skip the five non-showcase runs' scatter curves")
     args = ap.parse_args()
     if args.stage == "fetch":
         print(json.dumps(fetch(), indent=2))
+    elif args.stage == "fetch-basemaps":
+        print(json.dumps(fetch_basemaps_only(), indent=2))
     else:
         print(json.dumps(build(quick=args.quick), indent=2))
     return 0

@@ -312,6 +312,17 @@ the figures and the tests all replay from a fresh checkout.
   charts replay `triangulation-summary.json` and its depth panels replay the committed
   payloads. Committed per the archival rule in `CLAUDE.md`: every byte an artifact
   depends on lives in the repo, so the page rebuilds offline from a fresh checkout.
+- `triangulation-viz-basemaps.jsonl.gz` — verbatim aerial tiles (40 tiles, 6 sites,
+  ~300 KB, fetched 2026-08-09 from New Jersey's 2020 orthoimagery at z20, 0.11 m/px)
+  giving each showcase site's 3D scene a real ground plane, so a reader can see which
+  corner the bearings converge on. One record per site carries the tiles plus the ENU
+  origin (`lat`, `lng`) and half-extent (`ext`) the patch was cut for; `build` re-derives
+  the crop from those and refuses to render if the scene's extent has moved. Orientation
+  context only — a different capture year to the panoramas, and no number depends on it.
+  Fetched by its own stage, `python/triangulation_viz.py fetch-basemaps`, precisely so
+  that adding ground context never becomes a reason to re-fetch the GSV bundles above.
+  Sources are tried highest-resolution first and the one that answered is recorded per
+  site; Esri's World Imagery is the global fallback should the showcase run ever move.
 
 **What the truth here does and does not depend on.** It uses panorama positions, panorama
 headings and the horizontal detection angle. It uses **no** vertical click angle, camera
