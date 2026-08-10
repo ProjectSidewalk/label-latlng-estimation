@@ -267,9 +267,11 @@ thead th{background:var(--tile); font-weight:600}
         fetched 2026-08-09 — context for human eyes; no number anywhere depends on them.
         The depth panels beside them replay the committed payloads.</div>
       <div>Committed verbatim: <code>data/triangulation-viz-tiles.jsonl.gz</code>
-        (192 tiles, 32 panoramas, ~7&nbsp;MB). This page itself is committed as
-        <code>figures/triangulation-conclusions.html</code> and rebuilt offline by
-        <code>python/triangulation_viz.py build</code>.</div>
+        (192 tiles, 18 panoramas, ~7&nbsp;MB) plus
+        <code>data/triangulation-viz-depth-payloads.jsonl.gz</code>, the depth top-up for
+        cameras outside the §8 sample — so every view carries its model panel. This page
+        itself is committed as <code>figures/triangulation-conclusions.html</code> and
+        rebuilt offline by <code>python/triangulation_viz.py build</code>.</div>
       <div class="h">Not used</div>
       <div>No production database. No imagery pixels — inputs are detection centroids the
         auto-labeler produced upstream; raw tiles are not fetched or needed here. No vertical
@@ -590,7 +592,9 @@ gallery = (() => {
       `triangulated range <b class="mono">${fmt(m.rt,2)} m</b><br>` +
       (m.rd
         ? `depth at this pixel <b class="mono">${fmt(m.rd,2)} m</b> · ratio <b class="mono">${fmt(m.rt/m.rd,3)}</b><br>`
-        : `<i>depth payload not in the committed 480-pano sample — pixels only</i><br>`) +
+        : m.dimg
+          ? `<i>depth panel from the committed viz top-up payload — this camera sits outside the §8 anchor sample, so its pixel carries no committed depth range</i><br>`
+          : `<i>no depth payload committed for this camera — pixels only</i><br>`) +
       `crosshair = the detector's point · dashed line = horizon (image mid-row). ` +
       `The depth panel is Google's model of the identical window: mostly a bare ground ` +
       `plane — which is the point of Sheet 03.`;

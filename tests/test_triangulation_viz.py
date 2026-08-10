@@ -49,7 +49,8 @@ def test_page_is_self_contained_with_real_pixels(page_data):
         assert len(site["members"]) >= 4, site["site"]
         for m in site["members"]:
             assert m["img"].startswith("data:image/jpeg;base64,"), site["site"]
-        # every committed depth read is rendered as a depth panel, and vice versa
-        assert (sum(1 for m in site["members"] if m.get("dimg"))
-                == sum(1 for m in site["members"] if m["rd"] is not None)
+            # the viz top-up bundle gives every camera a depth-model panel
+            assert m.get("dimg", "").startswith("data:image/png;base64,"), site["site"]
+        # ...but committed r_depth values remain exactly the §8 anchor population
+        assert (sum(1 for m in site["members"] if m["rd"] is not None)
                 == site["n_depth"]), site["site"]

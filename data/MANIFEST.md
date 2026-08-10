@@ -300,6 +300,11 @@ the figures and the tests all replay from a fresh checkout.
   what proves the auto-labeler's stored panorama positions are Google's own (median drift
   0.000 m, computed as `depth_anchor.position_drift` and locked by the findings tests),
   which is load-bearing because triangulated range scales with the baseline.
+- `triangulation-viz-depth-payloads.jsonl.gz` — verbatim depth payloads for the showcase
+  cameras that fall **outside** the §8 anchor's 480-pano sample, so every camera view on
+  the conclusions page carries its depth-model panel. Deliberately separate from
+  `triangulation-depth-payloads.jsonl.gz`: the anchor population is locked by the
+  findings tests and must not grow, and these pixels carry no committed `r_depth`.
 - `triangulation-viz-tiles.jsonl.gz` — verbatim GSV imagery tiles (192 tiles, 18
   panoramas, ~7 MB, fetched 2026-08-09) behind `figures/triangulation-conclusions.html`,
   the interactive conclusions page built by `python/triangulation_viz.py`. Context for

@@ -44,6 +44,11 @@ import triangulation_depth as td  # noqa: E402
 DATA_DIR = tg.DATA_DIR
 ROOT = tg.ROOT
 TILES_BUNDLE = DATA_DIR / "triangulation-viz-tiles.jsonl.gz"
+#: Depth payloads for showcase cameras that fall outside the §8 anchor's 480-pano sample,
+#: so every camera view carries its depth-model panel. Kept separate from the anchor
+#: bundle on purpose: the anchor population is locked by the findings tests and must not
+#: grow, while these bytes are page context whose pixels carry no committed r_depth.
+VIZ_PAYLOADS = DATA_DIR / "triangulation-viz-depth-payloads.jsonl.gz"
 CACHE = DATA_DIR / "triangulation-viz-cache"
 TEMPLATE = Path(__file__).resolve().parent / "triangulation_viz_template.html"
 OUT_HTML = ROOT / "figures" / "triangulation-conclusions.html"
@@ -191,7 +196,23 @@ def fetch() -> dict:
                                      "jpg_b64": base64.b64encode(data).decode()})
                 n += 1
             fh.write(json.dumps(rec, sort_keys=True) + "\n")
-    return {"n_panos": len(need), "n_tiles": n, "bundle": str(TILES_BUNDLE)}
+
+    # Depth top-up: payloads for showcase cameras outside the anchor's 480-pano sample.
+    anchor_payloads = td.load_payloads()
+    missing = sorted(p for p in need if p not in anchor_payloads)
+    vp = []
+    for pano_id in missing:
+        throttle.wait()
+        resp = gd.fetch_photometa_raw(pano_id)
+        b64 = gd.extract_depth_b64(resp)
+        if b64:
+            vp.append({"pano_id": pano_id, "run": VIZ_RUN, "depth_b64": b64})
+    with gzip.open(VIZ_PAYLOADS, "wt", encoding="utf-8", newline="\n") as fh:
+        for p in vp:
+            fh.write(json.dumps(p, sort_keys=True) + "\n")
+    return {"n_panos": len(need), "n_tiles": n, "bundle": str(TILES_BUNDLE),
+            "n_viz_payloads": len(vp), "n_missing": len(missing),
+            "payloads_bundle": str(VIZ_PAYLOADS)}
 
 
 def load_tiles() -> dict:
@@ -267,8 +288,11 @@ def build(quick: bool = False) -> dict:
     data = page_data(quick=quick)
     frames = data.pop("frames")
     f = frames[VIZ_RUN]
-    payloads = td.load_payloads()
-    cmp_ = td._comparable(td.depth_ranges(VIZ_RUN, f, payloads, td.load_panos()))
+    # r_depth values come from the ANCHOR payloads only — the committed §8 population.
+    # The merged set adds the viz top-up so every camera can render its depth panel.
+    anchor_payloads = td.load_payloads()
+    payloads = {**anchor_payloads, **td.load_payloads(VIZ_PAYLOADS)}
+    cmp_ = td._comparable(td.depth_ranges(VIZ_RUN, f, anchor_payloads, td.load_panos()))
     tiles = load_tiles()
     s = json.load(open(DATA_DIR / "triangulation-summary.json", encoding="utf-8"))
 
