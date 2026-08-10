@@ -270,3 +270,78 @@ value on a 250-pano slice by default, and on **all** 3,286 rows under `RUN_SLOW=
 (`pytest tests/test_modern_truth_findings.py`), so the artifacts and the code cannot drift
 apart. **Regenerate by intent only**: a refetch observes a different GSV state (panos die,
 depth planes get re-measured), so drift in a fresh fetch is expected rather than an error.
+
+---
+
+# Bearing-only triangulation artifacts (issue #7)
+
+Written by `python python/run_triangulation.py`. The inputs are the **already-committed**
+auto-labeler multi-view runs (`falsification-sites-*.jsonl.gz`, `falsification-panos-*.csv.gz`,
+imported for issue #3 Stage 3) — no new extraction and no database. The only stage that
+touches the network is `fetch`, and its payloads are committed verbatim, so `build`,
+the figures and the tests all replay from a fresh checkout.
+
+- `triangulation-summary.json` — the findings `tests/test_triangulation_findings.py` locks:
+  per-run applicability and intersection-angle conditioning, the converged noise budget
+  (σ_bearing / σ_panorama-position, with the iteration trace and the binned regression the
+  split comes from), synthetic **and** real-geometry bias validation, the implied camera
+  height by two estimators with site-bootstrap intervals, the robustness sweeps (conditioning
+  gate, site size, fuse-gate selection probe, and the **rejected** camera-tilt hypothesis
+  under all four sign conventions), every distance model scored against the triangulated
+  truth, split-half precision, the fitted global bearing offset, cross-source absolute rig
+  heights, and the same-pixel `depth_anchor` — including the position-drift check (stored
+  vs freshly fetched panorama positions), the quality-gate sweep of the ratio
+  (`quality_gates`: bearing residual, conditioning, site size — the systematicity claim,
+  computed rather than asserted), and the gap's range and capture-era profiles, which
+  separate the §8 candidates by shape.
+- `triangulation-depth-payloads.jsonl.gz` — verbatim base64 depth payloads for 480 GSV
+  panoramas (120 per GSV run; ~3 MB), fetched 2026-08-08. Same preservation principle as the
+  depth-pilot and modern-truth payloads: the evidence, not a pointer to it.
+- `triangulation-depth-panos.csv.gz` — one row per attempted pano (480, all `ok`): fetch
+  status plus the fresh photometa pose, position and capture date. The position column is
+  what proves the auto-labeler's stored panorama positions are Google's own (median drift
+  0.000 m, computed as `depth_anchor.position_drift` and locked by the findings tests),
+  which is load-bearing because triangulated range scales with the baseline.
+- `triangulation-viz-depth-payloads.jsonl.gz` — verbatim depth payloads for the showcase
+  cameras that fall **outside** the §8 anchor's 480-pano sample, so every camera view on
+  the conclusions page carries its depth-model panel. Deliberately separate from
+  `triangulation-depth-payloads.jsonl.gz`: the anchor population is locked by the
+  findings tests and must not grow, and these pixels carry no committed `r_depth`.
+- `triangulation-viz-tiles.jsonl.gz` — verbatim GSV imagery tiles (185 tiles, 18
+  panoramas, ~7 MB, fetched 2026-08-09; one gen-3 panorama's window re-fetched
+  2026-08-10 after review found the crop code assumed the 4096×2048 zoom-3 pyramid —
+  that pano serves 3328×1664, so its two crops showed the wrong window. The fix derives
+  each pano's pyramid from its native height, cross-checked against the `image_sizes`
+  in `triangulation-depth-panos.csv.gz`; the stale nadir-band tiles were dropped and
+  the other 17 panoramas' bytes are unchanged) behind
+  `figures/triangulation-conclusions.html`, the interactive conclusions page built by
+  `python/triangulation_viz.py`. Context for human eyes: no number in the reports or
+  tests depends on these bytes — the page's charts replay `triangulation-summary.json`
+  and its depth panels replay the committed payloads. Committed per the archival rule in
+  `CLAUDE.md`: every byte an artifact depends on lives in the repo, so the page rebuilds
+  offline from a fresh checkout — byte-identically under the pinned environment (PIL's
+  encoders), which `RUN_SLOW=1 pytest tests/test_triangulation_viz.py` locks.
+- `triangulation-viz-basemaps.jsonl.gz` — verbatim aerial tiles (40 tiles, 6 sites,
+  ~300 KB, fetched 2026-08-09 from New Jersey's 2020 orthoimagery at z20, 0.11 m/px)
+  giving each showcase site's 3D scene a real ground plane, so a reader can see which
+  corner the bearings converge on. One record per site carries the tiles plus the ENU
+  origin (`lat`, `lng`) and half-extent (`ext`) the patch was cut for; `build` re-derives
+  the crop from those and refuses to render if the scene's extent has moved. Orientation
+  context only — a different capture year to the panoramas, and no number depends on it.
+  Fetched by its own stage, `python/triangulation_viz.py fetch-basemaps`, precisely so
+  that adding ground context never becomes a reason to re-fetch the GSV bundles above.
+  Sources are tried highest-resolution first and the one that answered is recorded per
+  site; Esri's World Imagery is the global fallback should the showcase run ever move.
+
+**What the truth here does and does not depend on.** It uses panorama positions, panorama
+headings and the horizontal detection angle. It uses **no** vertical click angle, camera
+height, ground-plane assumption, depth data or panorama resolution — that is the entire
+point, and `test_declared_inputs_exclude_every_vertical_and_depth_quantity` pins the claim.
+Two properties are inherited rather than established here and are stated in the report:
+cluster membership comes from the auto-labeler's fuse (which assumed a 2.6 m camera height;
+the selection probe tests whether that biased the answer, and finds it did not), and the
+whole chain still rests on the camera positions Google and Mapillary report — a weaker
+dependency than trusting their depth planes, but not none.
+
+Regenerating: `python python/run_triangulation.py build --write` (~12 min, offline). A
+re-`fetch` observes a different GSV state and will drift; regenerate by intent only.
