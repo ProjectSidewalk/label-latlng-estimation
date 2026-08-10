@@ -24,6 +24,11 @@ data/depth-validation-cache/
 data/modern-extraction/
 data/modern-truth-cache/
 
+# The conclusions-page tile fetch cache (issue #7 viz). The committed
+# data/triangulation-viz-tiles.jsonl.gz holds the same bytes verbatim, so `build`
+# replays offline without it.
+data/triangulation-viz-cache/
+
 # The overlay gallery is generated from the committed tiles by `run_depth_validation.py
 # gallery`; 8 MB of regenerable HTML does not belong in history.
 figures/depth-overlay-gallery.html

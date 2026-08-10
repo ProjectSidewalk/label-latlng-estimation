@@ -300,6 +300,13 @@ the figures and the tests all replay from a fresh checkout.
   what proves the auto-labeler's stored panorama positions are Google's own (median drift
   0.000 m, computed as `depth_anchor.position_drift` and locked by the findings tests),
   which is load-bearing because triangulated range scales with the baseline.
+- `triangulation-viz-tiles.jsonl.gz` — verbatim GSV imagery tiles (192 tiles, 18
+  panoramas, ~7 MB, fetched 2026-08-09) behind `figures/triangulation-conclusions.html`,
+  the interactive conclusions page built by `python/triangulation_viz.py`. Context for
+  human eyes: no number in the reports or tests depends on these bytes — the page's
+  charts replay `triangulation-summary.json` and its depth panels replay the committed
+  payloads. Committed per the archival rule in `CLAUDE.md`: every byte an artifact
+  depends on lives in the repo, so the page rebuilds offline from a fresh checkout.
 
 **What the truth here does and does not depend on.** It uses panorama positions, panorama
 headings and the horizontal detection angle. It uses **no** vertical click angle, camera

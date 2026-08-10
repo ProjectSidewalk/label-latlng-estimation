@@ -1,0 +1,814 @@
+<title>Bearing-only triangulation — conclusions</title>
+<style>
+:root{
+  --surface:#fbfaf7; --panel:#ffffff; --ink:#1d2733; --muted:#5b6675;
+  --grid:#e5e2da; --line:#d8d4ca; --bearing:#2a78d6; --depth:#8a63d2;
+  --mapillary:#eb6834; --shipped:#14996b; --assumed:#898781;
+  --tile:#f2f0ea;
+}
+@media (prefers-color-scheme: dark){
+  :root{
+    --surface:#14181d; --panel:#1b2027; --ink:#e8e9ec; --muted:#9aa3ad;
+    --grid:#2a3038; --line:#333a44; --bearing:#5aa2f0; --depth:#a98ae8;
+    --mapillary:#f0854e; --shipped:#35c792; --assumed:#8e8c86;
+    --tile:#20262e;
+  }
+}
+:root[data-theme="dark"]{
+  --surface:#14181d; --panel:#1b2027; --ink:#e8e9ec; --muted:#9aa3ad;
+  --grid:#2a3038; --line:#333a44; --bearing:#5aa2f0; --depth:#a98ae8;
+  --mapillary:#f0854e; --shipped:#35c792; --assumed:#8e8c86;
+  --tile:#20262e;
+}
+:root[data-theme="light"]{
+  --surface:#fbfaf7; --panel:#ffffff; --ink:#1d2733; --muted:#5b6675;
+  --grid:#e5e2da; --line:#d8d4ca; --bearing:#2a78d6; --depth:#8a63d2;
+  --mapillary:#eb6834; --shipped:#14996b; --assumed:#898781;
+  --tile:#f2f0ea;
+}
+*{box-sizing:border-box}
+body{
+  margin:0; background:var(--surface); color:var(--ink);
+  font-family:"Segoe UI",system-ui,-apple-system,sans-serif;
+  font-size:15px; line-height:1.55;
+}
+.wrap{max-width:1120px; margin:0 auto; padding:28px 20px 60px}
+h1,h2{font-family:Cambria,Georgia,"Times New Roman",serif; text-wrap:balance; margin:0}
+h1{font-size:34px; line-height:1.15; letter-spacing:.2px}
+h2{font-size:22px}
+.eyebrow{
+  font-size:11px; letter-spacing:.14em; text-transform:uppercase; color:var(--muted);
+  font-weight:600; margin-bottom:6px;
+}
+.dek{color:var(--muted); max-width:68ch; margin:10px 0 0}
+.mono,.tile b,td.num,th.num{font-family:"Cascadia Mono",Consolas,monospace; font-variant-numeric:tabular-nums}
+header{border-bottom:2px solid var(--ink); padding-bottom:18px}
+.tiles{display:flex; gap:10px; flex-wrap:wrap; margin-top:18px}
+.tile{
+  background:var(--tile); border:1px solid var(--line); padding:10px 14px;
+  min-width:150px; flex:1 1 150px;
+}
+.tile b{display:block; font-size:20px; font-weight:600}
+.tile span{font-size:12px; color:var(--muted)}
+section{margin-top:44px}
+.sheet-head{display:flex; align-items:baseline; gap:14px; border-bottom:1px solid var(--line); padding-bottom:8px; margin-bottom:14px}
+.sheet-no{font-family:"Cascadia Mono",Consolas,monospace; font-size:12px; color:var(--muted); letter-spacing:.1em}
+.note{color:var(--muted); font-size:13.5px; max-width:74ch}
+.panel{background:var(--panel); border:1px solid var(--line)}
+.survey{display:grid; grid-template-columns:1fr 268px; gap:0}
+@media (max-width:820px){ .survey{grid-template-columns:1fr} }
+#scene{display:block; width:100%; height:480px; cursor:grab; touch-action:none}
+#scene.dragging{cursor:grabbing}
+.rail{border-left:1px solid var(--line); padding:14px 16px; display:flex; flex-direction:column; gap:14px}
+@media (max-width:820px){ .rail{border-left:none; border-top:1px solid var(--line)} }
+.rail label{font-size:12px; color:var(--muted); text-transform:uppercase; letter-spacing:.1em; font-weight:600}
+.sitebtns{display:flex; flex-wrap:wrap; gap:6px}
+.sitebtns button{
+  background:var(--tile); color:var(--ink); border:1px solid var(--line);
+  font:inherit; font-size:12.5px; padding:4px 9px; cursor:pointer;
+}
+.sitebtns button[aria-pressed="true"]{border-color:var(--bearing); box-shadow:inset 0 0 0 1px var(--bearing)}
+.sitebtns button:focus-visible,.toggle input:focus-visible,#hslider:focus-visible{outline:2px solid var(--bearing); outline-offset:2px}
+.toggle{display:flex; align-items:center; gap:8px; font-size:13.5px; cursor:pointer}
+.key{display:inline-block; width:10px; height:10px; border-radius:50%}
+input[type="range"]{width:100%; accent-color:var(--bearing)}
+.readout{font-size:13px; color:var(--muted)}
+.readout b{color:var(--ink); font-weight:600}
+figure{margin:0}
+.figrow{display:grid; grid-template-columns:1fr 1fr; gap:18px}
+@media (max-width:820px){ .figrow{grid-template-columns:1fr} }
+.fig{background:var(--panel); border:1px solid var(--line); padding:14px 16px 8px}
+.fig h3{margin:0 0 2px; font-size:14.5px; font-weight:600}
+.fig .sub{font-size:12.5px; color:var(--muted); margin:0 0 8px}
+.fig svg{display:block; width:100%; height:auto; overflow:visible}
+.legend{display:flex; gap:16px; font-size:12.5px; color:var(--muted); margin:6px 0 2px; flex-wrap:wrap}
+.legend .key{margin-right:5px; vertical-align:-1px}
+.legend .dash{display:inline-block; width:16px; height:0; border-top:2px dashed currentColor; vertical-align:3px; margin-right:5px}
+#tooltip{
+  position:fixed; pointer-events:none; background:var(--ink); color:var(--surface);
+  font-size:12.5px; padding:6px 9px; border-radius:2px; opacity:0; transition:opacity .12s;
+  max-width:260px; z-index:10; font-family:"Cascadia Mono",Consolas,monospace;
+}
+@media (prefers-reduced-motion: reduce){ #tooltip{transition:none} }
+details{margin-top:10px}
+summary{cursor:pointer; font-size:12.5px; color:var(--muted)}
+table{border-collapse:collapse; font-size:12.5px; margin-top:8px; width:100%}
+th,td{border:1px solid var(--line); padding:4px 8px; text-align:left}
+th.num,td.num{text-align:right}
+thead th{background:var(--tile); font-weight:600}
+.titleblock{border:2px solid var(--ink)}
+.titleblock .tb-head{
+  display:flex; justify-content:space-between; align-items:baseline; flex-wrap:wrap; gap:6px;
+  border-bottom:2px solid var(--ink); padding:10px 16px;
+  font-family:"Cascadia Mono",Consolas,monospace; font-size:12px; letter-spacing:.08em;
+}
+.tb-grid{display:grid; grid-template-columns:170px 1fr 1fr; }
+.tb-grid > div{padding:10px 16px; border-top:1px solid var(--line); font-size:13.5px}
+.tb-grid > div:nth-child(-n+3){border-top:none}
+.tb-grid .h{font-size:11px; letter-spacing:.12em; text-transform:uppercase; color:var(--muted); font-weight:600}
+.tb-grid code, .prose code{font-family:"Cascadia Mono",Consolas,monospace; font-size:12.5px; background:var(--tile); padding:1px 5px; border:1px solid var(--line)}
+@media (max-width:720px){ .tb-grid{grid-template-columns:1fr} .tb-grid > div{border-top:1px solid var(--line)} .tb-grid > div:first-child{border-top:none} }
+.footline{margin-top:26px; font-size:12px; color:var(--muted)}
+.camview{margin-top:14px}
+.cam-row{display:flex; gap:14px; padding:14px 14px 6px; flex-wrap:wrap; align-items:flex-start}
+.camframe{position:relative; flex:1 1 260px; max-width:360px}
+.camframe img{display:block; width:100%; height:auto}
+.camframe svg{position:absolute; inset:0; width:100%; height:100%; pointer-events:none}
+.camtag{
+  position:absolute; left:0; top:0; background:var(--ink); color:var(--surface);
+  font-size:10.5px; padding:2px 7px; letter-spacing:.06em; text-transform:uppercase;
+}
+.cam-info{flex:1 1 200px; min-width:200px; font-size:13px; color:var(--muted)}
+.cam-info b{color:var(--ink)}
+.strip{display:flex; gap:8px; overflow-x:auto; padding:8px 14px 14px}
+.thumb{
+  padding:0; border:2px solid var(--line); background:none; cursor:pointer; flex:0 0 auto;
+}
+.thumb img{display:block; height:62px; width:auto}
+.thumb[aria-pressed="true"]{border-color:var(--bearing)}
+.thumb:focus-visible{outline:2px solid var(--bearing); outline-offset:2px}
+</style>
+
+<div class="wrap">
+<header>
+  <div class="eyebrow">label-latlng-estimation · issue #7 · PR #19 · rev c011b7f</div>
+  <h1>Bearings intersect: the depth-free survey of Project Sidewalk's distance chain</h1>
+  <p class="dek">22,647 street objects, each detected from three or more panoramas. Rays from
+  known camera positions meet at the object — using no depth data, no camera height, no
+  vertical model, no panorama resolution. Every conclusion below falls out of that geometry.</p>
+  <div class="tiles" id="tiles"></div>
+</header>
+
+<section>
+  <div class="sheet-head"><span class="sheet-no">SHEET 01</span><h2>The site survey — one height makes the views agree</h2></div>
+  <p class="note">A real curb-ramp site from the paterson run. Each panorama's detection is a
+  bearing ray; the rays meet at the star. The auto-labeler instead <em>placed</em> each
+  detection by assuming a 2.6&nbsp;m camera — drag the height slider and watch the placements
+  slide along their rays: they only converge at one height, and it is not 2.6. Violet squares
+  are Google's depth read at the very same detection pixels — consistently short of the
+  intersection. Drag to orbit, scroll to zoom, <b>click a camera to see its actual pixels</b>
+  below — juxtaposed with Google's depth model rendered over the identical window.</p>
+  <div class="panel survey">
+    <canvas id="scene" aria-label="Interactive 3D view of a triangulated site"></canvas>
+    <div class="rail">
+      <div>
+        <label>Site</label>
+        <div class="sitebtns" id="sitebtns"></div>
+      </div>
+      <div>
+        <label>Assumed camera height</label>
+        <input type="range" id="hslider" min="2.00" max="2.80" step="0.005" value="2.60"
+               aria-label="Assumed camera height in metres">
+        <div class="readout" id="hreadout"></div>
+        <svg id="minicurve" width="236" height="86" role="img" aria-label="Placement scatter versus assumed height"></svg>
+      </div>
+      <div id="toggles">
+        <label style="margin-bottom:4px; display:block">Show</label>
+        <label class="toggle"><input type="checkbox" id="t-rays" checked>
+          <span class="key" style="background:var(--bearing)"></span>bearing rays &amp; placements</label>
+        <label class="toggle"><input type="checkbox" id="t-tri" checked>
+          <span class="key" style="background:var(--bearing); border-radius:0; transform:rotate(45deg)"></span>triangulated intersection</label>
+        <label class="toggle"><input type="checkbox" id="t-depth" checked>
+          <span class="key" style="background:var(--depth); border-radius:0"></span>depth reads (same pixels)</label>
+      </div>
+      <div class="readout" id="sitemeta"></div>
+    </div>
+  </div>
+  <div class="panel camview">
+    <div class="cam-row">
+      <div class="camframe"><span class="camtag">camera pixels</span>
+        <img id="cam-img" alt="Panorama crop around the detection"><svg id="cam-ov" viewBox="0 0 100 100" preserveAspectRatio="none"></svg></div>
+      <div class="camframe" id="cf-depth"><span class="camtag">depth model, same window</span>
+        <img id="cam-dimg" alt="Google depth model over the same window"><svg id="cam-dov" viewBox="0 0 100 100" preserveAspectRatio="none"></svg></div>
+      <div class="cam-info" id="cam-info"></div>
+    </div>
+    <div class="strip" id="strip" role="tablist" aria-label="Cameras of this site"></div>
+  </div>
+</section>
+
+<section>
+  <div class="sheet-head"><span class="sheet-no">SHEET 02</span><h2>The height the bearings imply — 2.6 m is too tall everywhere</h2></div>
+  <div class="figrow">
+    <figure class="fig">
+      <h3>Implied camera height, by run</h3>
+      <p class="sub">Global scale fit with 95% site-bootstrap interval · tick = per-member median</p>
+      <div class="legend"><span><span class="key" style="background:var(--bearing)"></span>GSV</span>
+        <span><span class="key" style="background:var(--mapillary)"></span>Mapillary</span>
+        <span style="color:var(--shipped)"><span class="dash"></span>shipped 2.3412 m</span>
+        <span style="color:var(--assumed)"><span class="dash"></span>assumed 2.6 m</span></div>
+      <svg id="chart-heights"></svg>
+      <details><summary>Data table</summary><div id="table-heights"></div></details>
+    </figure>
+    <figure class="fig">
+      <h3>Within-site placement scatter vs assumed height</h3>
+      <p class="sub">Every run's scatter has one minimum — its implied height. All six sit left of 2.6.</p>
+      <div class="legend"><span><span class="key" style="background:var(--bearing)"></span>GSV</span>
+        <span><span class="key" style="background:var(--mapillary)"></span>Mapillary</span></div>
+      <svg id="chart-curves"></svg>
+      <details><summary>Data table</summary><div id="table-curves"></div></details>
+    </figure>
+  </div>
+</section>
+
+<section>
+  <div class="sheet-head"><span class="sheet-no">SHEET 03</span><h2>Depth vs bearings: a ratio, not an offset</h2></div>
+  <p class="note">At 2,639 identical detection pixels, the triangulated range runs 13.8% past
+  Google's depth. The two candidate causes predict different shapes: a detector centroid on a
+  fixed-size ramp is an <em>offset</em> — capped near the object's 1–2&nbsp;m extent, ratio falling
+  toward 1 with range — while a depth model restating its own ground plane is a <em>scale</em> —
+  flat ratio, gap growing in proportion. The data hugs one prediction and crosses the other.</p>
+  <div class="figrow">
+    <figure class="fig">
+      <h3>Ratio of triangulated to depth range, by range</h3>
+      <p class="sub">Median per bin · both hypothesis curves drawn</p>
+      <div class="legend"><span><span class="key" style="background:var(--bearing)"></span>measured</span>
+        <span style="color:var(--depth)"><span class="dash"></span>constant-scale prediction</span>
+        <span style="color:var(--assumed)"><span class="dash"></span>constant-offset prediction</span></div>
+      <svg id="chart-ratio"></svg>
+    </figure>
+    <figure class="fig">
+      <h3>Gap in metres, by range</h3>
+      <p class="sub">The gap grows past the objects' own size — an offset cannot do that</p>
+      <div class="legend"><span><span class="key" style="background:var(--bearing)"></span>measured</span>
+        <span style="color:var(--depth)"><span class="dash"></span>constant-scale prediction</span>
+        <span style="color:var(--assumed)"><span class="dash"></span>constant-offset prediction</span></div>
+      <svg id="chart-gap"></svg>
+      <details><summary>Data table</summary><div id="table-gap"></div></details>
+    </figure>
+  </div>
+  <p class="note" id="era-note" style="margin-top:12px"></p>
+</section>
+
+<section>
+  <div class="sheet-head"><span class="sheet-no">SHEET 04</span><h2>Provenance — where every byte comes from and lives</h2></div>
+  <div class="titleblock">
+    <div class="tb-head">
+      <span>PROJECT SIDEWALK · LABEL-LATLNG-ESTIMATION</span>
+      <span>DWG №&nbsp;7 — BEARING-ONLY TRIANGULATION</span>
+      <span>REV c011b7f · 2026-08-09</span>
+    </div>
+    <div class="tb-grid">
+      <div class="h">Geometry inputs</div>
+      <div>Multi-view detection runs from the <b>Project Sidewalk auto-labeler</b>: fused
+        curb-ramp sites with per-detection bearings plus panorama positions &amp; metadata,
+        six cities over GSV and Mapillary imagery. Gitignored build artifacts in their home
+        repo — preserved verbatim here.</div>
+      <div>Stored in-repo: <code>data/falsification-sites-*.jsonl.gz</code> ·
+        <code>data/falsification-panos-*.csv.gz</code> (imported 2026-08-07 for #3 Stage 3;
+        documented in <code>data/MANIFEST.md</code>)</div>
+      <div class="h">Depth cross-check</div>
+      <div>Per-panorama depth payloads and fresh pose from <b>Google's photometa endpoint</b>,
+        fetched via the <code>streetlevel</code> library on 2026-08-08 — 480 panoramas, the only
+        network stage in the pipeline.</div>
+      <div>Stored in-repo, verbatim bytes: <code>data/triangulation-depth-payloads.jsonl.gz</code>
+        (~3&nbsp;MB) · <code>data/triangulation-depth-panos.csv.gz</code></div>
+      <div class="h">Page imagery</div>
+      <div>The camera-view crops in Sheet 01 are GSV tile windows around each detection,
+        fetched 2026-08-09 — context for human eyes; no number anywhere depends on them.
+        The depth panels beside them replay the committed payloads.</div>
+      <div>Committed verbatim: <code>data/triangulation-viz-tiles.jsonl.gz</code>
+        (192 tiles, 32 panoramas, ~7&nbsp;MB). This page itself is committed as
+        <code>figures/triangulation-conclusions.html</code> and rebuilt offline by
+        <code>python/triangulation_viz.py build</code>.</div>
+      <div class="h">Not used</div>
+      <div>No production database. No imagery pixels — inputs are detection centroids the
+        auto-labeler produced upstream; raw tiles are not fetched or needed here. No vertical
+        click angle, camera height, ground plane, depth data or resolution enters the estimator.</div>
+      <div>Depth enters only as the <em>thing being audited</em> in Sheet 03.</div>
+      <div class="h">Outputs</div>
+      <div>Findings in <code>data/triangulation-summary.json</code>, figures 24–27, report
+        <code>reports/2026-08-08-bearing-only-triangulation.md</code> — all regenerate offline
+        from a fresh checkout and are locked by 412 tests.</div>
+      <div>This page reads only committed artifacts; every number on it is reproducible with
+        <code>python python/run_triangulation.py build</code>.</div>
+    </div>
+  </div>
+  <p class="footline">Interactive survey of PR #19's conclusions · data extracted 2026-08-09
+  from the committed summary and site frames · hover any mark for values.</p>
+</section>
+</div>
+<div id="tooltip" role="status"></div>
+
+<script>
+const DATA = __DATA_JSON__;
+
+/* ---------- shared ---------- */
+const css = n => getComputedStyle(document.documentElement).getPropertyValue(n).trim();
+const tokens = () => ({
+  ink:css('--ink'), muted:css('--muted'), grid:css('--grid'), line:css('--line'),
+  bearing:css('--bearing'), depth:css('--depth'), map:css('--mapillary'),
+  shipped:css('--shipped'), assumed:css('--assumed'), panel:css('--panel'), surface:css('--surface')
+});
+const tip = document.getElementById('tooltip');
+function showTip(html, x, y){
+  tip.innerHTML = html; tip.style.opacity = 1;
+  const w = tip.offsetWidth, h = tip.offsetHeight;
+  tip.style.left = Math.min(x + 14, innerWidth - w - 8) + 'px';
+  tip.style.top  = Math.max(y - h - 12, 6) + 'px';
+}
+function hideTip(){ tip.style.opacity = 0; }
+const fmt = (v, d=3) => v.toFixed(d);
+const S = DATA.summary;
+const RUNS = ['gainesville','paterson','bend','sao_paulo','clovis','richmond'];
+
+/* ---------- stat tiles ---------- */
+{
+  const rg = Object.values(S.real_geometry);
+  const tiles = [
+    ['k &lt; 1 on 6 / 6 runs', 'the assumed 2.6 m is too tall everywhere'],
+    [fmt(Math.min(...rg),3) + '–' + fmt(Math.max(...rg),3), 'planted-height recovery — the method does not manufacture height'],
+    [fmt(S.pooled_ratio,3) + '×', 'triangulated ÷ depth range at ' + S.n_anchor_detections.toLocaleString() + ' identical pixels'],
+    [fmt(S.position_drift.median_m,3) + ' m', 'median drift, stored vs fresh camera positions (' + S.position_drift.n + ' panos)'],
+  ];
+  document.getElementById('tiles').innerHTML = tiles.map(t =>
+    `<div class="tile"><b class="mono">${t[0]}</b><span>${t[1]}</span></div>`).join('');
+}
+
+/* ---------- SHEET 01: 3D scene ---------- */
+let gallery = null;
+const scene = (() => {
+  const cv = document.getElementById('scene');
+  const ctx = cv.getContext('2d');
+  const st = { yaw:-2.35, pitch:0.62, dist:46, site:0, h:2.6,
+               rays:true, tri:true, depth:true, hover:null };
+  const site = () => DATA.sites[st.site];
+
+  function resize(){
+    const r = cv.getBoundingClientRect(), dpr = devicePixelRatio || 1;
+    cv.width = r.width * dpr; cv.height = r.height * dpr;
+    ctx.setTransform(dpr,0,0,dpr,0,0);
+    draw();
+  }
+  function project(e, n, u){
+    const c = Math.cos(st.yaw), s = Math.sin(st.yaw);
+    const x1 = c*e - s*n, y1 = s*e + c*n;
+    const cp = Math.cos(st.pitch), sp = Math.sin(st.pitch);
+    const d = cp*y1 + sp*u, z = cp*u - sp*y1;
+    const r = cv.getBoundingClientRect();
+    const f = Math.min(r.width, 640) * 0.92;
+    const w = st.dist / (st.dist + d);
+    return { x: r.width/2 + x1*f*w/ (st.dist*0.42), y: r.height*0.56 - z*f*w/(st.dist*0.42), d, w };
+  }
+  function line(a, b, color, width, dash){
+    ctx.strokeStyle = color; ctx.lineWidth = width;
+    ctx.setLineDash(dash || []);
+    ctx.beginPath(); ctx.moveTo(a.x, a.y); ctx.lineTo(b.x, b.y); ctx.stroke();
+    ctx.setLineDash([]);
+  }
+  function draw(){
+    const T = tokens(), r = cv.getBoundingClientRect();
+    ctx.clearRect(0,0,r.width,r.height);
+    const s = site(); if(!s) return;
+    const ext = Math.ceil(Math.max(...s.members.map(m => Math.hypot(m.e,m.n) + 4), 12)/2)*2;
+
+    // ground grid
+    for(let g=-ext; g<=ext; g+=2){
+      line(project(g,-ext,0), project(g,ext,0), T.grid, 1);
+      line(project(-ext,g,0), project(ext,g,0), T.grid, 1);
+    }
+    // compass: north arrow
+    const nA = project(-ext+1.2, ext-3.2, 0), nB = project(-ext+1.2, ext-0.8, 0);
+    line(nA, nB, T.muted, 1.4);
+    ctx.fillStyle = T.muted; ctx.font = '11px Consolas,monospace';
+    ctx.fillText('N', nB.x - 4, nB.y - 5);
+
+    const hits = [];  // hover + click targets
+    const h = st.h;
+    const members = s.members.map(m => {
+      const br = m.b * Math.PI/180, ux = Math.sin(br), uy = Math.cos(br);
+      const range = h / Math.tan(m.dep * Math.PI/180);
+      return { ...m, ux, uy, range,
+        place: { e: m.e + ux*range, n: m.n + uy*range } };
+    });
+
+    // placements centroid (for scatter readout drawn in rail, not here)
+    // draw order: rays, poles, ground marks, points
+    if(st.rays) for(const m of members){
+      const top = project(m.e, m.n, h);
+      const hit = project(m.place.e, m.place.n, 0);
+      line(top, hit, T.bearing, 1.4);
+      // faint continuation to triangulated range
+      const te = m.e + m.ux*m.rt, tn = m.n + m.uy*m.rt;
+      ctx.globalAlpha = 0.25;
+      line(hit, project(te, tn, 0), T.bearing, 1);
+      ctx.globalAlpha = 1;
+    }
+    members.forEach((m, mi) => {
+      const base = project(m.e, m.n, 0), top = project(m.e, m.n, h);
+      line(base, top, T.ink, 2);
+      const p = top;
+      ctx.fillStyle = T.ink;
+      ctx.fillRect(p.x-3, p.y-3, 6, 6);
+      hits.push({x:p.x, y:p.y, mi, html:
+        `camera ${String.fromCharCode(97+mi)} · bearing ${fmt(m.b,1)}°, depression ${fmt(m.dep,2)}°<br>r_tri ${fmt(m.rt,2)} m` +
+        (m.rd ? `<br>r_depth ${fmt(m.rd,2)} m (ratio ${fmt(m.rt/m.rd,3)})` : '') +
+        `<br>click for this camera's pixels`});
+    });
+    if(st.rays) members.forEach((m, mi) => {
+      const hit = project(m.place.e, m.place.n, 0);
+      ctx.fillStyle = T.bearing;
+      ctx.beginPath(); ctx.arc(hit.x, hit.y, 4.4, 0, 7); ctx.fill();
+      ctx.strokeStyle = T.panel; ctx.lineWidth = 1.6; ctx.stroke();
+      hits.push({x:hit.x, y:hit.y, mi, html:
+        `placement at h=${fmt(h,3)} m → range ${fmt(m.range,2)} m<br>(stored 2.6 m range: ${fmt(m.r26,2)} m)`});
+    });
+    if(st.depth) members.forEach((m, mi) => {
+      if(!m.rd) return;
+      const p = project(m.e + m.ux*m.rd, m.n + m.uy*m.rd, 0);
+      ctx.fillStyle = T.depth;
+      ctx.fillRect(p.x-4, p.y-4, 8, 8);
+      ctx.strokeStyle = T.panel; ctx.lineWidth = 1.6; ctx.strokeRect(p.x-4, p.y-4, 8, 8);
+      hits.push({x:p.x, y:p.y, mi, html:
+        `depth read at the same pixel<br>r_depth ${fmt(m.rd,2)} m vs r_tri ${fmt(m.rt,2)} m`});
+    });
+    if(st.tri){
+      const p = project(0,0,0);
+      ctx.fillStyle = T.bearing;
+      ctx.save(); ctx.translate(p.x,p.y); ctx.rotate(Math.PI/4);
+      ctx.fillRect(-5.5,-5.5,11,11); ctx.strokeStyle = T.panel; ctx.lineWidth=1.8;
+      ctx.strokeRect(-5.5,-5.5,11,11); ctx.restore();
+      hits.push({x:p.x, y:p.y, html:'triangulated intersection (leave-one-out consensus)'});
+      ctx.fillStyle = T.muted; ctx.font = '11.5px "Segoe UI",sans-serif';
+      ctx.fillText('intersection', p.x + 10, p.y - 8);
+    }
+    st.hits = hits;
+
+    // scale bar: 5 m along east at front edge
+    const a = project(ext-6, -ext+1.5, 0), b = project(ext-1, -ext+1.5, 0);
+    line(a, b, T.muted, 2);
+    ctx.fillStyle = T.muted; ctx.font = '11px Consolas,monospace';
+    ctx.fillText('5 m', (a.x+b.x)/2 - 10, a.y + 14);
+  }
+
+  /* interactions */
+  let drag = null;
+  cv.addEventListener('pointerdown', e => {
+    drag = {x:e.clientX, y:e.clientY, yaw:st.yaw, pitch:st.pitch, moved:false};
+    cv.classList.add('dragging'); cv.setPointerCapture(e.pointerId);
+  });
+  function hitAt(e){
+    const r = cv.getBoundingClientRect(), mx = e.clientX - r.left, my = e.clientY - r.top;
+    let best = null, bd = 15*15;
+    for(const t of (st.hits||[])){
+      const d = (t.x-mx)**2 + (t.y-my)**2;
+      if(d < bd){ bd = d; best = t; }
+    }
+    return best;
+  }
+  cv.addEventListener('pointermove', e => {
+    if(drag){
+      if(Math.abs(e.clientX-drag.x) + Math.abs(e.clientY-drag.y) > 5) drag.moved = true;
+      st.yaw   = drag.yaw   + (e.clientX - drag.x) * 0.008;
+      st.pitch = Math.max(0.12, Math.min(1.35, drag.pitch + (e.clientY - drag.y) * 0.006));
+      draw(); return;
+    }
+    const best = hitAt(e);
+    if(best) showTip(best.html, e.clientX, e.clientY); else hideTip();
+  });
+  cv.addEventListener('pointerup', e => {
+    const wasClick = drag && !drag.moved;
+    drag = null; cv.classList.remove('dragging');
+    if(wasClick){
+      const best = hitAt(e);
+      if(best && best.mi != null && gallery) gallery.select(best.mi);
+    }
+  });
+  cv.addEventListener('pointerleave', () => hideTip());
+  cv.addEventListener('wheel', e => {
+    e.preventDefault();
+    st.dist = Math.max(18, Math.min(120, st.dist * (e.deltaY > 0 ? 1.08 : 0.93)));
+    draw();
+  }, {passive:false});
+
+  /* rail */
+  const btns = document.getElementById('sitebtns');
+  DATA.sites.forEach((s, i) => {
+    const b = document.createElement('button');
+    b.textContent = String.fromCharCode(65+i);
+    b.setAttribute('aria-pressed', i===0 ? 'true' : 'false');
+    b.title = `${s.run} site — ${s.members.length} panoramas, ${s.n_depth} depth reads`;
+    b.onclick = () => {
+      st.site = i;
+      [...btns.children].forEach((c,j)=>c.setAttribute('aria-pressed', j===i?'true':'false'));
+      meta(); draw(); curve();
+      if(gallery) gallery.render();
+    };
+    btns.appendChild(b);
+  });
+  const slider = document.getElementById('hslider');
+  const readout = document.getElementById('hreadout');
+  function scatterAt(h){
+    const s = site();
+    let cx=0, cy=0;
+    const pts = s.members.map(m => {
+      const br = m.b*Math.PI/180, rg = h/Math.tan(m.dep*Math.PI/180);
+      const x = m.e + Math.sin(br)*rg, y = m.n + Math.cos(br)*rg;
+      cx += x; cy += y; return [x,y];
+    });
+    cx /= pts.length; cy /= pts.length;
+    return pts.reduce((a,p)=>a+Math.hypot(p[0]-cx,p[1]-cy),0)/pts.length;
+  }
+  function meta(){
+    const s = site();
+    document.getElementById('sitemeta').innerHTML =
+      `<b>Site ${String.fromCharCode(65+st.site)}</b> · ${s.run} · ${s.members.length} panoramas · ` +
+      `${s.n_depth} depth reads · max intersection ${fmt(s.angle,0)}°<br>` +
+      `run's fitted height: <b class="mono">${fmt(s.height,3)} m</b>`;
+  }
+  function upd(){
+    st.h = parseFloat(slider.value);
+    readout.innerHTML = `h = <b class="mono">${fmt(st.h,3)} m</b> · placement scatter ` +
+      `<b class="mono">${fmt(scatterAt(st.h),2)} m</b>`;
+    draw(); curveCursor();
+  }
+  /* mini scatter curve */
+  const mini = document.getElementById('minicurve');
+  let curveGeom = null;
+  function curve(){
+    const T = tokens(), W = 236, H = 86, L = 8, R = 8, Tp = 10, B = 20;
+    const hs = [], vs = [];
+    for(let h=2.0; h<=2.8001; h+=0.01){ hs.push(h); vs.push(scatterAt(h)); }
+    const vmax = Math.max(...vs)*1.05, vmin = Math.min(...vs)*0.9;
+    const X = h => L + (h-2.0)/(0.8)*(W-L-R);
+    const Y = v => Tp + (1-(v-vmin)/(vmax-vmin))*(H-Tp-B);
+    curveGeom = {X, hs, vs};
+    let d = hs.map((h,i)=>(i?'L':'M')+fmt(X(h),1)+','+fmt(Y(vs[i]),1)).join('');
+    const imin = vs.indexOf(Math.min(...vs));
+    mini.innerHTML =
+      `<line x1="${X(S.shipped)}" y1="${Tp}" x2="${X(S.shipped)}" y2="${H-B}" stroke="${T.shipped}" stroke-dasharray="3 3"/>` +
+      `<line x1="${X(2.6)}" y1="${Tp}" x2="${X(2.6)}" y2="${H-B}" stroke="${T.assumed}" stroke-dasharray="3 3"/>` +
+      `<path d="${d}" fill="none" stroke="${T.bearing}" stroke-width="2"/>` +
+      `<circle cx="${X(hs[imin])}" cy="${Y(vs[imin])}" r="3.5" fill="${T.bearing}"/>` +
+      `<line id="mc-cursor" x1="0" y1="${Tp}" x2="0" y2="${H-B}" stroke="${T.ink}" stroke-width="1"/>` +
+      `<text x="${X(S.shipped)}" y="${H-7}" fill="${T.shipped}" font-size="9.5" text-anchor="middle" font-family="Consolas,monospace">2.34</text>` +
+      `<text x="${X(2.6)}" y="${H-7}" fill="${T.assumed}" font-size="9.5" text-anchor="middle" font-family="Consolas,monospace">2.60</text>`;
+    curveCursor();
+  }
+  function curveCursor(){
+    const c = document.getElementById('mc-cursor');
+    if(c && curveGeom) { c.setAttribute('x1', curveGeom.X(st.h)); c.setAttribute('x2', curveGeom.X(st.h)); }
+  }
+  slider.addEventListener('input', upd);
+  for(const id of ['rays','tri','depth']){
+    document.getElementById('t-'+id).addEventListener('change', e => { st[id] = e.target.checked; draw(); });
+  }
+  addEventListener('resize', resize);
+  meta(); curve(); upd(); resize();
+  return { redraw: () => { draw(); curve(); }, current: site };
+})();
+
+/* ---------- SHEET 01: camera pixels gallery ---------- */
+gallery = (() => {
+  const img = document.getElementById('cam-img'), ov = document.getElementById('cam-ov');
+  const dframe = document.getElementById('cf-depth');
+  const dimg = document.getElementById('cam-dimg'), dov = document.getElementById('cam-dov');
+  const info = document.getElementById('cam-info'), strip = document.getElementById('strip');
+  let sel = 0;
+  function overlay(el, m, T){
+    const x = m.cx*100, y = m.cy*100, hz = m.hz*100;
+    el.innerHTML =
+      `<line x1="0" y1="${hz}" x2="100" y2="${hz}" stroke="${T.shipped}" stroke-width="1.4"
+         stroke-dasharray="4 3" vector-effect="non-scaling-stroke" opacity="0.9"/>` +
+      ['#ffffff','__C__'].map((c,i) => {
+        const w = i ? 1.6 : 3.4;
+        return `<line x1="${x-5}" y1="${y}" x2="${x-1.5}" y2="${y}" stroke="${c}" stroke-width="${w}" vector-effect="non-scaling-stroke"/>` +
+               `<line x1="${x+1.5}" y1="${y}" x2="${x+5}" y2="${y}" stroke="${c}" stroke-width="${w}" vector-effect="non-scaling-stroke"/>` +
+               `<line x1="${x}" y1="${y-5}" x2="${x}" y2="${y-1.5}" stroke="${c}" stroke-width="${w}" vector-effect="non-scaling-stroke"/>` +
+               `<line x1="${x}" y1="${y+1.5}" x2="${x}" y2="${y+5}" stroke="${c}" stroke-width="${w}" vector-effect="non-scaling-stroke"/>`;
+      }).join('').replaceAll('__C__', T.bearing);
+  }
+  function select(i){
+    const s = scene.current(), T = tokens();
+    sel = Math.max(0, Math.min(i, s.members.length - 1));
+    const m = s.members[sel];
+    img.src = m.img; overlay(ov, m, T);
+    if(m.dimg){ dframe.style.display = ''; dimg.src = m.dimg; overlay(dov, m, T); }
+    else { dframe.style.display = 'none'; }
+    info.innerHTML =
+      `<b>camera ${String.fromCharCode(97+sel)}</b> · pano <span class="mono">${m.pano}</span><br>` +
+      `bearing <b class="mono">${fmt(m.b,1)}°</b> · depression <b class="mono">${fmt(m.dep,2)}°</b><br>` +
+      `triangulated range <b class="mono">${fmt(m.rt,2)} m</b><br>` +
+      (m.rd
+        ? `depth at this pixel <b class="mono">${fmt(m.rd,2)} m</b> · ratio <b class="mono">${fmt(m.rt/m.rd,3)}</b><br>`
+        : `<i>depth payload not in the committed 480-pano sample — pixels only</i><br>`) +
+      `crosshair = the detector's point · dashed line = horizon (image mid-row). ` +
+      `The depth panel is Google's model of the identical window: mostly a bare ground ` +
+      `plane — which is the point of Sheet 03.`;
+    [...strip.children].forEach((c,j)=>c.setAttribute('aria-pressed', j===sel?'true':'false'));
+  }
+  function render(){
+    const s = scene.current();
+    strip.innerHTML = '';
+    s.members.forEach((m, i) => {
+      const b = document.createElement('button');
+      b.className = 'thumb'; b.setAttribute('role','tab');
+      b.setAttribute('aria-pressed', 'false');
+      b.title = `camera ${String.fromCharCode(97+i)} — bearing ${fmt(m.b,1)}°`;
+      const im = document.createElement('img');
+      im.src = m.img; im.alt = b.title;
+      b.appendChild(im);
+      b.onclick = () => select(i);
+      strip.appendChild(b);
+    });
+    select(0);
+  }
+  render();
+  return { render, select };
+})();
+
+/* ---------- chart helpers ---------- */
+function svgEl(parent, w, h){
+  const el = document.getElementById(parent);
+  el.setAttribute('viewBox', `0 0 ${w} ${h}`);
+  el.innerHTML = '';
+  return el;
+}
+function add(el, tag, attrs, text){
+  const n = document.createElementNS('http://www.w3.org/2000/svg', tag);
+  for(const k in attrs) n.setAttribute(k, attrs[k]);
+  if(text != null) n.textContent = text;
+  el.appendChild(n);
+  return n;
+}
+function hoverable(node, html){
+  node.style.cursor = 'default';
+  node.addEventListener('pointerenter', e => showTip(html, e.clientX, e.clientY));
+  node.addEventListener('pointermove',  e => showTip(html, e.clientX, e.clientY));
+  node.addEventListener('pointerleave', hideTip);
+}
+
+/* ---------- SHEET 02a: heights dot plot ---------- */
+function chartHeights(){
+  const T = tokens(), W = 520, H = 300, L = 108, R = 20, Tp = 14, B = 34;
+  const el = svgEl('chart-heights', W, H);
+  const xmin = 2.27, xmax = 2.66;
+  const X = v => L + (v-xmin)/(xmax-xmin)*(W-L-R);
+  const rows = RUNS;
+  const Y = i => Tp + (i+0.5)*(H-Tp-B)/rows.length;
+  for(const v of [2.3, 2.4, 2.5, 2.6]){
+    add(el,'line',{x1:X(v),y1:Tp,x2:X(v),y2:H-B,stroke:T.grid,'stroke-width':1});
+    add(el,'text',{x:X(v),y:H-B+16,fill:T.muted,'font-size':11,'text-anchor':'middle',
+      'font-family':'Consolas,monospace'}, v.toFixed(1));
+  }
+  add(el,'text',{x:(L+W-R)/2,y:H-2,fill:T.muted,'font-size':11.5,'text-anchor':'middle'},'implied camera height (m)');
+  // reference lines
+  add(el,'line',{x1:X(S.shipped),y1:Tp,x2:X(S.shipped),y2:H-B,stroke:T.shipped,'stroke-width':1.6,'stroke-dasharray':'5 4'});
+  add(el,'line',{x1:X(2.6),y1:Tp,x2:X(2.6),y2:H-B,stroke:T.assumed,'stroke-width':1.6,'stroke-dasharray':'5 4'});
+  rows.forEach((run, i) => {
+    const g = S.scale_global[run], med = S.scale_median[run];
+    const color = S.imagery[run]==='gsv' ? T.bearing : T.map;
+    const y = Y(i);
+    add(el,'text',{x:L-10,y:y+4,fill:T.ink,'font-size':12.5,'text-anchor':'end'},run.replace('_',' '));
+    const ci = g.ci95_m || [g.height_m, g.height_m];
+    add(el,'line',{x1:X(ci[0]),y1:y,x2:X(ci[1]),y2:y,stroke:color,'stroke-width':4,'stroke-linecap':'round'});
+    add(el,'line',{x1:X(med),y1:y-7,x2:X(med),y2:y+7,stroke:color,'stroke-width':1.6,opacity:0.55});
+    const dot = add(el,'circle',{cx:X(g.height_m),cy:y,r:5.5,fill:color,stroke:T.panel,'stroke-width':1.5});
+    add(el,'text',{x:X(g.height_m),y:y-10,fill:color,'font-size':11,'text-anchor':'middle',
+      'font-family':'Consolas,monospace','font-weight':600}, g.height_m.toFixed(3));
+    hoverable(dot, `${run} (${S.imagery[run]})<br>global fit ${fmt(g.height_m,3)} m · k=${fmt(g.k,3)}<br>` +
+      `CI ${fmt(ci[0],3)}–${fmt(ci[1],3)} · median ${fmt(med,3)} m<br>n=${g.n.toLocaleString()}`);
+  });
+  add(el,'text',{x:X(S.shipped)-4,y:Tp+9,fill:T.shipped,'font-size':10.5,'text-anchor':'end','font-family':'Consolas,monospace'},'2.3412');
+  add(el,'text',{x:X(2.6)+4,y:Tp+9,fill:T.assumed,'font-size':10.5,'font-family':'Consolas,monospace'},'2.60');
+  document.getElementById('table-heights').innerHTML =
+    '<table><thead><tr><th>run</th><th>imagery</th><th class="num">k</th><th class="num">height (m)</th><th class="num">CI 95%</th><th class="num">median (m)</th></tr></thead><tbody>' +
+    rows.map(r => { const g = S.scale_global[r];
+      return `<tr><td>${r}</td><td>${S.imagery[r]}</td><td class="num">${fmt(g.k,3)}</td>` +
+        `<td class="num">${fmt(g.height_m,3)}</td><td class="num">${g.ci95_m?fmt(g.ci95_m[0],3)+'–'+fmt(g.ci95_m[1],3):'—'}</td>` +
+        `<td class="num">${fmt(S.scale_median[r],3)}</td></tr>`; }).join('') + '</tbody></table>';
+}
+
+/* ---------- SHEET 02b: scatter curves ---------- */
+function chartCurves(){
+  const T = tokens(), W = 520, H = 300, L = 46, R = 84, Tp = 14, B = 34;
+  const el = svgEl('chart-curves', W, H);
+  const xmin = 2.0, xmax = 2.95;
+  const allv = RUNS.filter(r => DATA.curves[r]).flatMap(r => DATA.curves[r].scatter);
+  const ymin = Math.min(...allv)*0.92, ymax = Math.max(...allv)*1.03;
+  const X = v => L + (v-xmin)/(xmax-xmin)*(W-L-R);
+  const Y = v => Tp + (1-(v-ymin)/(ymax-ymin))*(H-Tp-B);
+  for(const v of [2.0,2.2,2.4,2.6,2.8]){
+    add(el,'line',{x1:X(v),y1:Tp,x2:X(v),y2:H-B,stroke:T.grid});
+    add(el,'text',{x:X(v),y:H-B+16,fill:T.muted,'font-size':11,'text-anchor':'middle','font-family':'Consolas,monospace'},v.toFixed(1));
+  }
+  add(el,'text',{x:(L+W-R)/2,y:H-2,fill:T.muted,'font-size':11.5,'text-anchor':'middle'},'assumed camera height (m)');
+  add(el,'text',{x:12,y:Tp+((H-Tp-B)/2),fill:T.muted,'font-size':11.5,'text-anchor':'middle',
+    transform:`rotate(-90 12 ${Tp+(H-Tp-B)/2})`},'placement scatter (m)');
+  add(el,'line',{x1:X(2.6),y1:Tp,x2:X(2.6),y2:H-B,stroke:T.assumed,'stroke-width':1.4,'stroke-dasharray':'5 4'});
+  RUNS.forEach(run => {
+    const c = DATA.curves[run];
+    if(!c) return;
+    const color = S.imagery[run]==='gsv' ? T.bearing : T.map;
+    const pts = c.h.map((h,i)=>[X(h), Y(c.scatter[i])]);
+    const d = pts.map((p,i)=>(i?'L':'M')+fmt(p[0],1)+','+fmt(p[1],1)).join('');
+    const path = add(el,'path',{d, fill:'none', stroke:color, 'stroke-width':2, opacity:0.85});
+    const imin = c.scatter.indexOf(Math.min(...c.scatter));
+    add(el,'circle',{cx:X(c.h[imin]),cy:Y(c.scatter[imin]),r:4,fill:color,stroke:T.panel,'stroke-width':1.4});
+    const last = pts[pts.length-1];
+    add(el,'text',{x:last[0]+5,y:last[1]+4,fill:color,'font-size':11},run.replace('_',' '));
+    hoverable(path, `${run}: minimum at ${fmt(c.h[imin],3)} m<br>scatter ${fmt(c.scatter[imin],3)} m ` +
+      `(vs ${fmt(c.scatter[c.h.findIndex(h=>Math.abs(h-2.6)<0.004)] ?? 0,3)} m at 2.6)`);
+  });
+  document.getElementById('table-curves').innerHTML =
+    '<table><thead><tr><th>run</th><th class="num">argmin height (m)</th><th class="num">scatter at min (m)</th><th class="num">scatter at 2.6 (m)</th></tr></thead><tbody>' +
+    RUNS.filter(r => DATA.curves[r]).map(r => { const c = DATA.curves[r]; const i = c.scatter.indexOf(Math.min(...c.scatter));
+      const j = c.h.findIndex(h=>Math.abs(h-2.6)<0.004);
+      return `<tr><td>${r}</td><td class="num">${fmt(c.h[i],3)}</td><td class="num">${fmt(c.scatter[i],3)}</td><td class="num">${j>=0?fmt(c.scatter[j],3):'—'}</td></tr>`; }).join('') +
+    '</tbody></table>';
+}
+
+/* ---------- SHEET 03: ratio & gap ---------- */
+function parseBin(k){ const m = k.match(/\(([\d.]+),\s*([\d.]+)\]/); return [(+m[1]+ +m[2])/2, +m[1], +m[2]]; }
+function chartProfile(){
+  const T = tokens();
+  const prof = Object.entries(S.gap_range_profile)
+    .map(([k,v]) => ({mid:parseBin(k)[0], key:k, ...v}))
+    .sort((a,b)=>a.mid-b.mid);
+  const pooled = S.pooled_ratio;
+  const medDiff = S.pooled_gap_m;             // pooled median gap, m
+  const xmin = 2, xmax = 23;
+
+  // ratio chart
+  {
+    const W = 520, H = 260, L = 50, R = 16, Tp = 12, B = 34;
+    const el = svgEl('chart-ratio', W, H);
+    const ymin = 0.98, ymax = 1.30;
+    const X = v => L + (v-xmin)/(xmax-xmin)*(W-L-R);
+    const Y = v => Tp + (1-(v-ymin)/(ymax-ymin))*(H-Tp-B);
+    for(const v of [1.0, 1.1, 1.2, 1.3]){
+      add(el,'line',{x1:L,y1:Y(v),x2:W-R,y2:Y(v),stroke:v===1.0?T.line:T.grid});
+      add(el,'text',{x:L-8,y:Y(v)+4,fill:T.muted,'font-size':11,'text-anchor':'end','font-family':'Consolas,monospace'},v.toFixed(1));
+    }
+    for(const v of [5,10,15,20]) add(el,'text',{x:X(v),y:H-B+16,fill:T.muted,'font-size':11,'text-anchor':'middle','font-family':'Consolas,monospace'},v);
+    add(el,'text',{x:(L+W-R)/2,y:H-2,fill:T.muted,'font-size':11.5,'text-anchor':'middle'},'triangulated range (m)');
+    // hypotheses
+    add(el,'line',{x1:X(xmin),y1:Y(pooled),x2:X(xmax),y2:Y(pooled),stroke:T.depth,'stroke-width':1.8,'stroke-dasharray':'6 4'});
+    let d = '';
+    for(let r=3; r<=xmax; r+=0.5) d += (d?'L':'M') + fmt(X(r),1) + ',' + fmt(Y(Math.min(1 + medDiff/(r - medDiff), ymax)),1);
+    add(el,'path',{d, fill:'none', stroke:T.assumed, 'stroke-width':1.8, 'stroke-dasharray':'3 4'});
+    // measured
+    const pd = prof.map((p,i)=>(i?'L':'M')+fmt(X(p.mid),1)+','+fmt(Y(p.median_ratio),1)).join('');
+    add(el,'path',{d:pd, fill:'none', stroke:T.bearing, 'stroke-width':2.2});
+    prof.forEach(p => {
+      const c = add(el,'circle',{cx:X(p.mid),cy:Y(p.median_ratio),r:4.5,fill:T.bearing,stroke:T.panel,'stroke-width':1.5});
+      hoverable(c, `${p.key} m · n=${p.n}<br>ratio ${fmt(p.median_ratio,3)} · gap ${fmt(p.median_diff_m,2)} m`);
+    });
+    add(el,'text',{x:X(21),y:Y(pooled)-7,fill:T.depth,'font-size':10.5,'text-anchor':'end'},'scale: flat at 1.138');
+    add(el,'text',{x:X(11),y:Y(1.115)+30,fill:T.assumed,'font-size':10.5},'offset: falls toward 1');
+  }
+  // gap chart
+  {
+    const W = 520, H = 260, L = 50, R = 16, Tp = 12, B = 34;
+    const el = svgEl('chart-gap', W, H);
+    const ymin = 0, ymax = 2.9;
+    const X = v => L + (v-xmin)/(xmax-xmin)*(W-L-R);
+    const Y = v => Tp + (1-(v-ymin)/(ymax-ymin))*(H-Tp-B);
+    // curb ramp extent band
+    add(el,'rect',{x:L,y:Y(2.0),width:W-L-R,height:Y(1.0)-Y(2.0),fill:T.assumed,opacity:0.13});
+    add(el,'text',{x:L+6,y:Y(2.0)+13,fill:T.muted,'font-size':10.5},'a curb ramp is 1–2 m — an offset is capped here');
+    for(const v of [0,1,2]){
+      add(el,'line',{x1:L,y1:Y(v),x2:W-R,y2:Y(v),stroke:v===0?T.line:T.grid});
+      add(el,'text',{x:L-8,y:Y(v)+4,fill:T.muted,'font-size':11,'text-anchor':'end','font-family':'Consolas,monospace'},v);
+    }
+    for(const v of [5,10,15,20]) add(el,'text',{x:X(v),y:H-B+16,fill:T.muted,'font-size':11,'text-anchor':'middle','font-family':'Consolas,monospace'},v);
+    add(el,'text',{x:(L+W-R)/2,y:H-2,fill:T.muted,'font-size':11.5,'text-anchor':'middle'},'triangulated range (m)');
+    add(el,'text',{x:12,y:Tp+(H-Tp-B)/2,fill:T.muted,'font-size':11.5,'text-anchor':'middle',
+      transform:`rotate(-90 12 ${Tp+(H-Tp-B)/2})`},'r_tri − r_depth (m)');
+    // hypotheses: scale → gap = r(1−1/ratio); offset → flat at medDiff
+    let d = '';
+    for(let r=3; r<=xmax; r+=0.5) d += (d?'L':'M') + fmt(X(r),1) + ',' + fmt(Y(r*(1-1/S.pooled_ratio)),1);
+    add(el,'path',{d, fill:'none', stroke:T.depth, 'stroke-width':1.8, 'stroke-dasharray':'6 4'});
+    add(el,'line',{x1:X(xmin),y1:Y(medDiff),x2:X(xmax),y2:Y(medDiff),stroke:T.assumed,'stroke-width':1.8,'stroke-dasharray':'3 4'});
+    const pd = prof.map((p,i)=>(i?'L':'M')+fmt(X(p.mid),1)+','+fmt(Y(p.median_diff_m),1)).join('');
+    add(el,'path',{d:pd, fill:'none', stroke:T.bearing, 'stroke-width':2.2});
+    prof.forEach(p => {
+      const c = add(el,'circle',{cx:X(p.mid),cy:Y(p.median_diff_m),r:4.5,fill:T.bearing,stroke:T.panel,'stroke-width':1.5});
+      hoverable(c, `${p.key} m · n=${p.n}<br>gap ${fmt(p.median_diff_m,2)} m · ratio ${fmt(p.median_ratio,3)}`);
+    });
+    add(el,'text',{x:X(17.2),y:Y(17.2*(1-1/S.pooled_ratio))-8,fill:T.depth,'font-size':10.5},'scale: grows with range');
+    add(el,'text',{x:X(3.2),y:Y(medDiff)-7,fill:T.assumed,'font-size':10.5},'offset: constant');
+  }
+  document.getElementById('table-gap').innerHTML =
+    '<table><thead><tr><th>range bin (m)</th><th class="num">n</th><th class="num">ratio</th><th class="num">gap (m)</th><th class="num">depth-implied height (m)</th></tr></thead><tbody>' +
+    prof.map(p => `<tr><td>${p.key}</td><td class="num">${p.n}</td><td class="num">${fmt(p.median_ratio,3)}</td>` +
+      `<td class="num">${fmt(p.median_diff_m,2)}</td><td class="num">${fmt(p.median_h_depth_m,3)}</td></tr>`).join('') +
+    '</tbody></table>';
+  // era note
+  const eras = Object.entries(S.gap_by_capture_year);
+  const bulk = eras.reduce((a,b)=>b[1].n>a[1].n?b:a);
+  const old  = eras[0];
+  document.getElementById('era-note').innerHTML =
+    `<b>Not an old-imagery artifact:</b> the modern bulk of the sample (${bulk[0].replace('(','').replace(']','')}, ` +
+    `n=${bulk[1].n.toLocaleString()}) carries the full ratio at <span class="mono">${fmt(bulk[1].median_ratio,3)}</span>, ` +
+    `while the small pre-2016 stratum (n=${old[1].n}) runs hotter at <span class="mono">${fmt(old[1].median_ratio,3)}</span> — ` +
+    `the direction the modern-truth close-out's era-dependent plane scale predicts.`;
+}
+
+/* ---------- render + theme reactivity ---------- */
+function renderCharts(){ chartHeights(); chartCurves(); chartProfile(); }
+renderCharts();
+matchMedia('(prefers-color-scheme: dark)').addEventListener('change',
+  () => { renderCharts(); scene.redraw(); if(gallery) gallery.render(); });
+new MutationObserver(() => { renderCharts(); scene.redraw(); if(gallery) gallery.render(); })
+  .observe(document.documentElement, {attributes:true, attributeFilter:['data-theme']});
+</script>

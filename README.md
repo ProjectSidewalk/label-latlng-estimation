@@ -44,7 +44,7 @@ pip install -r python/requirements.txt
 python python/run_analysis.py        # seven-estimator comparison + coefficients vs published 2021
 python python/run_distance_refit.py  # the issue #3 candidate ladder vs the 2021 distance half
 python python/run_triangulation.py build  # the issue #7 depth-free bearing anchor
-pytest                               # 412 tests — see "Tests" below
+pytest                               # 414 tests — see "Tests" below
 ```
 
 The R side needs R ≥ 4.x with readr/dplyr/tidyr/tibble/purrr/geosphere/lme4/jsonlite
@@ -82,7 +82,7 @@ ones before it.
 | `scripts/rerun-analysis.R` | The Rmd's pipeline as a plain R script; regenerates the R baseline fixtures the tests compare the port against. |
 | `scripts/extraction/` | SQL + runners that regenerate the datasets from the production databases: `extract-depth-labels.*` (the frozen 2021 depth population) and `extract-modern-labels.*` (the post-2021 modern-truth sampling frame; city schemas discovered at run time). |
 | `data/` | Datasets and committed evidence bundles — see [Data & provenance](#data--provenance) and `data/MANIFEST.md`. |
-| `figures/` | The figures referenced by the reports (`python/make_figures.py` and friends regenerate them). |
+| `figures/` | The figures referenced by the reports (`python/make_figures.py` and friends regenerate them), plus `triangulation-conclusions.html` — a self-contained interactive page of the issue-#7 findings (`python/triangulation_viz.py build`). |
 | `tests/` | Data contract, R↔Python equivalence (~1e-8), and findings-vs-published reproduction tests. |
 
 ### Python module map
@@ -124,7 +124,7 @@ provenance, caveats, and regeneration instructions: **`data/MANIFEST.md`**.
 
 ## Tests
 
-`pytest` runs 412 tests: data contract, R↔Python equivalence, findings-vs-published, depth
+`pytest` runs 414 tests: data contract, R↔Python equivalence, findings-vs-published, depth
 pilot, depth validation, coordinate conventions, POV inversion, distance refit (findings +
 invariants), Mapillary falsification, GBM ceiling, modern truth (findings + invariants), and
 bearing-only triangulation (estimator invariants on known geometry + findings).
