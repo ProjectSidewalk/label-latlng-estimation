@@ -7,8 +7,8 @@ follows the [modern-truth close-out](2026-08-07-modern-truth.md) and the
 
 | | |
 |---|---|
-| **0.898–0.984** | the scale on the ecosystem's assumed 2.6 m camera height that makes multi-view ray geometry self-consistent — **below 1.0 on all six runs**, GSV and Mapillary alike. Measured with no vertical model, no camera height, no ground plane, no depth and no panorama resolution |
-| **2.335 / 2.376 m** | what the bearings imply for gainesville and paterson, against the shipped **2.3412 m**. bend (2.460) and sao_paulo (2.558) sit 5–9% above. The anchor confirms the shipped scale to ~8% and rejects 2.6 m outright — it does not confirm it to better than that |
+| **0.899–0.984** | the scale on the ecosystem's assumed 2.6 m camera height that makes multi-view ray geometry self-consistent — **below 1.0 on all six runs**, GSV and Mapillary alike. Measured with no vertical model, no camera height, no ground plane, no depth and no panorama resolution |
+| **2.337 / 2.376 m** | what the bearings imply for gainesville and paterson, against the shipped **2.3412 m**. bend (2.458) and sao_paulo (2.559) sit 5–9% above. The anchor confirms the shipped scale to ~8% and rejects 2.6 m outright — it does not confirm it to better than that |
 | **0.998–1.000** | planted-height recovery: plant a known height on each run's *own* site geometry, re-apply that run's *measured* noise, run the identical pipeline. It returns what it was given, so the spread above is rigs and detector, not method |
 | **1.138** | triangulated range ÷ depth-derived range **at the very same detection pixels** (2,639 detections, 480 panoramas, four GSV cities). Systematic — it survives every quality gate — and **multiplicative**: the ratio is flat in range while the metre gap grows to 2.4 m, which excludes a fixed-extent detector-centroid cause and is the signature of a depth model restating its own ground plane. **The central finding of this report; not adjudicated absolutely (§8)** |
 | **4.80 m → 1.47 m** | clovis median distance error, deployed 2021 linear model → shipped blend, scored against a truth built from bearings. [#4765](https://github.com/ProjectSidewalk/SidewalkWebpage/issues/4765)'s sign-flip measured against *absolute* truth on imagery no candidate was fit on |
@@ -54,8 +54,8 @@ and much weaker dependency, but not zero. §11 keeps that distinction.
 - **Q2 — What is the error budget?** → **§5**: bearing and panorama-position noise
   separated by their range dependence, cross-checked model-free by split-half agreement.
   Also a finding in its own right: pose quality tracks the **rig**, not the imagery source.
-- **Q3 — What camera height do the bearings imply?** → **§6**: 2.335–2.558 m across four
-  GSV cities and 2.371/2.486 m on the two Mapillary ones. 2.6 m is too tall everywhere.
+- **Q3 — What camera height do the bearings imply?** → **§6**: 2.337–2.559 m across four
+  GSV cities and 2.373/2.483 m on the two Mapillary ones. 2.6 m is too tall everywhere.
 - **Q4 — Is the flat-ground cotangent's *shape* right, absolutely?** → **§7**: no — the
   implied height climbs with depression angle on every run. Four candidate explanations
   are tested; three are killed, one survives and is not resolved here.
@@ -74,14 +74,19 @@ The auto-labeler's fused multi-view runs, imported and committed for
 [Stage 3](2026-08-07-mapillary-falsification.md) and reused verbatim here — no new
 extraction, no database.
 
-| run | imagery | sites with ≥3 panos | members analysed | median panos/site | median intersection angle |
+| run | imagery | sites with ≥3 panos | members analysed | median panos/site (≥3 subset) | median intersection angle |
 |---|---|---:|---:|---:|---:|
 | bend | GSV | 9,709 | 42,941 | 4 | 85° |
-| paterson | GSV | 4,810 | 20,443 | 3 | 84° |
-| sao_paulo | GSV | 3,258 | 12,118 | 3 | 83° |
-| gainesville | GSV | 2,790 | 9,107 | 2 | 81° |
-| clovis | Mapillary | 1,135 | 6,570 | 4 | 87° |
-| richmond | Mapillary | 945 | 7,007 | 5 | 88° |
+| paterson | GSV | 4,810 | 20,443 | 4 | 84° |
+| sao_paulo | GSV | 3,258 | 12,118 | 4 | 83° |
+| gainesville | GSV | 2,790 | 9,107 | 3 | 81° |
+| clovis | Mapillary | 1,135 | 6,570 | 5 | 87° |
+| richmond | Mapillary | 945 | 7,007 | 7 | 88° |
+
+(The per-site pano count is the median over the ≥3-pano sites the analysis actually uses —
+`applicability.median_panos_per_site_3plus`. An earlier draft quoted the median over all
+multiply-observed sites, which read as an impossible "2" for gainesville in a table about
+sites with at least three.)
 
 **22,647 sites, 98,186 member observations.** Three panoramas is the minimum, because a
 member's range truth is triangulated from the *others* — leave-one-out, so the observation
@@ -117,6 +122,13 @@ That last row is the one the report stands on. For each run: take every site, pl
 object at its own leave-one-out consensus, give it depressions implied by a *known* camera
 height, corrupt the panorama positions and bearings at that run's *measured* noise, and run
 the identical pipeline. It returns 2.337–2.341 m from a planted 2.3412 m.
+
+One noise source is deliberately not simulated: the vertical click angle enters both
+checks exactly, not corrupted. That is a safe omission for the *estimator* claim — the
+estimand is a median of `r_tri · tan(depression)`, which is first-order immune to
+zero-mean angular noise, and the depression never enters the triangulation itself — but
+it means these checks validate the geometry pipeline, not the detector's vertical
+convention. The detector's convention is exactly what §7 and §8 then interrogate.
 
 So the estimator does not manufacture camera height, and the between-run spread in §6 is
 not an artefact of the method. Fig 24 (right panel) shows this alongside the headline.
@@ -160,7 +172,7 @@ fit puts essentially all the miss in the bearing term (σ_pos → 0, σ_bearing 
 two components are told apart only by their range dependence, so when one is genuinely
 small the split is weakly identified. The contract tests reproduce this failure mode on
 synthetic data *and* show the height estimate is unaffected by it — and empirically these
-two runs land on opposite sides of the shipped constant (2.335 and 2.558), so the
+two runs land on opposite sides of the shipped constant (2.337 and 2.559), so the
 degeneracy is not what produces the spread.
 
 **The bearings carry no systematic yaw error.** A global rotation fitted per run lands
@@ -181,12 +193,18 @@ Two estimators of the same quantity:
 
 | run | imagery | k | implied height | 95% CI | per-member median |
 |---|---|---:|---:|---|---:|
-| gainesville | GSV | 0.898 | **2.335 m** | 2.327–2.353 | 2.338 |
-| paterson | GSV | 0.914 | **2.376 m** | 2.366–2.379 | 2.422 |
-| bend | GSV | 0.946 | **2.460 m** | 2.457–2.457 | 2.527 |
-| sao_paulo | GSV | 0.984 | **2.558 m** | 2.548–2.574 | 2.604 |
-| clovis | Mapillary | 0.912 | **2.371 m** | 2.353–2.392 | 2.433 |
-| richmond | Mapillary | 0.956 | **2.486 m** | 2.457–2.509 | 2.577 |
+| gainesville | GSV | 0.899 | **2.337 m** | 2.326–2.351 | 2.338 |
+| paterson | GSV | 0.914 | **2.376 m** | 2.369–2.384 | 2.422 |
+| bend | GSV | 0.946 | **2.458 m** | 2.455–2.462 | 2.527 |
+| sao_paulo | GSV | 0.984 | **2.559 m** | 2.550–2.568 | 2.604 |
+| clovis | Mapillary | 0.913 | **2.373 m** | 2.351–2.389 | 2.433 |
+| richmond | Mapillary | 0.955 | **2.483 m** | 2.463–2.504 | 2.577 |
+
+(Interval note: the estimate and every bootstrap replicate are the parabolic vertex of
+the scatter's minimum, not the nearest sweep grid point. The first build's intervals were
+argmin grid points, quantised to 13 mm — bend's printed as the width-zero "2.457–2.457",
+excluding its own estimate. `test_bootstrap_intervals_are_nondegenerate_and_contain_their_estimates`
+now locks the repair.)
 
 Read plainly:
 
@@ -197,21 +215,39 @@ Read plainly:
    four runs (placement scatter 1.42 → 1.70 m on gainesville if 2.6 m is assumed) and
    **thin on sao_paulo**, whose `k = 0.984` buys only 0.6% — that run rejects 2.6 m only
    barely, and the report does not lean on it.
-2. **Every run lands inside the band between the shipped 2.3412 m and 2.6 m.** The
-   independent measurement brackets the shipped value rather than contradicting it.
-3. **But it does not confirm it tightly.** gainesville and paterson sit within 0.4% and
-   1.5%; bend and sao_paulo sit 5.1% and 9.3% above. The bootstrap intervals are far too
+2. **Every run lands in the band from the shipped 2.3412 m up to 2.6 m** — with the one
+   qualifier stated rather than rounded away: gainesville sits 5 mm *below* the shipped
+   value, well inside its own interval (2.326–2.351), so "at the shipped value" is the
+   honest reading there. The independent measurement brackets the shipped constant
+   rather than contradicting it.
+3. **But it does not confirm it tightly.** gainesville and paterson sit within 0.2% and
+   1.5%; bend and sao_paulo sit 5.0% and 9.3% above. The bootstrap intervals are far too
    narrow to absorb that, so the between-city spread is real structure, not sampling error.
 
 **Also delivered, and new: absolute Mapillary camera heights.** What triangulation measures
 is `H_rig − δ`, where δ is however far above the ground contact the detector's click point
 sits. δ is a property of the detector, and the auto-labeler ran the *same* detector on every
 run — so it cancels in a *difference* between runs even though it is not identifiable within
-one. Calibrating δ once on the GSV runs (δ = −0.077 m) transfers absolute heights to
-Mapillary: **clovis 2.294 m, richmond 2.409 m**. Stage 3 could only ever produce *relative*
+one. Calibrating δ once on the GSV runs (δ = −0.076 m) transfers absolute heights to
+Mapillary: **clovis 2.297 m, richmond 2.407 m**. Stage 3 could only ever produce *relative*
 per-sequence scales; these are absolute. The calibration step borrows the depth-measured
 2.34 m back, so this particular number is anchored, not independent — labelled as such in
 `cross_source.detector_click_offset_note`.
+
+Two consequences of that anchoring, quantified rather than left implicit:
+
+- **δ = −0.076 m is physically impossible taken at face value** — it says the detector's
+  click point sits *below* the object's ground contact. A real detection cannot do that,
+  so a negative δ is itself evidence of strain between the two systems being combined,
+  and in exactly the direction §8 measures: if the depth-measured rig is ~14% short (the
+  §8 shape reading), the true modern rig is ≈ 2.66 m, δ flips to a physically sensible
+  ≈ +0.25 m, and both Mapillary absolutes above move **up by ≈ 0.32 m** with it. These
+  transfers are conditional on the depth chain's scale in a way the bearings themselves
+  are not.
+- **One pooled δ treats four GSV cities as one rig**, while item 3 above says the
+  between-city spread is real structure. The pooled median is the best single transfer
+  available, but a per-city δ spans +0.005 m (gainesville) to −0.217 m (sao_paulo), so
+  the transfer inherits that spread as an unmodelled uncertainty.
 
 Robustness (all in `robustness.sensitivity`): the answer moves by <0.05 m across a
 conditioning-gate sweep from 0.75 m to 4.0 m, and across minimum site sizes of 3, 4 and 5
@@ -234,7 +270,7 @@ Four explanations, tested:
 | hypothesis | test | verdict |
 |---|---|---|
 | **The fuse gate selected a population consistent with 2.6 m** | A wrong height pushes a site's members apart only in proportion to how much their ranges differ, so the gate can only bite where the within-site range spread is large. Stratify on it. | **Killed.** On five of six runs the highest-spread stratum sits *below* the lowest-spread one; the one exception rises 0.048 m, an order of magnitude too little (fig 25, right) |
-| **Triangulation noise** (norm convexity under-corrected) | The correction scales as σ_c²/2r; producing the observed 0.17–0.28 m climb would need σ_c ≈ 1.9 m, against 0.28–0.59 m measured two independent ways | **Killed** on magnitude |
+| **Triangulation noise** (norm convexity under-corrected) | The correction scales as σ_c²/2r; producing the observed climb (0.14–0.33 m across the runs) would need σ_c ≈ 1.7–2.0 m, against 0.28–0.59 m measured two independent ways | **Killed** on magnitude |
 | **Uncorrected camera tilt** — the auto-labeler fused with `apply_pose: false`, and rig tilt displaces the horizon by a sinusoid in azimuth, biting hardest at small depression: exactly the observed shape | Apply the committed per-panorama `camera_pitch`/`camera_roll` under all four sign conventions | **Killed, decisively and against expectation.** Every convention leaves the trend *larger* than leaving it alone (paterson 0.28 → 0.89; gainesville 0.17 → 0.68). The recorded pose adds noise here rather than removing a systematic |
 | **A range-dependent detector click convention** — if the detector's reported point sits higher above ground contact at long range (minimum box size, blur), then `H − δ` shrinks with range, which is the observed trend | Not separable from the camera height by bearings alone; §8 was built to test it | **Survives.** Not resolved here |
 
@@ -266,9 +302,15 @@ heading-centred column derived from the detection's absolute bearing.
 | **pooled** | **9.93 m** | **11.16 m** | **1.138** | **1.27 m** |
 
 **The two systems disagree by 13.8%, and the disagreement is systematic.** It survives
-every quality gate: tightening the bearing residual from >4° to <0.25° moves it 1.158 →
-1.133; tightening the conditioning gate moves it 1.160 → 1.107; restricting to 5+ panorama
-sites does not move it. So it is not mis-clustering, not conditioning, and not noise.
+every quality gate, and the sweep is computed into the summary
+(`depth_anchor.quality_gates`) and locked by the findings tests rather than asserted:
+tightening the bearing-residual gate sixteen-fold (≤4° → ≤0.25°) leaves the ratio at
+1.132 → 1.133; tightening the conditioning gate from the headline's 1.5 m to 0.5 m moves
+it 1.138 → 1.133; restricting to 5+ panorama sites moves it to 1.133. No stratum of any
+sweep leaves the 1.13s. So it is not mis-clustering, not conditioning, and not noise.
+(An earlier draft quoted sweep numbers from an exploratory session that the committed
+build did not produce; review caught it, and the sweep now regenerates offline with
+everything else.)
 
 Two supporting facts:
 
@@ -353,11 +395,19 @@ scored exactly as committed; nothing is fitted here.
   "the one-liner and the refit have to travel together" conclusion from an independent
   direction.
 - **The compression signature is confirmed once more**: the deployed model's range slope is
-  −0.29 to −0.78 on every run, against −0.005 to −0.17 for the cotangent family.
-- **The shipped blend under-predicts against this truth** (signed median −0.58 to −1.54 m),
+  −0.29 to −0.78 on every run, against −0.17 to +0.03 for the pure 2.6 m cotangent (five
+  runs negative, bend at a flat +0.03 — an order of magnitude off the deployed model's).
+  A technical footnote: the slope regresses error on the *measured* truth, whose own noise
+  attenuates it by roughly σ²ᵣ/Var(r_tri) ≈ 0.01–0.02 — negligible against every slope
+  read as compression here, but the same order as the flattest cotangent slopes, whose
+  exact sign should not be over-read.
+- **The shipped blend under-predicts against this truth** (signed median −0.57 to −1.54 m),
   which is §8's 13.8% restated: a truth reading ~14% longer will make any depth-calibrated
   model look short. This is the one column that should not be read as a verdict on the
-  blend until §8 is resolved.
+  blend until §8 is resolved — and the same caveat covers the *median-absolute* column:
+  the cotangent@2.6 posts the table's best figure on three runs precisely because a taller
+  assumed camera stretches every prediction toward a truth §8 says is stretched. The table
+  is not evidence for 2.6 m; §6 measured that height directly and rejected it.
 
 ![fig 27](../figures/fig27-triangulation-model-scoring.png)
 
@@ -386,13 +436,15 @@ It does not replace the closed form; it audits it.
   unanchored" — is now answered by a measurement that shares none of the depth chain's
   assumptions and is validated to 0.2% on planted heights under real geometry and measured
   noise.
-- **2.6 m is too tall on every run**, GSV and Mapillary, by 1.6–10.2%. Directly actionable
+- **2.6 m is too tall on every run**, GSV and Mapillary, by 1.6–10.1%. Directly actionable
   for the auto-labeler's fuse, and it needs no reference height.
 - **The shipped 2.3412 m is bracketed, not contradicted**: the independent measurement lands
-  between it and 2.6 m on all six runs, and within 1.5% of it on the two cities with the
-  most favourable geometry.
-- **Absolute Mapillary camera heights** (clovis 2.294 m, richmond 2.409 m), which nothing
-  else here can produce — Stage 3's were relative by construction.
+  in the band from 5 mm below it (gainesville, inside its own interval) up to 2.6 m on all
+  six runs, and within 1.5% of it on the two cities with the most favourable geometry.
+- **Absolute Mapillary camera heights** (clovis 2.297 m, richmond 2.407 m), which nothing
+  else here can produce — Stage 3's were relative by construction. Anchored on the
+  depth-measured GSV rig, not independent: §6 quantifies the two ways that anchoring can
+  move them, including +0.32 m together if §8 resolves against the depth scale.
 - **Three candidate artefacts killed**: fuse-gate selection, norm-convexity under-correction,
   and uncorrected camera tilt. The tilt result is the surprising one and is committed as a
   negative finding rather than dropped.

@@ -14,16 +14,18 @@ Headline findings (reports/2026-08-08-bearing-only-triangulation.md):
   returns it to within 0.2% (bias factor 0.998-1.000, all six runs). So the spread between
   runs is the rigs and the detector, not the method.
 - **The ecosystem's 2.6 m is too tall on every run**, GSV and Mapillary alike: the scale
-  that makes multi-view ray geometry self-consistent is 0.898-0.984 of it. Measured with no
+  that makes multi-view ray geometry self-consistent is 0.899-0.984 of it. Measured with no
   depth data, no vertical model and no camera height assumed anywhere.
-- **The two flattest GSV cities bracket the shipped 2.3412 m** (gainesville 2.33,
+- **The two flattest GSV cities bracket the shipped 2.3412 m** (gainesville 2.34,
   paterson 2.38); bend and sao_paulo sit 5-9% above it. The anchor therefore confirms the
   shipped scale to within about 8% and decisively rejects 2.6 m — it does not confirm it
   to better than that.
 - **Two independent measurements of the same pixels disagree by ~14%** (triangulated
   range over depth-derived range, pooled over four GSV cities). The disagreement is
-  systematic: it survives every quality gate (bearing residual, conditioning, site size).
-  Its cause is not resolved here and is recorded as open.
+  systematic: it survives every quality gate (bearing residual, conditioning, site size),
+  and the sweep itself is committed as ``depth_anchor.quality_gates`` and locked below —
+  the ratio stays within 1.13-1.14 under every tightening. The gap's *shape* points at
+  the depth side (see the range-profile test); absolute adjudication needs survey truth.
 - **Pose quality is a property of the rig, not the imagery source**: richmond's four-rig
   Mapillary zoo has the worst panorama positions (sigma_pos 0.447 m) but clovis's single
   disciplined GoPro Fusion creator (0.138 m) beats paterson's GSV (0.185 m).
@@ -108,17 +110,35 @@ def test_synthetic_norm_convexity_correction_works(summary):
 # The headline: absolute scale with no depth data
 # ======================================================================================
 
+#: The committed per-run scale on the assumed 2.6 m — the PR's headline row, locked to
+#: the values the build writes rather than to a permissive band.
+K_BY_RUN = {"gainesville": 0.8987, "paterson": 0.914, "bend": 0.9455,
+            "sao_paulo": 0.984, "clovis": 0.9126, "richmond": 0.9551}
+
+
 def test_the_assumed_2p6_m_is_too_tall_on_every_run(summary):
     """The clearest actionable finding, and it needs no reference height at all: the
     multi-view-consistent scale is below 1.0 everywhere, GSV and Mapillary alike."""
     for run in ALL:
         k = summary["scale_global"][run]["k"]
         assert 0.85 < k < 1.0, f"{run}: k={k}"
+        assert k == pytest.approx(K_BY_RUN[run], abs=0.003), f"{run}: k={k}"
         # and the fit is genuinely better than assuming 2.6 m
         g = summary["scale_global"][run]
         assert g["scatter_at_best_m"] < g["scatter_at_2p6_m"], run
         # an interior minimum: none of these k values is a clamp at the sweep boundary
         assert g["at_grid_edge"] is False, run
+
+
+def test_bootstrap_intervals_are_nondegenerate_and_contain_their_estimates(summary):
+    """The interval must be an interval. Before the parabolic argmin refinement the
+    bootstrap snapped to a 13 mm grid and bend's CI printed as a width-zero band that
+    excluded its own point estimate."""
+    for run in ALL:
+        g = summary["scale_global"][run]
+        lo, hi = g["ci95_m"]
+        assert lo < hi, f"{run}: degenerate CI {g['ci95_m']}"
+        assert lo <= g["height_m"] <= hi, f"{run}: {g['height_m']} outside {g['ci95_m']}"
 
 
 def test_implied_heights_bracket_the_shipped_constant(summary):
@@ -175,6 +195,16 @@ def test_conditioning_gate_does_not_move_the_answer(summary):
         assert max(vals) - min(vals) < 0.05, f"{run}: {vals}"
 
 
+def test_site_size_does_not_move_the_answer(summary):
+    """The other half of §6's robustness sentence — previously asserted in prose only."""
+    for run in ALL:
+        vals = [v["median_m"] for v in
+                summary["robustness"][run]["sensitivity"]["by_min_panos"].values()
+                if v.get("median_m")]
+        assert len(vals) == 3, run
+        assert max(vals) - min(vals) < 0.05, f"{run}: {vals}"
+
+
 def test_fuse_gate_selection_is_not_driving_the_scale(summary):
     """The auto-labeler fused at 2.6 m, so the population could in principle have been
     selected for consistency with it — but a wrong height only pushes members apart in
@@ -213,12 +243,13 @@ def test_mapillary_runs_carry_no_pose_to_test(summary):
 
 def test_no_systematic_yaw_error_in_the_bearings(summary):
     """A fitted global rotation is the check that the bearing half is clean; it must come
-    back at essentially zero, otherwise every range here is suspect."""
+    back at essentially zero, otherwise every range here is suspect. The bounds are the
+    report's own sentence ("within 0.15 deg ... buys under 1%"), not a looser stand-in."""
     for run in ALL:
         off = summary["bearing_offset"][run]
-        assert abs(off["best_offset_deg"]) <= 0.25, run
+        assert abs(off["best_offset_deg"]) <= 0.15, run
         gain = 1.0 - off["loss_at_best_m"] / off["loss_at_zero_m"]
-        assert gain < 0.02, f"{run}: rotation bought {gain:.3f} of the residual"
+        assert gain < 0.01, f"{run}: rotation bought {gain:.3f} of the residual"
 
 
 # ======================================================================================
@@ -264,9 +295,13 @@ def test_the_noise_decomposition_degenerates_on_two_runs(summary):
 
 
 def test_split_half_precision_is_sub_metre(summary):
-    """Model-free reproducibility: two disjoint halves of a site must land close."""
+    """Model-free reproducibility: two disjoint halves of a site must land close. Locked
+    to the committed values (the report's §5 table), not merely to a ceiling."""
+    sep = {"bend": 0.5714, "paterson": 0.7619, "gainesville": 0.9169,
+           "sao_paulo": 1.1898, "clovis": 0.5524, "richmond": 0.9302}
     for run in ALL:
-        assert summary["split_half"][run]["median_half_separation_m"] < 1.5, run
+        got = summary["split_half"][run]["median_half_separation_m"]
+        assert got == pytest.approx(sep[run], abs=0.02), f"{run}: {got}"
 
 
 # ======================================================================================
@@ -274,9 +309,15 @@ def test_split_half_precision_is_sub_metre(summary):
 # ======================================================================================
 
 def test_applicability_is_reported_and_honest(summary):
+    """The report's §10 reach numbers (47-83% of multiply-observed objects), locked to
+    the committed values rather than to an existence check."""
+    frac = {"bend": 0.833, "richmond": 0.7988, "clovis": 0.7276,
+            "paterson": 0.6876, "sao_paulo": 0.5204, "gainesville": 0.4708}
     for run in ALL:
         a = summary["applicability"][run]
-        assert 0.0 < a["frac_sites_3plus_panos"] <= 1.0, run
+        assert a["frac_sites_3plus_panos"] == pytest.approx(frac[run], abs=0.002), run
+        # the dataset table's per-site pano count describes the >=3 population it names
+        assert a["median_panos_per_site_3plus"] >= 3, run
         # error scales as 1/sin of the intersection angle, so the distribution matters
         assert a["intersection_angle_deg"]["median"] > 45, run
         assert a["intersection_angle_deg"]["frac_below_20deg"] < 0.10, run
@@ -319,6 +360,33 @@ def test_row_flipped_depth_lookup_finds_no_ground(summary):
     c = summary["depth_anchor"]["frame_controls"]
     assert c["row_flip"]["n"] < 0.05 * c["identity"]["n"]
     assert c["rotate_180"]["n"] < 0.05 * c["identity"]["n"]
+
+
+def test_the_gap_survives_every_quality_gate(summary):
+    """The systematicity half of the central finding — computed into the summary by
+    ``triangulation_depth.quality_gates`` and locked here, after review found the gate
+    sweep existed only as prose numbers no committed code produced.
+
+    Tightening the bearing-residual gate 16-fold, the conditioning gate 3-fold, or
+    restricting to 5+ panorama sites moves the pooled ratio by under 0.01: the
+    disagreement is a property of the population, not of its worst-measured members.
+    """
+    qg = summary["depth_anchor"]["quality_gates"]
+    assert set(qg) == {"by_max_abs_bearing_resid_deg", "by_sigma_r_m", "by_min_panos"}
+    ratios = [v["median_ratio"] for sweep in qg.values() for v in sweep.values()]
+    assert len(ratios) >= 10
+    assert all(1.10 < r < 1.16 for r in ratios), ratios
+    assert max(ratios) - min(ratios) < 0.01, ratios
+    # the tightest stratum of each sweep still carries the full gap
+    assert qg["by_max_abs_bearing_resid_deg"]["0.25"]["median_ratio"] == \
+        pytest.approx(1.1333, abs=0.003)
+    assert qg["by_sigma_r_m"]["0.5"]["median_ratio"] == pytest.approx(1.1329, abs=0.003)
+    assert qg["by_min_panos"]["5"]["median_ratio"] == pytest.approx(1.1327, abs=0.003)
+    # and the loosest sigma row is the headline population itself, so the sweep and the
+    # pooled number cannot drift apart
+    assert qg["by_sigma_r_m"]["1.5"]["n"] == summary["depth_anchor"]["n_detections"]
+    assert qg["by_sigma_r_m"]["1.5"]["median_ratio"] == \
+        summary["depth_anchor"]["pooled"]["median_ratio_tri_over_depth"]
 
 
 def test_panorama_positions_did_not_drift(summary):
@@ -375,6 +443,16 @@ def test_the_gap_is_not_an_old_imagery_artifact(summary):
 # Model scoring against a truth that shares none of the models' assumptions
 # ======================================================================================
 
+def test_clovis_headline_numbers(summary):
+    """The PR's 4.80 -> 1.47 m headline and #4765's +4.63 m signed error, locked to the
+    committed magnitudes — review found only their orderings were tested, so a material
+    drift in either number would previously have passed."""
+    m = summary["scoring"]["clovis"]["models"]
+    assert m["deployed_linear"]["median_abs_m"] == pytest.approx(4.8034, abs=0.01)
+    assert m["deployed_linear"]["signed_median_m"] == pytest.approx(4.625, abs=0.01)
+    assert m["shipped_blend"]["median_abs_m"] == pytest.approx(1.4669, abs=0.01)
+
+
 def test_deployed_linear_is_compressive_against_triangulated_truth(summary):
     """#4766's compression, reproduced once more against an absolute truth built from
     bearings — including on the two Mapillary cities, where no depth truth can exist."""
@@ -402,9 +480,14 @@ def test_shipped_blend_has_a_flatter_range_slope_than_the_deployed_model(summary
 # ======================================================================================
 
 def test_cross_source_reports_absolute_mapillary_rig_heights(summary):
+    """Locked to the committed values (a half-metre drift used to pass the old 1.8-3.2
+    band). These are anchored on the depth-measured GSV rig, not independent — the note
+    string carries that caveat and the report's §6 quantifies the sensitivity."""
     cs = summary["cross_source"]
     assert set(cs["absolute_rig_heights_m"]) == set(ALL)
+    want = {"clovis": 2.2969, "richmond": 2.4073}
     for run in MAPILLARY:
         v = cs["absolute_rig_heights_m"][run]["absolute_rig_m"]
-        assert 1.8 < v < 3.2, f"{run}: {v}"
+        assert v == pytest.approx(want[run], abs=0.01), f"{run}: {v}"
+    assert cs["detector_click_offset_m"] == pytest.approx(-0.076, abs=0.005)
     assert "NOT identifiable from bearings alone" in cs["detector_click_offset_note"]

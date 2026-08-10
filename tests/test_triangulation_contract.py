@@ -145,10 +145,9 @@ def test_covariance_grows_as_intersection_angle_shrinks():
     """Error scales as 1/sin of the intersection angle — the conditioning claim, checked."""
     prev = None
     for sep in (80.0, 40.0, 20.0, 10.0, 5.0):
-        pe = np.array([0.0, 0.0])
-        pn = np.array([0.0, 0.0])
-        # two rays separated by `sep` degrees from a common-ish baseline
+        # two rays separated by `sep` degrees from a 10 m baseline
         pe = np.array([-5.0, 5.0])
+        pn = np.array([0.0, 0.0])
         b = np.array([90.0 - sep / 2.0, 90.0 + sep / 2.0])
         _, cov = tg.triangulate(pe, pn, b)
         scale = float(np.trace(cov))
@@ -267,12 +266,17 @@ def _synthetic_member_frame(sigma_bearing_deg, sigma_pos_m, height_m=2.35,
         r = np.hypot(te - pe, tn - pn)
         lat, lng = tg.en_to_latlng(pe + rng.normal(0, sigma_pos_m, n),
                                    pn + rng.normal(0, sigma_pos_m, n), lat0, lng0)
+        dep = np.degrees(np.arctan2(height_m, r))
         rows.append(pd.DataFrame({
             "site_id": sid, "pano_id": [f"{sid}_{i}" for i in range(n)],
             "pano_lat": lat, "pano_lng": lng,
             "bearing_deg": _bearings_to(pe, pn, te, tn)
             + rng.normal(0, sigma_bearing_deg, n),
-            "range_m": r, "dep_deg": np.degrees(np.arctan2(height_m, r)),
+            # exactly what the real sites files carry: the range the auto-labeler's
+            # assumed 2.6 m implies for this depression, NOT the true range — the global
+            # scale fit reads this column, so the fixture must not hand it the answer
+            "range_m": tg.COT_CAMERA_HEIGHT / np.tan(np.radians(dep)),
+            "dep_deg": dep,
             "pano_height": 8192, "sequence_id": "s",
             "member_lat": lat, "member_lng": lng,
         }))
@@ -327,6 +331,56 @@ def test_pipeline_recovers_a_planted_camera_height_under_realistic_noise(sigma_b
                        frame=_synthetic_member_frame(sigma_b, sigma_p, height_m=planted))
     got = tg.implied_height(fit["frame"], n_boot=60)
     assert got["median_m"] == pytest.approx(planted, abs=0.03), got
+
+
+def test_refine_argmin_recovers_an_off_grid_vertex_exactly():
+    """The parabolic vertex refinement behind the bootstrap interval: exact on a true
+    parabola, and falling back to the grid point at an edge or on a non-convex triple."""
+    ks = np.arange(0.7, 1.3, 0.002)
+    true_k = 0.94631
+    losses = (ks - true_k) ** 2 + 0.8
+    got = tg._refine_argmin(ks, losses, int(np.argmin(losses)))
+    assert got == pytest.approx(true_k, abs=1e-12)
+    assert tg._refine_argmin(ks, np.linspace(1.0, 2.0, len(ks)), 0) == pytest.approx(ks[0])
+    assert tg._refine_argmin(ks, np.ones_like(ks), 5) == pytest.approx(ks[5])
+
+
+def test_fit_model_scale_interval_contains_the_planted_height():
+    """The interval must be nondegenerate and cover both the estimate and the truth —
+    before the refinement, grid snapping could produce a width-zero band that excluded
+    its own point estimate (bend, in the committed first build)."""
+    fit = tg.fit_noise("synthetic",
+                       frame=_synthetic_member_frame(1.2, 0.5, height_m=2.35))
+    g = tg.fit_model_scale(fit["frame"], n_boot=40)
+    lo, hi = g["ci95_m"]
+    assert lo < hi
+    assert lo <= g["height_m"] <= hi
+    assert g["height_m"] == pytest.approx(2.35, abs=0.03)
+
+
+def test_quality_gates_sweep_is_well_formed_on_synthetic_data():
+    """The depth-anchor gate sweep: tightening a gate must shrink the population and, on
+    data built at one constant ratio, must not move the measured ratio."""
+    import triangulation_depth as td
+
+    rng = np.random.default_rng(0)
+    n = 600
+    g = pd.DataFrame({
+        "r_tri": rng.uniform(4, 20, n),
+        "bearing_resid_deg": rng.normal(0, 1.2, n),
+        "sigma_r_m": rng.uniform(0.1, 1.5, n),
+        "n_panos": rng.integers(3, 8, n),
+    })
+    g["r_depth"] = g["r_tri"] / 1.138
+    qg = td.quality_gates(g)
+    for sweep in (qg["by_max_abs_bearing_resid_deg"], qg["by_sigma_r_m"]):
+        ns = [sweep[k]["n"] for k in sorted(sweep, key=float)]
+        assert ns == sorted(ns), ns                     # looser gate, larger population
+    ns = [qg["by_min_panos"][k]["n"] for k in sorted(qg["by_min_panos"], key=int)]
+    assert ns == sorted(ns, reverse=True), ns
+    for sweep in qg.values():
+        for v in sweep.values():
+            assert v["median_ratio"] == pytest.approx(1.138, abs=0.001)
 
 
 # ======================================================================================

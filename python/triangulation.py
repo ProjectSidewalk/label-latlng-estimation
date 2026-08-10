@@ -403,6 +403,7 @@ def fit_noise(run: str, data_dir: Path = DATA_DIR, frame: pd.DataFrame | None = 
     trace = [{"iter": 0, "sigma_bearing_deg": sb, "sigma_pos_m": sp}]
     if sb is None:
         return {"sigma_bearing_deg": None, "sigma_pos_m": None, "frame": f, "trace": trace}
+    converged = False
     for i in range(1, n_iter + 1):
         f = site_frame(run, data_dir, sigma_bearing_deg=sb, sigma_pos_m=max(sp, 1e-3),
                        frame=base)
@@ -422,8 +423,10 @@ def fit_noise(run: str, data_dir: Path = DATA_DIR, frame: pd.DataFrame | None = 
     f = site_frame(run, data_dir, sigma_bearing_deg=sb, sigma_pos_m=max(sp, 1e-3),
                    frame=base)
     final = variance_components(f)
+    # the explicit flag, not `len(trace) - 1 < n_iter`: the degenerate early break above
+    # (decomposition unresolvable on a tiny subset) must not report as convergence
     return {"sigma_bearing_deg": round(float(sb), 4), "sigma_pos_m": round(float(sp), 4),
-            "n_iter": len(trace) - 1, "converged": bool(len(trace) - 1 < n_iter),
+            "n_iter": len(trace) - 1, "converged": bool(converged),
             "trace": trace, "bins_final": final.get("bins", []),
             "median_abs_bearing_resid_deg": final.get("median_abs_bearing_resid_deg"),
             "frame": f}
@@ -669,6 +672,26 @@ def implied_height(f: pd.DataFrame, sigma_gate_m: float = SIGMA_R_GATE_M,
     }
 
 
+def _refine_argmin(ks: np.ndarray, losses: np.ndarray, i: int) -> float:
+    """Vertex of the three-point parabola through a discrete argmin.
+
+    The placement scatter is smooth and locally quadratic in ``k`` (every placement is
+    linear in it), so the continuum minimum is recovered to far below the grid pitch.
+    Without this, the estimate — and, worse, every bootstrap replicate — snaps to its
+    grid, and a percentile interval of snapped values is quantised to the pitch (0.005 in
+    ``k`` is 13 mm of height): bend's interval printed as a width-zero band that excluded
+    its own point estimate. Falls back to the grid point at a sweep edge or on a locally
+    non-convex triple, where a vertex is undefined.
+    """
+    if not 0 < i < len(ks) - 1:
+        return float(ks[i])
+    denom = float(losses[i - 1] - 2.0 * losses[i] + losses[i + 1])
+    if denom <= 0:
+        return float(ks[i])
+    return float(ks[i] + 0.5 * (ks[i + 1] - ks[i])
+                 * (losses[i - 1] - losses[i + 1]) / denom)
+
+
 def fit_model_scale(f: pd.DataFrame, sigma_gate_m: float = SIGMA_R_GATE_M,
                     lo: float = 0.70, hi: float = 1.30, step: float = 0.002,
                     loss: str = "L1", n_boot: int = 0, seed: int = SEED) -> dict:
@@ -719,14 +742,14 @@ def fit_model_scale(f: pd.DataFrame, sigma_gate_m: float = SIGMA_R_GATE_M,
     ks = np.arange(lo, hi + 1e-9, step)
     losses = np.array([scatter(k) for k in ks])
     i_best = int(np.argmin(losses))
-    k_best = float(ks[i_best])
+    k_best = _refine_argmin(ks, losses, i_best)
     out = {
         "n": int(len(d)), "n_sites": int(d["site_id"].nunique()), "loss": loss,
         "k": round(k_best, 4),
         # a minimum pinned to the sweep boundary is a clamp, not an estimate
         "at_grid_edge": bool(i_best in (0, len(ks) - 1)),
         "height_m": round(k_best * COT_CAMERA_HEIGHT, 4),
-        "scatter_at_best_m": round(float(losses.min()), 4),
+        "scatter_at_best_m": round(float(scatter(k_best)), 4),
         "scatter_at_2p6_m": round(float(scatter(1.0)), 4),
     }
     if n_boot:
@@ -738,7 +761,8 @@ def fit_model_scale(f: pd.DataFrame, sigma_gate_m: float = SIGMA_R_GATE_M,
         starts = np.searchsorted(g[order], np.arange(n_sites), side="left")
         ends = np.searchsorted(g[order], np.arange(n_sites), side="right")
         idx_by = [order[a:b] for a, b in zip(starts, ends)]
-        # a coarser grid for the interval: the CI is wider than the grid by a long way
+        # a coarser grid for the interval is fine because the parabolic vertex refinement
+        # below recovers the continuum minimum: the grid pitch never reaches the interval
         ks_b = np.arange(lo, hi + 1e-9, max(step, 0.005))
         boots = []
         for _ in range(n_boot):
@@ -746,7 +770,8 @@ def fit_model_scale(f: pd.DataFrame, sigma_gate_m: float = SIGMA_R_GATE_M,
             sel = np.concatenate([idx_by[p] for p in pick])
             newg = np.repeat(np.arange(n_sites), [len(idx_by[p]) for p in pick])
             bl = np.array([scatter(k, (sel, newg)) for k in ks_b])
-            boots.append(ks_b[int(np.argmin(bl))] * COT_CAMERA_HEIGHT)
+            boots.append(_refine_argmin(ks_b, bl, int(np.argmin(bl)))
+                         * COT_CAMERA_HEIGHT)
         out["ci95_m"] = [round(float(np.percentile(boots, 2.5)), 4),
                          round(float(np.percentile(boots, 97.5)), 4)]
     return out
@@ -1054,11 +1079,15 @@ def applicability(run: str, data_dir: Path = DATA_DIR,
         "n_sites_3plus_panos": int((per_site_panos >= 3).sum()),
         "frac_sites_3plus_panos": round(float((per_site_panos >= 3).mean()), 4),
         "median_panos_per_site": float(per_site_panos.median()),
+        # the population the report's dataset table describes — sites that can support
+        # leave-one-out — not the 2+ population `median_panos_per_site` summarises
+        "median_panos_per_site_3plus": float(
+            per_site_panos[per_site_panos >= MIN_PANOS_FOR_LOO].median()),
     }
     if f.empty:
         return out
-    # intersection-angle conditioning: for each member, the angle between its ray and the
-    # best-separated other ray in the site (error scales ~ 1/sin of this)
+    # intersection-angle conditioning: each site's best-separated ray *pair* (error scales
+    # ~ 1/sin of this); every member of a site carries the same site-level value
     ang = f.groupby("site_id")["bearing_deg"].transform(
         lambda b: _max_intersection_angle(b.to_numpy()))
     out["intersection_angle_deg"] = {

@@ -290,8 +290,10 @@ the figures and the tests all replay from a fresh checkout.
   under all four sign conventions), every distance model scored against the triangulated
   truth, split-half precision, the fitted global bearing offset, cross-source absolute rig
   heights, and the same-pixel `depth_anchor` — including the position-drift check (stored
-  vs freshly fetched panorama positions) and the gap's range and capture-era profiles,
-  which separate the §8 candidates by shape.
+  vs freshly fetched panorama positions), the quality-gate sweep of the ratio
+  (`quality_gates`: bearing residual, conditioning, site size — the systematicity claim,
+  computed rather than asserted), and the gap's range and capture-era profiles, which
+  separate the §8 candidates by shape.
 - `triangulation-depth-payloads.jsonl.gz` — verbatim base64 depth payloads for 480 GSV
   panoramas (120 per GSV run; ~3 MB), fetched 2026-08-08. Same preservation principle as the
   depth-pilot and modern-truth payloads: the evidence, not a pointer to it.
@@ -305,13 +307,20 @@ the figures and the tests all replay from a fresh checkout.
   the conclusions page carries its depth-model panel. Deliberately separate from
   `triangulation-depth-payloads.jsonl.gz`: the anchor population is locked by the
   findings tests and must not grow, and these pixels carry no committed `r_depth`.
-- `triangulation-viz-tiles.jsonl.gz` — verbatim GSV imagery tiles (192 tiles, 18
-  panoramas, ~7 MB, fetched 2026-08-09) behind `figures/triangulation-conclusions.html`,
-  the interactive conclusions page built by `python/triangulation_viz.py`. Context for
-  human eyes: no number in the reports or tests depends on these bytes — the page's
-  charts replay `triangulation-summary.json` and its depth panels replay the committed
-  payloads. Committed per the archival rule in `CLAUDE.md`: every byte an artifact
-  depends on lives in the repo, so the page rebuilds offline from a fresh checkout.
+- `triangulation-viz-tiles.jsonl.gz` — verbatim GSV imagery tiles (185 tiles, 18
+  panoramas, ~7 MB, fetched 2026-08-09; one gen-3 panorama's window re-fetched
+  2026-08-10 after review found the crop code assumed the 4096×2048 zoom-3 pyramid —
+  that pano serves 3328×1664, so its two crops showed the wrong window. The fix derives
+  each pano's pyramid from its native height, cross-checked against the `image_sizes`
+  in `triangulation-depth-panos.csv.gz`; the stale nadir-band tiles were dropped and
+  the other 17 panoramas' bytes are unchanged) behind
+  `figures/triangulation-conclusions.html`, the interactive conclusions page built by
+  `python/triangulation_viz.py`. Context for human eyes: no number in the reports or
+  tests depends on these bytes — the page's charts replay `triangulation-summary.json`
+  and its depth panels replay the committed payloads. Committed per the archival rule in
+  `CLAUDE.md`: every byte an artifact depends on lives in the repo, so the page rebuilds
+  offline from a fresh checkout — byte-identically under the pinned environment (PIL's
+  encoders), which `RUN_SLOW=1 pytest tests/test_triangulation_viz.py` locks.
 - `triangulation-viz-basemaps.jsonl.gz` — verbatim aerial tiles (40 tiles, 6 sites,
   ~300 KB, fetched 2026-08-09 from New Jersey's 2020 orthoimagery at z20, 0.11 m/px)
   giving each showcase site's 3D scene a real ground plane, so a reader can see which

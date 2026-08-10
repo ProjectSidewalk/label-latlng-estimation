@@ -61,6 +61,14 @@ DATA_DIR = tg.DATA_DIR
 PAYLOADS = DATA_DIR / "triangulation-depth-payloads.jsonl.gz"
 PANOS_CSV = DATA_DIR / "triangulation-depth-panos.csv.gz"
 
+
+def payloads_path(data_dir: Path = DATA_DIR) -> Path:
+    return Path(data_dir) / PAYLOADS.name
+
+
+def panos_path(data_dir: Path = DATA_DIR) -> Path:
+    return Path(data_dir) / PANOS_CSV.name
+
 #: Panoramas to sample per GSV run. Enough that the median is pinned to a few centimetres
 #: while the committed payload bundle stays a few megabytes.
 PANOS_PER_RUN = 120
@@ -121,8 +129,8 @@ def fetch(runs=None, per_run: int = PANOS_PER_RUN, data_dir: Path = DATA_DIR) ->
             print(f"    fetched {i}/{len(plan)}", flush=True)
 
     panos = pd.DataFrame(rows)
-    panos.to_csv(PANOS_CSV, index=False, compression="gzip")
-    with gzip.open(PAYLOADS, "wt", encoding="utf-8", newline="\n") as fh:
+    panos.to_csv(panos_path(data_dir), index=False, compression="gzip")
+    with gzip.open(payloads_path(data_dir), "wt", encoding="utf-8", newline="\n") as fh:
         for p in payloads:
             fh.write(json.dumps(p, sort_keys=True) + "\n")
     return {"n_planned": len(plan), "n_payloads": len(payloads),
@@ -177,6 +185,10 @@ def depth_ranges(run: str, frame: pd.DataFrame, payloads: dict[str, str],
             rows.append({
                 "run": run, "site_id": m.site_id, "pano_id": pano_id,
                 "dep_deg": m.dep_deg, "r_tri": m.r_tri, "range_m": m.range_m,
+                # carried through so the quality-gate sweep can tighten on them
+                "bearing_resid_deg": m.bearing_resid_deg,
+                "sigma_r_m": m.sigma_r_m,
+                "n_panos": m.n_panos,
                 "hit_class": hit.hit_class,
                 "r_depth": hit.horizontal_m,
                 "height_above_ground_m": hit.height_above_ground_m,
@@ -202,8 +214,8 @@ def anchor(data_dir: Path = DATA_DIR, runs=None,
     ``frames`` accepts the noise-fitted member frames the build already holds, keyed by
     run; any run not supplied is fitted here (several minutes each on the larger cities).
     """
-    payloads = load_payloads()
-    panos = load_panos()
+    payloads = load_payloads(payloads_path(data_dir))
+    panos = load_panos(panos_path(data_dir))
     if not payloads or panos.empty:
         return {"available": False,
                 "note": "run `python python/run_triangulation.py fetch` first"}
@@ -273,6 +285,7 @@ def anchor(data_dir: Path = DATA_DIR, runs=None,
             "measurement systems, not a convention difference."),
         "frame_controls": controls,
         "position_drift": position_drift(panos, data_dir),
+        "quality_gates": quality_gates(allg),
         "gap_range_profile": gap_range_profile(allg),
         "gap_by_capture_year": gap_by_capture_year(allg, panos),
     }
@@ -307,6 +320,37 @@ def position_drift(panos: pd.DataFrame, data_dir: Path = DATA_DIR) -> dict:
             "median_m": round(float(np.median(d)), 4),
             "p99_m": round(float(np.percentile(d, 99)), 4),
             "max_m": round(float(np.max(d)), 4)}
+
+
+def quality_gates(allg: pd.DataFrame, min_n: int = 40) -> dict:
+    """The disagreement under tightening quality gates — computed, not asserted.
+
+    "The gap is systematic" is only a claim if it survives every gate that would remove a
+    quality artifact: a mis-clustered member (bearing residual), an ill-conditioned
+    triangulation (propagated range sigma), a thin site (panorama count). Each sweep
+    tightens one gate over the same pooled population and reports the ratio that remains.
+    Committed to the summary and locked by the findings tests so the prose can never again
+    carry numbers the build does not produce.
+    """
+    def cell(g: pd.DataFrame) -> dict:
+        return {"n": int(len(g)),
+                "median_ratio": round(float(np.median(g["r_tri"] / g["r_depth"])), 4)}
+
+    out = {"by_max_abs_bearing_resid_deg": {}, "by_sigma_r_m": {}, "by_min_panos": {}}
+    for t in (4.0, 2.0, 1.0, 0.5, 0.25):
+        g = allg[np.abs(allg["bearing_resid_deg"]) <= t]
+        if len(g) >= min_n:
+            out["by_max_abs_bearing_resid_deg"][str(t)] = cell(g)
+    for t in (1.5, 1.0, 0.75, 0.5):
+        # 1.5 is the headline's own gate (`usable`), so that row restates the pooled ratio
+        g = allg[allg["sigma_r_m"] <= t]
+        if len(g) >= min_n:
+            out["by_sigma_r_m"][str(t)] = cell(g)
+    for t in (3, 4, 5):
+        g = allg[allg["n_panos"] >= t]
+        if len(g) >= min_n:
+            out["by_min_panos"][str(t)] = cell(g)
+    return out
 
 
 #: Range-bin edges for the gap profile. The last committed bin (18, 25] still carries

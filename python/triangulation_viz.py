@@ -65,10 +65,49 @@ OUT_HTML = ROOT / "figures" / "triangulation-conclusions.html"
 #: :func:`pick_sites`): 4-6 panoramas, >=2 committed depth reads, median range 5-16 m,
 #: max pairwise intersection angle >=60 deg — well-conditioned sites a reader can orbit.
 VIZ_RUN = "paterson"
-ZOOM, TILE, W, H = 3, 512, 4096, 2048
+ZOOM, TILE = 3, 512
 COL_HALF = 32.0 / 360.0          # crop: +/-32 deg of azimuth around the detection
 ROW_LO, ROW_HI = 0.44, 0.80      # rows: elevation +10.8 deg .. -54 deg
 OUT_W = 440                      # crop resize width, px
+
+
+def pano_zoom3_wh(pano_height: float) -> tuple[int, int]:
+    """The zoom-3 equirect dimensions this pano actually serves, from its native height.
+
+    GSV's zoom-3 level is native/4 on both axes: an 8192-px gen-4 pano serves 4096x2048,
+    a 6656-px gen-3 pano serves 3328x1664. A hardcoded 4096x2048 sampled the wrong window
+    on gen-3 panos — azimuth scaled by 4096/3328 and the elevation band shifted into the
+    nadir — which put two wrong photo crops on the committed page (found in review).
+    Wherever the pano appears in the committed anchor fetch metadata, the build
+    cross-checks this derivation against the ``image_sizes`` Google itself reported.
+    """
+    h = int(round(float(pano_height))) // 4
+    return 2 * h, h
+
+
+def _anchor_image_wh() -> dict:
+    """pano_id -> served zoom-3 (w, h), parsed from the committed anchor fetch metadata."""
+    panos = td.load_panos()
+    out = {}
+    if panos.empty or "image_sizes" not in panos:
+        return out
+    for r in panos.itertuples():
+        if isinstance(r.image_sizes, str):
+            try:
+                w_, h_ = r.image_sizes.split(";")[ZOOM].split("x")
+                out[r.pano_id] = (int(w_), int(h_))
+            except (IndexError, ValueError):
+                pass
+    return out
+
+
+def _checked_wh(pano_id: str, pano_height: float, sizes: dict) -> tuple[int, int]:
+    wh = pano_zoom3_wh(pano_height)
+    exp = sizes.get(pano_id)
+    if exp is not None and exp != wh:
+        raise SystemExit(f"{pano_id}: zoom-3 {wh} derived from pano_height "
+                         f"{pano_height} disagrees with fetched image_sizes {exp}")
+    return wh
 
 #: Aerial sources in preference order — (name, tile URL template, max zoom). The first
 #: that serves real imagery for a site wins, and which one did is recorded per site and
@@ -183,24 +222,34 @@ class _Throttle:
         self.last = time.time()
 
 
-def _crop_tiles(cf: float) -> tuple[list, int]:
-    """(x, y) tile indices covering the crop window at column-fraction ``cf``."""
-    x0 = (cf - COL_HALF) * W
-    x1 = (cf + COL_HALF) * W
-    c0 = int(np.floor(x0 / TILE))
-    cols = range(c0, int(np.floor(x1 / TILE)) + 1)
-    rows = range(int(ROW_LO * H) // TILE, (int(ROW_HI * H) - 1) // TILE + 1)
-    return [(cx, cy) for cx in cols for cy in rows], c0
+def _crop_tiles(cf: float, w: int, h: int) -> list:
+    """Real (wrapped) (x, y) tile ids covering the crop window at column-fraction ``cf``.
+
+    Column ids come from mapping every needed *pixel* column through ``mod w`` first: the
+    served width need not be a tile multiple (gen-3's 3328 px is 6.5 tiles), so the seam
+    sits mid-tile and a tile-index modulo would name tiles that do not exist.
+    """
+    x0 = int(np.floor((cf - COL_HALF) * w))
+    xs = (x0 + np.arange(int(2 * COL_HALF * w))) % w
+    cols = sorted(set((xs // TILE).tolist()))
+    rows = range(int(ROW_LO * h) // TILE, (int(ROW_HI * h) - 1) // TILE + 1)
+    return [(int(cx), int(cy)) for cx in cols for cy in rows]
 
 
 def _members(f, cmp_):
-    """(site_id, member row, heading, column fraction) for every showcase member."""
+    """(site_id, member row, ..., column fraction, zoom-3 (w, h)) per showcase member.
+
+    The (w, h) is derived from the member's own ``pano_height`` and cross-checked against
+    the ``image_sizes`` Google reported wherever the pano is in the committed anchor CSV.
+    """
     heading = mf.load_panos(VIZ_RUN).set_index("pano_id")["camera_heading"]
+    sizes = _anchor_image_wh()
     for sid, gg, n_depth, ang, depth_by in pick_sites(f, cmp_):
         for m in gg.itertuples():
             hd = float(heading.loc[m.pano_id])
             cf = ((m.bearing_deg - hd + 180.0) % 360.0) / 360.0
-            yield sid, m, n_depth, ang, depth_by, cf
+            yield sid, m, n_depth, ang, depth_by, cf, \
+                _checked_wh(m.pano_id, m.pano_height, sizes)
 
 
 def _fit_for_fetch() -> tuple:
@@ -232,14 +281,20 @@ def fetch_basemaps_only() -> dict:
 
 
 def fetch() -> dict:
-    """Fetch the tiles every crop needs and commit them verbatim. The only network stage."""
+    """Fetch the tiles every crop needs and commit them verbatim. The only network stage.
+
+    Committed bytes are preserved, not re-observed: tiles come from the local cache when
+    present, top-up depth payloads already in the committed bundle are carried forward
+    verbatim (only genuinely new cameras are fetched), and an aerial patch is reused
+    whenever its site still draws the same extent. Fixing one bundle is never a reason
+    to let the others drift.
+    """
     f, cmp_ = _fit_for_fetch()
     session = requests.Session()
     throttle = _Throttle(0.12)
     need = {}
-    for _, m, _, _, _, cf in _members(f, cmp_):
-        tiles, _ = _crop_tiles(cf)
-        need.setdefault(m.pano_id, set()).update((cx % (W // TILE), cy) for cx, cy in tiles)
+    for _, m, _, _, _, cf, wh in _members(f, cmp_):
+        need.setdefault(m.pano_id, set()).update(_crop_tiles(cf, *wh))
     n = 0
     with gzip.open(TILES_BUNDLE, "wt", encoding="utf-8", newline="\n") as fh:
         for pano_id in sorted(need):
@@ -253,24 +308,38 @@ def fetch() -> dict:
             fh.write(json.dumps(rec, sort_keys=True) + "\n")
 
     # Depth top-up: payloads for showcase cameras outside the anchor's 480-pano sample.
+    # Bytes already committed for a camera are reused verbatim; a fresh photometa fetch
+    # observes a different remote state and is reserved for genuinely new cameras.
     anchor_payloads = td.load_payloads()
+    committed = load_viz_payloads()
     missing = sorted(p for p in need if p not in anchor_payloads)
-    vp = []
+    vp, n_new = [], 0
     for pano_id in missing:
+        if pano_id in committed:
+            vp.append({"pano_id": pano_id, "run": VIZ_RUN,
+                       "depth_b64": committed[pano_id]})
+            continue
         throttle.wait()
         resp = gd.fetch_photometa_raw(pano_id)
         b64 = gd.extract_depth_b64(resp)
         if b64:
             vp.append({"pano_id": pano_id, "run": VIZ_RUN, "depth_b64": b64})
+            n_new += 1
     with gzip.open(VIZ_PAYLOADS, "wt", encoding="utf-8", newline="\n") as fh:
         for p in vp:
             fh.write(json.dumps(p, sort_keys=True) + "\n")
 
     out = {"n_panos": len(need), "n_tiles": n, "bundle": str(TILES_BUNDLE),
-           "n_viz_payloads": len(vp), "n_missing": len(missing),
-           "payloads_bundle": str(VIZ_PAYLOADS)}
-    out.update(_write_basemaps(fetch_basemaps(f, cmp_, session, throttle)))
+           "n_viz_payloads": len(vp), "n_viz_payloads_new": n_new,
+           "n_missing": len(missing), "payloads_bundle": str(VIZ_PAYLOADS)}
+    out.update(_write_basemaps(fetch_basemaps(f, cmp_, session, throttle,
+                                              reuse=load_basemaps())))
     return out
+
+
+def load_viz_payloads() -> dict:
+    """pano_id -> depth_b64 from the committed top-up bundle ({} if never fetched)."""
+    return td.load_payloads(VIZ_PAYLOADS) if VIZ_PAYLOADS.exists() else {}
 
 
 def load_tiles() -> dict:
@@ -284,20 +353,25 @@ def load_tiles() -> dict:
     return out
 
 
-def crop_image(tiles: dict, cf: float) -> Image.Image:
-    coords, c0 = _crop_tiles(cf)
-    rows0 = int(ROW_LO * H) // TILE
-    ncols = max(cx for cx, _ in coords) - c0 + 1
-    nrows = max(cy for _, cy in coords) - rows0 + 1
-    canvas = Image.new("RGB", (ncols * TILE, nrows * TILE))
-    for cx, cy in coords:
-        img = Image.open(io.BytesIO(tiles[(cx % (W // TILE), cy)]))
-        canvas.paste(img, ((cx - c0) * TILE, (cy - rows0) * TILE))
-    x0 = (cf - COL_HALF) * W
-    px0 = int(x0 - c0 * TILE)
-    y0, y1 = int(ROW_LO * H), int(ROW_HI * H)
-    img = canvas.crop((px0, y0 - rows0 * TILE,
-                       px0 + int(2 * COL_HALF * W), y1 - rows0 * TILE))
+def crop_image(tiles: dict, cf: float, w: int, h: int) -> Image.Image:
+    """The crop window, assembled seam-safely: paste the bundle's tiles for the needed
+    rows onto a full-width strip, trim the dead margin past ``w`` (gen-3's last column
+    tile is half blank), then gather the window's pixel columns through ``mod w`` — the
+    only wrap that is correct when the seam falls mid-tile. For the standard 4096-px
+    pyramid this reproduces the previous paste-and-crop path pixel for pixel."""
+    rows0 = int(ROW_LO * h) // TILE
+    rows1 = (int(ROW_HI * h) - 1) // TILE
+    ncols = (w + TILE - 1) // TILE
+    strip = Image.new("RGB", (ncols * TILE, (rows1 - rows0 + 1) * TILE))
+    for (cx, cy), jpg in tiles.items():
+        if rows0 <= cy <= rows1 and cx < ncols:
+            strip.paste(Image.open(io.BytesIO(jpg)), (cx * TILE, (cy - rows0) * TILE))
+    a = np.asarray(strip)[:, :w]
+    y0, y1 = int(ROW_LO * h), int(ROW_HI * h)
+    a = a[y0 - rows0 * TILE: y1 - rows0 * TILE]
+    x0 = int(np.floor((cf - COL_HALF) * w))
+    cols = (x0 + np.arange(int(2 * COL_HALF * w))) % w
+    img = Image.fromarray(a[:, cols])
     s = OUT_W / img.width
     return img.resize((OUT_W, int(img.height * s)), Image.LANCZOS)
 
@@ -315,15 +389,15 @@ def _colormap(v: np.ndarray) -> np.ndarray:
     return (a + (b - a) * frac).astype(np.uint8)
 
 
-def depth_crop(t_raster: np.ndarray, cf: float) -> Image.Image:
+def depth_crop(t_raster: np.ndarray, cf: float, w: int, h: int) -> Image.Image:
     """Google's modelled ray distance over the same heading-centred window (log 2-40 m)."""
     hd, wd = t_raster.shape
     ow = 220
-    # Same aspect as the photo crop it sits beside: the window spans int(2*COL_HALF*W)
-    # equirect columns by (ROW_HI-ROW_LO)*H rows — and H = W/2, so it is very nearly
+    # Same aspect as the photo crop it sits beside: the window spans int(2*COL_HALF*w)
+    # equirect columns by (ROW_HI-ROW_LO)*h rows — and h = w/2, so it is very nearly
     # square. Deriving it any other way (in azimuth/elevation fractions, say) drops or
     # doubles that factor of two and the panel renders at the wrong height.
-    oh = int(ow * (int(ROW_HI * H) - int(ROW_LO * H)) / int(2 * COL_HALF * W))
+    oh = int(ow * (int(ROW_HI * h) - int(ROW_LO * h)) / int(2 * COL_HALF * w))
     fx = (cf - COL_HALF + (np.arange(ow) + 0.5) / ow * 2 * COL_HALF) % 1.0
     fy = ROW_LO + (np.arange(oh) + 0.5) / oh * (ROW_HI - ROW_LO)
     cols = np.clip((fx * wd).astype(int), 0, wd - 1)
@@ -393,14 +467,25 @@ def _is_imagery(jpg: bytes) -> bool:
     return len(np.unique(a, axis=0)) >= BASEMAP_MIN_COLOURS
 
 
-def fetch_basemaps(f: "object", cmp_: "object", session, throttle) -> list[dict]:
-    """Aerial tiles covering each showcase site's ground square, verbatim."""
+def fetch_basemaps(f: "object", cmp_: "object", session, throttle,
+                   reuse: dict | None = None) -> list[dict]:
+    """Aerial tiles covering each showcase site's ground square, verbatim.
+
+    ``reuse`` carries the committed records: a site whose scene still draws the same
+    extent at the same centre keeps its committed bytes rather than re-observing the
+    provider (the ``fetch-basemaps`` stage refreshes by intent and passes none).
+    """
     lat0, lng0 = _run_origin(f)
     out = []
     for sid, gg, _, _, _ in pick_sites(f, cmp_):
         ce, cn = float(gg["loo_e"].median()), float(gg["loo_n"].median())
         ext = site_ext_m(gg, ce, cn)
         lat, lng = (float(v) for v in tg.en_to_latlng(ce, cn, lat0, lng0))
+        prev = (reuse or {}).get(str(sid))
+        if prev is not None and prev["ext"] == ext \
+                and abs(prev["lat"] - lat) < 1e-6 and abs(prev["lng"] - lng) < 1e-6:
+            out.append(prev)
+            continue
         for name, url, zoom in BASEMAP_SOURCES:
             x0, y0, x1, y1 = _patch_box(lat, lng, ext, zoom)
             tiles, ok = [], True
@@ -468,7 +553,7 @@ def build(quick: bool = False) -> dict:
     # r_depth values come from the ANCHOR payloads only — the committed §8 population.
     # The merged set adds the viz top-up so every camera can render its depth panel.
     anchor_payloads = td.load_payloads()
-    payloads = {**anchor_payloads, **td.load_payloads(VIZ_PAYLOADS)}
+    payloads = {**anchor_payloads, **load_viz_payloads()}
     cmp_ = td._comparable(td.depth_ranges(VIZ_RUN, f, anchor_payloads, td.load_panos()))
     tiles = load_tiles()
     basemaps = load_basemaps()
@@ -476,19 +561,21 @@ def build(quick: bool = False) -> dict:
 
     rasters = {}
     sites = []
+    heading = mf.load_panos(VIZ_RUN).set_index("pano_id")["camera_heading"]
+    sizes = _anchor_image_wh()
     for sid, gg, n_depth, ang, depth_by in pick_sites(f, cmp_):
         ce, cn = float(gg["loo_e"].median()), float(gg["loo_n"].median())
-        heading = mf.load_panos(VIZ_RUN).set_index("pano_id")["camera_heading"]
         mem = []
         for m in gg.itertuples():
             hd = float(heading.loc[m.pano_id])
             cf = ((m.bearing_deg - hd + 180.0) % 360.0) / 360.0
+            wh = _checked_wh(m.pano_id, m.pano_height, sizes)
             rd = depth_by.get((sid, m.pano_id))
             rec = {"e": round(m.pano_e - ce, 3), "n": round(m.pano_n - cn, 3),
                    "b": round(m.bearing_deg, 3), "dep": round(m.dep_deg, 3),
                    "rt": round(m.r_tri, 3), "r26": round(m.range_m, 3),
                    "rd": round(float(rd), 3) if rd is not None else None,
-                   "img": _to_uri(crop_image(tiles[m.pano_id], cf)),
+                   "img": _to_uri(crop_image(tiles[m.pano_id], cf, *wh)),
                    "cx": 0.5,
                    "cy": round((m.y_normalized - ROW_LO) / (ROW_HI - ROW_LO), 4),
                    "hz": round((0.5 - ROW_LO) / (ROW_HI - ROW_LO), 4),
@@ -497,7 +584,7 @@ def build(quick: bool = False) -> dict:
                 if m.pano_id not in rasters:
                     rasters[m.pano_id] = gd.compute_depth_t(
                         gd.decode_depth_payload(payloads[m.pano_id]))
-                rec["dimg"] = _to_uri(depth_crop(rasters[m.pano_id], cf), "PNG")
+                rec["dimg"] = _to_uri(depth_crop(rasters[m.pano_id], cf, *wh), "PNG")
             mem.append(rec)
         rec = {"run": VIZ_RUN, "site": str(sid),
                "height": s["scale_global"][VIZ_RUN]["height_m"],
@@ -514,9 +601,19 @@ def build(quick: bool = False) -> dict:
                              "src": bm["source"], "zoom": bm["zoom"]}
         sites.append(rec)
     data["sites"] = sites
+    # counts the page's provenance block quotes — measured from the bundles themselves,
+    # so a re-fetch can never leave the page describing a bundle it no longer replays
+    data["bundle_stats"] = {
+        "tiles": sum(len(v) for v in tiles.values()), "tile_panos": len(tiles),
+        "basemap_tiles": sum(len(b["tiles"]) for b in basemaps.values()),
+        "basemap_sites": len(basemaps),
+    }
 
     tpl = TEMPLATE.read_text(encoding="utf-8")
-    html = tpl.replace("__DATA_JSON__", json.dumps(data, separators=(",", ":")))
+    # "</" escaped so no future data value (today none contains "<") can terminate the
+    # script element the blob is inlined into; JSON treats \/ and / identically.
+    blob = json.dumps(data, separators=(",", ":")).replace("</", "<\\/")
+    html = tpl.replace("__DATA_JSON__", blob)
     OUT_HTML.write_text(html, encoding="utf-8", newline="\n")
     return {"sites": len(sites),
             "crops": sum(len(x["members"]) for x in sites),

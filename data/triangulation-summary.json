@@ -9,6 +9,7 @@
         "p90": 89.21
       },
       "median_panos_per_site": 4.0,
+      "median_panos_per_site_3plus": 4.0,
       "n_sites_2plus_panos": 11655,
       "n_sites_3plus_panos": 9709,
       "n_sites_multi_member": 11655
@@ -22,6 +23,7 @@
         "p90": 89.7
       },
       "median_panos_per_site": 4.0,
+      "median_panos_per_site_3plus": 5.0,
       "n_sites_2plus_panos": 1560,
       "n_sites_3plus_panos": 1135,
       "n_sites_multi_member": 1560
@@ -35,6 +37,7 @@
         "p90": 88.69
       },
       "median_panos_per_site": 2.0,
+      "median_panos_per_site_3plus": 3.0,
       "n_sites_2plus_panos": 5926,
       "n_sites_3plus_panos": 2790,
       "n_sites_multi_member": 5926
@@ -48,6 +51,7 @@
         "p90": 89.16
       },
       "median_panos_per_site": 3.0,
+      "median_panos_per_site_3plus": 4.0,
       "n_sites_2plus_panos": 6995,
       "n_sites_3plus_panos": 4810,
       "n_sites_multi_member": 6995
@@ -61,6 +65,7 @@
         "p90": 89.81
       },
       "median_panos_per_site": 5.0,
+      "median_panos_per_site_3plus": 7.0,
       "n_sites_2plus_panos": 1183,
       "n_sites_3plus_panos": 945,
       "n_sites_multi_member": 1183
@@ -74,6 +79,7 @@
         "p90": 89.04
       },
       "median_panos_per_site": 3.0,
+      "median_panos_per_site_3plus": 4.0,
       "n_sites_2plus_panos": 6261,
       "n_sites_3plus_panos": 3258,
       "n_sites_multi_member": 6261
@@ -435,45 +441,45 @@
   "cross_source": {
     "absolute_rig_heights_m": {
       "bend": {
-        "absolute_rig_m": 2.3828,
+        "absolute_rig_m": 2.3822,
         "imagery": "gsv",
-        "implied_m": 2.4596
+        "implied_m": 2.4582
       },
       "clovis": {
-        "absolute_rig_m": 2.2944,
+        "absolute_rig_m": 2.2969,
         "imagery": "mapillary",
-        "implied_m": 2.3712
+        "implied_m": 2.3729
       },
       "gainesville": {
-        "absolute_rig_m": 2.258,
+        "absolute_rig_m": 2.2607,
         "imagery": "gsv",
-        "implied_m": 2.3348
+        "implied_m": 2.3367
       },
       "paterson": {
-        "absolute_rig_m": 2.2996,
+        "absolute_rig_m": 2.3003,
         "imagery": "gsv",
-        "implied_m": 2.3764
+        "implied_m": 2.3763
       },
       "richmond": {
-        "absolute_rig_m": 2.4088,
+        "absolute_rig_m": 2.4073,
         "imagery": "mapillary",
-        "implied_m": 2.4856
+        "implied_m": 2.4833
       },
       "sao_paulo": {
-        "absolute_rig_m": 2.4816,
+        "absolute_rig_m": 2.4825,
         "imagery": "gsv",
-        "implied_m": 2.5584
+        "implied_m": 2.5585
       }
     },
-    "detector_click_offset_m": -0.0768,
+    "detector_click_offset_m": -0.076,
     "detector_click_offset_note": "H_rig - implied. Positive = the detector's click point sits above the ground contact. Calibrated on the GSV runs against the depth-measured modern rig, then transferred; it is NOT identifiable from bearings alone.",
     "gsv_implied_heights_m": {
-      "bend": 2.4596,
-      "gainesville": 2.3348,
-      "paterson": 2.3764,
-      "sao_paulo": 2.5584
+      "bend": 2.4582,
+      "gainesville": 2.3367,
+      "paterson": 2.3763,
+      "sao_paulo": 2.5585
     },
-    "gsv_pooled_implied_m": 2.418,
+    "gsv_pooled_implied_m": 2.4173,
     "gsv_runs": [
       "paterson",
       "gainesville",
@@ -606,6 +612,62 @@
           "max_m": 0.1017,
           "median_m": 0.0,
           "n": 120
+        }
+      }
+    },
+    "quality_gates": {
+      "by_max_abs_bearing_resid_deg": {
+        "0.25": {
+          "median_ratio": 1.1333,
+          "n": 227
+        },
+        "0.5": {
+          "median_ratio": 1.1301,
+          "n": 451
+        },
+        "1.0": {
+          "median_ratio": 1.1293,
+          "n": 888
+        },
+        "2.0": {
+          "median_ratio": 1.1312,
+          "n": 1495
+        },
+        "4.0": {
+          "median_ratio": 1.1323,
+          "n": 1979
+        }
+      },
+      "by_min_panos": {
+        "3": {
+          "median_ratio": 1.1377,
+          "n": 2639
+        },
+        "4": {
+          "median_ratio": 1.1349,
+          "n": 2171
+        },
+        "5": {
+          "median_ratio": 1.1327,
+          "n": 1506
+        }
+      },
+      "by_sigma_r_m": {
+        "0.5": {
+          "median_ratio": 1.1329,
+          "n": 2209
+        },
+        "0.75": {
+          "median_ratio": 1.1351,
+          "n": 2430
+        },
+        "1.0": {
+          "median_ratio": 1.1369,
+          "n": 2540
+        },
+        "1.5": {
+          "median_ratio": 1.1377,
+          "n": 2639
         }
       }
     },
@@ -2597,11 +2659,11 @@
     "bend": {
       "at_grid_edge": false,
       "ci95_m": [
-        2.457,
-        2.457
+        2.4549,
+        2.4618
       ],
-      "height_m": 2.4596,
-      "k": 0.946,
+      "height_m": 2.4582,
+      "k": 0.9455,
       "loss": "L1",
       "n": 42941,
       "n_sites": 9697,
@@ -2611,11 +2673,11 @@
     "clovis": {
       "at_grid_edge": false,
       "ci95_m": [
-        2.353,
-        2.392
+        2.3514,
+        2.3887
       ],
-      "height_m": 2.3712,
-      "k": 0.912,
+      "height_m": 2.3729,
+      "k": 0.9126,
       "loss": "L1",
       "n": 6570,
       "n_sites": 1094,
@@ -2625,11 +2687,11 @@
     "gainesville": {
       "at_grid_edge": false,
       "ci95_m": [
-        2.327,
-        2.353
+        2.3258,
+        2.3514
       ],
-      "height_m": 2.3348,
-      "k": 0.898,
+      "height_m": 2.3367,
+      "k": 0.8987,
       "loss": "L1",
       "n": 9107,
       "n_sites": 2566,
@@ -2639,10 +2701,10 @@
     "paterson": {
       "at_grid_edge": false,
       "ci95_m": [
-        2.366,
-        2.379
+        2.3693,
+        2.3836
       ],
-      "height_m": 2.3764,
+      "height_m": 2.3763,
       "k": 0.914,
       "loss": "L1",
       "n": 20443,
@@ -2653,24 +2715,24 @@
     "richmond": {
       "at_grid_edge": false,
       "ci95_m": [
-        2.457,
-        2.509
+        2.4625,
+        2.5036
       ],
-      "height_m": 2.4856,
-      "k": 0.956,
+      "height_m": 2.4833,
+      "k": 0.9551,
       "loss": "L1",
       "n": 7007,
       "n_sites": 909,
       "scatter_at_2p6_m": 2.1871,
-      "scatter_at_best_m": 2.1485
+      "scatter_at_best_m": 2.1484
     },
     "sao_paulo": {
       "at_grid_edge": false,
       "ci95_m": [
-        2.548,
-        2.574
+        2.5501,
+        2.568
       ],
-      "height_m": 2.5584,
+      "height_m": 2.5585,
       "k": 0.984,
       "loss": "L1",
       "n": 12118,

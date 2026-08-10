@@ -43,8 +43,9 @@ see the notes in `python/label_latlng_estimation.py`. The 2026-08-07 refit picke
 pip install -r python/requirements.txt
 python python/run_analysis.py        # seven-estimator comparison + coefficients vs published 2021
 python python/run_distance_refit.py  # the issue #3 candidate ladder vs the 2021 distance half
-python python/run_triangulation.py build  # the issue #7 depth-free bearing anchor
-pytest                               # 414 tests — see "Tests" below
+python python/run_triangulation.py build --write  # the issue #7 depth-free bearing anchor
+                                     #   (~12 min, offline; regenerates data/triangulation-summary.json)
+pytest                               # 431 tests — see "Tests" below
 ```
 
 The R side needs R ≥ 4.x with readr/dplyr/tidyr/tibble/purrr/geosphere/lme4/jsonlite
@@ -124,10 +125,12 @@ provenance, caveats, and regeneration instructions: **`data/MANIFEST.md`**.
 
 ## Tests
 
-`pytest` runs 414 tests: data contract, R↔Python equivalence, findings-vs-published, depth
+`pytest` runs 431 tests: data contract, R↔Python equivalence, findings-vs-published, depth
 pilot, depth validation, coordinate conventions, POV inversion, distance refit (findings +
 invariants), Mapillary falsification, GBM ceiling, modern truth (findings + invariants), and
-bearing-only triangulation (estimator invariants on known geometry + findings).
+bearing-only triangulation (estimator invariants on known geometry + findings + the
+conclusions-page build).
 
 `RUN_SLOW=1 pytest` additionally re-derives the coordinate-conventions evidence in full from
-the committed bytes.
+the committed bytes, re-reads every modern-truth label's truth from its payload, and rebuilds
+the issue-#7 conclusions page byte-for-byte from the committed bundles.

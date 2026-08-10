@@ -250,7 +250,7 @@ def fig26(s):
     ax2.set_xticklabels(runs, rotation=30, ha="right", fontsize=8)
     ax2.set_ylabel("sigma bearing (deg)   [pale]", fontsize=9)
     ax2b.set_ylabel("sigma panorama position (m)   [solid]", fontsize=9)
-    ax2.set_title("GSV positions beat Mapillary's SfM", loc="left")
+    ax2.set_title("Pose quality tracks the rig, not the imagery source", loc="left")
 
     _title(fig, "Fig 26 - The error budget, measured rather than assumed",
            "A bearing error misses the object by an amount proportional to range; a "
