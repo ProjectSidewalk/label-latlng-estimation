@@ -2,6 +2,19 @@
 
 **2026-08-07** · issue [#6](https://github.com/ProjectSidewalk/label-latlng-estimation/issues/6) · benchmarks the [#3](https://github.com/ProjectSidewalk/label-latlng-estimation/issues/3) refit ([2026-08-07 report](2026-08-07-distance-refit.md)) · **benchmark only — explicitly not a production candidate**
 
+> **Read with the 2026-08-10 follow-up: [The #6 ceiling was a scale, not scene
+> structure](2026-08-10-gbm-transfer.md).** Two things dated this report within a day of
+> its merge. (1) Its comparison anchor moved: "blend D (shipped)" was replaced hours later
+> by Stage 4's flat two-parameter `final_coefficients`, which is ~4 cm worse on era-frame
+> metrics by construction — so the +74% below *understates* the gap for what actually
+> ships. (2) The §5 caveat that some of the ceiling is truth-pipeline structure rather
+> than scene geometry, called "unmeasurable from inside this dataset", turned out to be
+> measurable from outside it, and it carries most of the gap: scored against modern
+> measured-plane truth with one calibration parameter on each side, the shipped closed
+> form **beats** the booster (0.410 m vs 0.498 m). Everything below is unchanged and still
+> reproduces — it is an accurate account of what the era truth frame supports, which is a
+> narrower claim than it reads as.
+
 | | |
 |---|---|
 | **0.54 m** | median lat/lng test error of the LightGBM benchmark on the published 79,029-row split — the shipped blend D answers **0.93 m**, so D sits **+74%** above the ceiling (the 2021 baseline +169%). The 10–15% "essentially free of regret" verdict does **not** hold |
