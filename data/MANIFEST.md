@@ -229,12 +229,14 @@ heights with the held-out seed sweep; report `reports/2026-08-07-mapillary-falsi
 and `gbm-ceiling-summary.json` (the LightGBM benchmark matrix, ablation, importances and the
 shared noise sweep; report `reports/2026-08-07-gbm-ceiling.md`) are the committed outputs of
 `python python/run_mapillary_falsification.py --write` and `python python/run_gbm_ceiling.py
---write` respectively — both deterministic from committed inputs (byte-identical across
-reruns), both locked by their `tests/test_*_findings.py`.
+--write` respectively — both deterministic from committed inputs, both locked by their
+`tests/test_*_findings.py`. The falsification summary is byte-identical across reruns on any
+machine; the two LightGBM artifacts are byte-identical **on the host recorded in their
+`meta.host`**, for the reason set out at the end of this section.
 
 `gbm-transfer-summary.json` is #6's second pass (report
 `reports/2026-08-10-gbm-transfer.md`, `python python/run_gbm_transfer.py --write`, 2-7 min depending on available cores —
-four LightGBM refits — and byte-identical across reruns):
+four LightGBM refits):
 the same boosters scored against the modern-truth rows below, asking whether that ceiling
 was scene structure or the era truth frame's own. It adds no data of its own; its complete
 input list is the era CSVs and the R-fixture split (to refit the boosters),
@@ -251,6 +253,52 @@ model, on a train half of panoramas, scored on the disjoint half. Locked by
 feature-frame mapping — the one thing here that could be wrong silently, since raw `pano_y`
 would reintroduce #4765's defect without raising anything — pinned separately by
 `tests/test_gbm_transfer_contract.py`.
+
+### The two LightGBM artifacts do not reproduce bit-for-bit across platforms
+
+They are the only files under `data/` for which that is true. Everything else here is
+closed-form or geometric and reproduces to 1e-9 on any machine.
+
+**Why.** LightGBM chooses its splits at histogram bin boundaries, and two platforms' `libm`
+disagree on `arctan` in the last bit — enough to move one split in the one variant that eats
+a trig-derived feature. Measured on an Apple-silicon macOS host in August 2026 against these
+Windows-built artifacts ([issue #22](https://github.com/ProjectSidewalk/label-latlng-estimation/issues/22)):
+every `best_iteration` identical, three of four variants matching to ~1e-9, and `gbm_dep_l1`
+off by 5.9e-5 m on the era-test median and 3.4e-3 m on its p90 — identically across 8 thread
+counts, two Python versions and two NumPy/pandas stacks. It is neither thread count nor
+library version, so no amount of pinning removes it.
+
+**What that costs, and what it does not.** It costs byte-identity of two files. It does not
+cost a finding: 5.9e-5 m is four orders of magnitude below the 0.40 m ceiling those files
+exist to measure, and an order below the narrowest interval either report quotes. So the
+guard in `run_gbm_transfer.py` asserts **the finding rather than the bytes** — the refitted
+boosters must reproduce the committed era-test numbers to 1 mm on medians and 2 cm on p90s
+(`gbm_transfer.CEILING_TOL_M`, whose margins are locked by the contract tests), and past that
+the run stops rather than publish a different model under the same name. Whether a given run
+*was* bit-identical is recorded in `meta.boosters_match_committed_ceiling`, never assumed.
+Until 2026-08-12 that guard asserted 1e-9, which made these two artifacts regenerable on one
+machine; a rerun elsewhere died on an assertion four orders of magnitude inside its own
+claims.
+
+Note where that check lives. `run_gbm_ceiling.py` has nothing to compare its own boosters
+against — it *is* the reference — so its in-process assertions cover only the closed-form
+baselines, which are exact on any platform and stay at 1e-9. The booster comparison lives in
+`run_gbm_transfer.py`, which refits the same four from the same code and checks them against
+the committed ceiling matrix. That makes it the tripwire for **both** artifacts: drift in
+`gbm-ceiling-summary.json` surfaces there, not in the runner that wrote it.
+
+**So, for a reproducer:** `python python/run_gbm_transfer.py --write` runs anywhere, and its
+numbers support every claim in both reports. An empty `git diff` afterwards is expected only
+on the host in `meta.host`. The same is true of `figures/fig28-gbm-transfer.png` for an
+unrelated and more mundane reason — matplotlib substitutes fonts differently per machine, so
+re-rendering it moves its bytes without moving a pixel of data. No claim anywhere rests on a
+figure's bytes; re-render only when the summary behind it changes.
+
+**Rejected alternative:** rounding `depression_deg` before it reaches the booster would make
+the divergence *rare* rather than impossible — it moves the question from "do two `libm`s
+agree in the last bit" to "do they straddle a rounding boundary", which over 316,118 rows
+still happens sometimes — and it would change published numbers in two merged reports to buy
+that. Not worth it for a benchmark-only artifact that is not a production candidate.
 
 # Modern-truth validation set (issue #3, absolute-scale close-out)
 

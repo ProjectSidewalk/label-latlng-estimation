@@ -115,11 +115,53 @@ def test_the_stored_pixel_and_the_exact_projection_agree(summary):
     assert abs(vs["p10"]) < 0.5 and abs(vs["p90"]) < 0.5
 
 
+def test_the_era_frames_own_pixels_discriminate_the_two_candidate_mappings(summary):
+    """§3's third check, read off the artifact that now carries it.
+
+    The mapping leaves the same ~15 px of pano re-registration drift in BOTH height
+    groups. The unmapped alternative is identical at 6656 px — the same expression, since
+    the calibration frame IS 6656 — and 140 px out at 8192, which is the 23% frame error
+    #4765 was. That is what makes this a conversion rather than a fitted fudge.
+    """
+    era = summary["frame_mapping"]["era_frame_residuals_px"]
+    assert era["n_rows"] == 162846
+    at6656, at8192 = era["by_pano_height"]["6656"], era["by_pano_height"]["8192"]
+    assert (at6656["n"], at8192["n"]) == (37494, 125352)
+    assert abs(at6656["mapped_px"] - 15.000) < 5e-3
+    assert abs(at8192["mapped_px"] - 14.562) < 5e-3
+    assert abs(at6656["mapped_px"] - at8192["mapped_px"]) < 1.0   # the agreement
+    assert abs(at6656["raw_px"] - at6656["mapped_px"]) < 1e-9     # degenerate at 6656
+    assert at8192["raw_px"] > 100.0                               # and not subtle at 8192
+
+
+# --------------------------------------------------------------------------- provenance
+
+def test_the_summary_records_the_host_that_built_it(summary):
+    """Issue #22: LightGBM does not reproduce bit-for-bit across platforms, so "which host
+    built this" has to be a record. Asserted structurally, never by value — the whole point
+    is that another machine can regenerate this file and write its own."""
+    host = summary["meta"]["host"]
+    assert {"platform", "machine", "python", "libraries"} <= set(host)
+    assert host["libraries"]["lightgbm"] == summary["meta"]["lightgbm_version"]
+    assert all(host[k] for k in ("platform", "machine", "python"))
+
+
 # ------------------------------------------------------------- cross-summary comparability
 
 def test_the_boosters_are_the_committed_ceiling_boosters(summary, ceiling):
-    """Same rounds, same era-test numbers — otherwise 'the #6 model' means nothing here."""
-    assert summary["meta"]["boosters_match_committed_ceiling"] is True
+    """Same rounds, same era-test numbers — otherwise 'the #6 model' means nothing here.
+
+    `within_tolerance` is the assertion; `bit_identical` is a recorded fact about the host
+    that ran it, deliberately NOT required (issue #22). A regeneration on another platform
+    can land a fifth-decimal away on `gbm_dep_l1` and still be this artifact — what it
+    cannot do is move any number this report quotes.
+    """
+    verdict = summary["meta"]["boosters_match_committed_ceiling"]
+    assert verdict["within_tolerance"] is True
+    assert verdict["best_iterations_match"] is True
+    assert isinstance(verdict["bit_identical"], bool)
+    assert verdict["max_abs_delta_m"] < max(verdict["tolerance_m"].values())
+    assert verdict["exceeded"] == {}
     for key, ref in summary["era_reference"]["models"].items():
         for metric, value in ref.items():
             assert abs(value - ceiling["matrix"][key][metric]) < 1e-9, (key, metric)

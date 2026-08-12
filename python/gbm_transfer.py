@@ -137,6 +137,48 @@ def frame_mapping_evidence(df: pd.DataFrame) -> dict:
     }
 
 
+ERA_RESIDUAL_HEIGHTS = (6656, 8192)
+
+
+def era_pixel_residuals(cleaned: pd.DataFrame,
+                        heights: tuple[int, ...] = ERA_RESIDUAL_HEIGHTS) -> dict:
+    """The third frame-mapping check: the mapping against the era frame's OWN real pixels.
+
+    The two checks above are computed on the modern rows. This one is computed on the era
+    rows the boosters are fitted on, and it is the one that discriminates: those rows carry
+    both the era ``sv_image_y`` the client stored and a ``current_pano_y`` read from
+    today's raster, so the mapping can be checked against a pixel it did not derive from.
+
+    ``mapped_px`` is the residual left by the conversion this module ships; ``raw_px`` is
+    the residual left by the discriminating alternative, the unmapped
+    ``pano_height/2 - pano_y``. The alternative is indistinguishable at 6656 px -- the two
+    are the same expression there, since the frame IS 6656 -- and wrong by ~23% of the
+    offset at 8192. Two height groups landing on the SAME small residual is what makes the
+    mapping right rather than fitted: that residual is pano re-registration drift between
+    the era panorama and today's, not a free parameter.
+
+    Emitted into the summary rather than left in prose because §3 of the report publishes
+    these exact figures, and under this repo's archival rule a published number needs an
+    artifact behind it. Nearly free: the runner already holds the cleaned frame.
+    """
+    df = cleaned.dropna(subset=["sv_image_y", "current_pano_y", "pano_height"])
+    out = {"n_rows": 0, "by_pano_height": {}}
+    for h, g in df[df["pano_height"].isin(list(heights))].groupby("pano_height"):
+        pano_y = g["current_pano_y"].astype(float)
+        raw = float(h) / 2.0 - pano_y
+        mapped = raw * (CALIBRATION_HEIGHT / float(h))
+        out["by_pano_height"][str(int(h))] = {
+            "n": int(len(g)),
+            "mapped_px": float((g["sv_image_y"] - mapped).median()),
+            "raw_px": float((g["sv_image_y"] - raw).median()),
+        }
+        out["n_rows"] += int(len(g))
+    out["reading"] = ("the mapping leaves the same small drift in both height groups; the "
+                      "unmapped alternative leaves it only at 6656 px, where the two "
+                      "expressions coincide, and is off by ~23% of the offset at 8192")
+    return out
+
+
 def support_shift(era: pd.DataFrame, modern: pd.DataFrame,
                   cols=("sv_image_y", "canvas_x", "canvas_y", "zoom", "heading", "pitch",
                         "pano_height", "depression_deg")) -> dict:
@@ -223,6 +265,75 @@ def gbm_predictions(gbms: dict, df: pd.DataFrame) -> pd.DataFrame:
         frame = swapped if "depression_deg" in model["cols"] else df
         out[key] = gc.predict_gbm(model, frame)
     return out
+
+
+# ------------------------------------------------------------------ the frozen-model guard
+
+# What the phrase "these are the #6 boosters" is allowed to mean.
+#
+# Bit-identity is what a rerun gets on the host that built the committed summary, and the
+# summary records whether it got it. It is NOT achievable across platforms, and asserting
+# it at 1e-9 made this artifact regenerable on exactly one machine (issue #22): two
+# platforms' libm disagree on arctan in the last bit, LightGBM chooses its splits at
+# histogram bin boundaries, and one such bit is enough to move a split in the single
+# variant that eats a trig-derived feature. Measured on Apple-silicon macOS in August 2026
+# -- every best_iteration identical, three of four variants matching to ~1e-9, and
+# gbm_dep_l1 off by 5.9e-5 m on the era-test median and 3.4e-3 m on its p90, identically
+# across 8 thread counts, two Python versions and two NumPy/pandas stacks.
+#
+# So the guard asserts what the reports actually rest on. The bounds sit between the
+# largest divergence anyone has measured and the smallest quantity either #6 report leans
+# on -- the transfer report's tightest published number is a +0.014 m bootstrap bound, and
+# its headline is a 0.40 m ceiling:
+#
+#   medians  1e-3 m   17x the measured divergence, 14x below that bootstrap bound
+#   p90s     2e-2 m   an order statistic on a heavy tail moves by the gap between adjacent
+#                     rows, so it is intrinsically the loosest of the four -- which is
+#                     exactly the asymmetry macOS showed on one fit (5.9e-5 m median,
+#                     3.4e-3 m p90). Still 6x that, and the p90 movements either report
+#                     treats as a finding are 0.75 m and larger (section 8's tail)
+#
+# Past these the run stops exactly as it always did: a booster that far from the committed
+# one is not the model the report describes, and scoring it would publish a different model
+# under the same name.
+CEILING_TOL_M = {"latlng_median_m": 1e-3, "latlng_p90_m": 2e-2,
+                 "dist_median_m": 1e-3, "dist_p90_m": 2e-2}
+BIT_IDENTICAL_TOL_M = 1e-9
+
+
+def compare_to_committed_ceiling(era_matrix: dict, ceiling: dict,
+                                 best_iterations: dict | None = None,
+                                 tol: dict = CEILING_TOL_M) -> dict:
+    """Verdict on whether the refitted boosters ARE the committed #6 boosters.
+
+    Returns a verdict rather than raising, because the interesting case is neither pass nor
+    fail: a rerun that is inside tolerance but not bit-identical is a legitimate
+    regeneration of this artifact on another host, and the summary should record that it
+    happened -- rather than the run dying, which is what shipped and what #22 caught, or
+    the meta block claiming an identity this run does not have.
+    """
+    deltas = {f"{key}.{metric}": era_matrix[key][metric] - ceiling["matrix"][key][metric]
+              for key in era_matrix for metric in tol}
+    exceeded = {k: v for k, v in deltas.items() if abs(v) > tol[k.split(".", 1)[1]]}
+    worst = max(deltas, key=lambda k: abs(deltas[k]))
+    rounds = {k: [v, ceiling["meta"]["best_iterations"][k]]
+              for k, v in (best_iterations or {}).items()}
+    return {
+        "within_tolerance": not exceeded,
+        "bit_identical": abs(deltas[worst]) < BIT_IDENTICAL_TOL_M,
+        "best_iterations_match": all(a == b for a, b in rounds.values()),
+        "best_iterations_refit_vs_committed": rounds,
+        "max_abs_delta_m": abs(deltas[worst]),
+        "worst_metric": worst,
+        "tolerance_m": dict(tol),
+        "exceeded": exceeded,
+        "meaning": "within_tolerance is the precondition this run enforces: the refitted "
+                   "boosters answer the era test the same way the committed #6 matrix "
+                   "does, to far inside anything either report claims. bit_identical is "
+                   "recorded, not required -- LightGBM's splits are not reproducible "
+                   "bit-for-bit across platforms (issue #22), so requiring it would make "
+                   "this artifact regenerable on one machine rather than on any",
+    }
 
 
 # --------------------------------------------------------------------- split and rescaling

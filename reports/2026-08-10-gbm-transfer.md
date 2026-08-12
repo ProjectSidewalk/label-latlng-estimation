@@ -17,11 +17,15 @@ against the truth built in the [Stage 4 close-out](2026-08-07-modern-truth.md) �
 > `gbm-ceiling`, `modern-truth`) are the only inputs:
 >
 > ```bash
-> python python/run_gbm_transfer.py --write     # 2-7 min, offline, byte-identical
+> python python/run_gbm_transfer.py --write     # 2-7 min, offline
 > python python/gbm_transfer_figures.py         # figure 28
 > pytest tests/test_gbm_transfer_contract.py    # the frame mapping and the harness
 > pytest tests/test_gbm_transfer_findings.py    # the findings, locked
 > ```
+>
+> Every number below reproduces on any machine. The *bytes* of the summary reproduce on the
+> host recorded in its `meta.host` — LightGBM's splits are not bit-reproducible across
+> platforms, which §3 and `data/MANIFEST.md` explain.
 
 ## §1 · Goal
 
@@ -85,8 +89,18 @@ Each is locked by `tests/test_gbm_transfer_findings.py`:
 **The boosters are #6's**, not re-specified ones. `run_gbm_transfer.py` refits them with
 `run_gbm_ceiling.fit_gbm` — the same code, seed 666, the same two-pass early stopping — and
 then *requires* them to reproduce the committed `data/gbm-ceiling-summary.json` era-test
-medians to float precision before a single modern row is scored. If that assertion ever
-fails, this report is not benchmarking the model #6 describes, and the run stops.
+numbers, to 1 mm on medians and 2 cm on p90s, before a single modern row is scored. If that
+check ever fails, this report is not benchmarking the model #6 describes, and the run stops.
+
+> **A note on that tolerance, added 2026-08-12.** It was `1e-9` when this report was
+> written, which is bit-identity, and bit-identity is not achievable for LightGBM across
+> platforms: splits are chosen at histogram bin boundaries and two `libm`s disagree on
+> `arctan` in the last bit. A macOS rerun therefore *failed the guard* while landing 5.9 ×
+> 10⁻⁵ m from the committed era-test median — four orders of magnitude inside this report's
+> own headline ([#22](https://github.com/ProjectSidewalk/label-latlng-estimation/issues/22)).
+> The guard now asserts what the report rests on and records whether a run was bit-identical
+> rather than requiring it, so this artifact regenerates anywhere. No number below moved: the
+> host that produced them reruns byte-identical, and is now recorded in `meta.host`.
 
 **The rows are Stage 4's**, not a new selection: the 2,655 gate-passing, human-placed rows
 of `data/modern-truth-labels.csv.gz` (922 panoramas, 36 cities, all post-2021), truth =
@@ -129,7 +143,8 @@ sv_image_y  =  (pano_height/2 − pano_y) · 6656/pano_height  =  −depression_
 ```
 
 Feeding raw `pano_y` instead would be #4765's defect reintroduced as a silent 23% error on
-8192-px panoramas, with no exception anywhere. Three checks, all in the contract tests:
+8192-px panoramas, with no exception anywhere. Three checks, all emitted into the summary and
+locked by the tests:
 
 | check | result |
 |---|---|
@@ -140,12 +155,14 @@ Feeding raw `pano_y` instead would be #4765's defect reintroduced as a silent 23
 Two height groups landing on the *same* small residual is what makes this the right
 conversion rather than a fitted one.
 
-The first two rows are computed by the run itself and stored in the summary's
-`frame_mapping` block. The third is the only claim in this report that needs the whole era
-frame rather than the scored rows, so it is locked by
-`test_era_frame_residuals_match_the_published_table` — the row counts and both residuals to
-0.005 px — which loads and cleans that frame and therefore runs under `RUN_SLOW=1`. The
-default suite runs the same comparison on one committed city as an early warning.
+All three rows are computed by the run itself and stored in the summary's `frame_mapping`
+block; the third arrived there on 2026-08-12 (issue #22), having previously been published
+here with only a test behind it. It is the only check that needs the whole era frame rather
+than the scored rows, so its re-derivation from the CSVs —
+`test_era_frame_residuals_reproduce_the_committed_block`, which compares against the emitted
+block rather than a second hand-maintained copy of these numbers — loads and cleans that
+frame and therefore runs under `RUN_SLOW=1`. The default suite locks the emitted values and
+runs the same comparison on one committed city as an early warning.
 
 ## §4 · The three comparisons, kept apart
 
@@ -353,8 +370,8 @@ the booster *did* see, the closed form still wins — 0.389 m against 0.478 m �
 ## Reproducing this report
 
 ```bash
-pip install -r python/requirements.txt        # includes lightgbm (benchmark-only)
-python python/run_gbm_transfer.py --write     # 2-7 min, offline, byte-identical
+python scripts/setup_venv.py                  # includes lightgbm (benchmark-only)
+python python/run_gbm_transfer.py --write     # 2-7 min, offline
 python python/gbm_transfer_figures.py         # figure 28 (renders the committed summary)
 pytest tests/test_gbm_transfer_contract.py tests/test_gbm_transfer_findings.py
 ```
@@ -363,6 +380,13 @@ No network anywhere. The complete input list: the committed era CSVs, the R-fixt
 `data/modern-truth-labels.csv.gz`, `distance-refit-summary.json` (the era blend coefficients),
 and the committed #6 and Stage 4 summaries (the shipped `final_coefficients`, and the
 comparability assertions).
+
+The run reproduces every number in this report on any machine, to the tolerance in §3. It
+reproduces the summary's *bytes* on the host in `meta.host`; off that host expect a
+fifth-decimal difference in `gbm_dep_l1` and a `bit_identical: false` in the meta block, both
+of which are the documented outcome rather than a failure
+([#22](https://github.com/ProjectSidewalk/label-latlng-estimation/issues/22),
+`data/MANIFEST.md`).
 
 ---
 

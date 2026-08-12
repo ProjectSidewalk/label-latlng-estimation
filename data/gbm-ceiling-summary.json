@@ -5,6 +5,19 @@
     "era_cal_delta_deg": 0.7198324609691498,
     "dist_cap_m": 50.0,
     "lightgbm_version": "4.7.0",
+    "host": {
+      "platform": "Windows-11-10.0.26200-SP0",
+      "machine": "AMD64",
+      "python": "3.12.10",
+      "python_build": "3.12.10 (tags/v3.12.10:0cc8128, Apr 8 2025, 12:21:36) [MSC v.1943 64 bit (AMD64)]",
+      "libraries": {
+        "numpy": "2.5.0",
+        "pandas": "3.0.5",
+        "scipy": "1.18.0",
+        "lightgbm": "4.7.0"
+      },
+      "note": "recorded so a rerun that lands on different numbers is diagnosable rather than forensic (issue #22)"
+    },
     "lgb_params": {
       "learning_rate": 0.05,
       "num_leaves": 63,

@@ -140,7 +140,7 @@ Done. Activate it with:
 
 {activation_hint(venv_dir)}
 
-Then `pytest` should report 463 passed, 4 skipped (the skips are RUN_SLOW=1 re-derivations).""")
+Then `pytest` should report 473 passed, 4 skipped (the skips are RUN_SLOW=1 re-derivations).""")
 
 
 if __name__ == "__main__":
