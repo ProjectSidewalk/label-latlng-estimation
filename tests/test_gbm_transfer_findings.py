@@ -215,12 +215,18 @@ def test_the_era_truths_scale_splits_by_panorama_resolution(summary):
     modern = summary["truth_scale_by_resolution"]["modern_truth"]["by_pano_height"]
     shipped = summary["truth_scale_by_resolution"]["shipped_flat_height_m"]
     assert abs(era["missing"]["implied_height_m"] - 2.80) < 0.02   # DC, 59% of era rows
+    assert abs(era["1664"]["implied_height_m"] - 2.06) < 0.02      # 272 rows, the low end
     assert abs(era["6656"]["implied_height_m"] - 2.79) < 0.02
     assert abs(era["8192"]["implied_height_m"] - 2.35) < 0.02
     assert era["missing"]["implied_height_m"] - era["8192"]["implied_height_m"] > 0.4
     # the era truth's 8192 subpopulation already implied the shipped constant
     assert abs(era["8192"]["implied_height_m"] - shipped) < 0.02
     assert abs(modern["8192"]["implied_height_m"] - shipped) < 0.02
+    # §7's table is every group the run kept, so its rows must account for the pooled n:
+    # a resolution silently dropped from the report would argue the heterogeneity by omission
+    pooled_n = summary["truth_scale_by_resolution"]["era_truth"]["pooled"]["n"]
+    assert sum(g["n"] for g in era.values()) == pooled_n
+    assert set(era) == {"missing", "1664", "6656", "8192"}
 
 
 # ----------------------------------------------------------------- what does transfer

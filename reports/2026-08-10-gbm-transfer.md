@@ -13,7 +13,8 @@ against the truth built in the [Stage 4 close-out](2026-08-07-modern-truth.md) �
 | **2.80 / 2.79 / 2.35 m** | the era truth's implied camera height where `pano_height` is absent (DC), at 6656-px panoramas, and at 8192-px ones. Not one scale — and the 8192 figure sits within 1 cm of both the modern measurement and the shipped constant. That heterogeneity is what the booster was reading |
 
 > Reproduce every number here in one command each. Offline from a fresh checkout — the
-> committed CSVs, the R-fixture split, and two committed summaries are the only inputs:
+> committed CSVs, the R-fixture split, and three committed summaries (`distance-refit`,
+> `gbm-ceiling`, `modern-truth`) are the only inputs:
 >
 > ```bash
 > python python/run_gbm_transfer.py --write     # 2-7 min, offline, byte-identical
@@ -110,7 +111,10 @@ Two population facts that matter and are not hidden:
 - **Two label types are new.** `Crosswalk` and `Signal` postdate the era categorical, so
   433 rows (16.3%) reach the booster as a missing category. The shipped flat model carries
   no such handicap — it dropped `label_type` from the distance path entirely. §8 cuts the
-  comparison on exactly that boundary so it cannot serve as an excuse.
+  comparison on exactly that boundary so it cannot serve as an excuse. The one arm where
+  this costs more than it looks is the modern-trained control of §6: it is fitted through
+  the same era feature builder, so those two types are missing from its *training* data as
+  well, not just at prediction time.
 
 ### The frame mapping, and why it is not a fudge
 
@@ -135,6 +139,13 @@ Feeding raw `pano_y` instead would be #4765's defect reintroduced as a silent 23
 
 Two height groups landing on the *same* small residual is what makes this the right
 conversion rather than a fitted one.
+
+The first two rows are computed by the run itself and stored in the summary's
+`frame_mapping` block. The third is the only claim in this report that needs the whole era
+frame rather than the scored rows, so it is locked by
+`test_era_frame_residuals_match_the_published_table` — the row counts and both residuals to
+0.005 px — which loads and cleans that frame and therefore runs under `RUN_SLOW=1`. The
+default suite runs the same comparison on one committed city as an early warning.
 
 ## §4 · The three comparisons, kept apart
 
@@ -216,8 +227,12 @@ Three of those rows exist specifically to close the escape routes:
   cannot fix is which row the booster ranks where — and that is precisely what is wrong.
 - **"An era-trained model was never going to transfer."** A booster trained on modern truth
   itself reaches 0.459 m. It is badly underpowered — 1,293 training rows against the era
-  split's 316,118 — so it is a **floor** on what modern data supports, not a modern
-  ceiling. But it does not clear the closed form either.
+  split's 316,118 — and it carries a second handicap that is easy to miss: it is fitted
+  through `run_gbm_ceiling`'s feature builder, whose `label_type` categorical is the era's
+  seven types, so `Crosswalk` and `Signal` (16.3% of these rows) are a missing category in
+  its own training data. Both handicaps push the same way, which is why this arm is quoted
+  as a **floor** on what modern data supports and never as a modern ceiling. It does not
+  clear the closed form either.
 
 ![Figure 28 — left: the calibrated comparison with paired cluster-bootstrap intervals; the shipped two-parameter closed form is ahead of every recalibrated booster. Middle: the mechanism, implied camera height by panorama resolution for the era and modern truth sets. Right: median error by true-distance bin — the shipped form leads below 15 m and is last above it, but so is it behind the era blend there, which §8 reads as bias rather than structure.](../figures/fig28-gbm-transfer.png)
 
@@ -227,10 +242,16 @@ Three of those rows exist specifically to close the escape routes:
 the booster leans on hardest (`sv_norm` + `pano_height` were 13.8% of its split gain in
 #6 §6):
 
-| population | no `pano_height` (DC) | 6656 px | 8192 px | pooled |
-|---|---:|---:|---:|---:|
-| era truth (2017–2020) | **2.802** (n = 223,814) | **2.785** (n = 36,617) | **2.351** (n = 121,177) | 2.636 |
-| modern truth (2021+) | – | 2.433 (n = 186) | **2.331** (n = 2,302) | 2.341 |
+| population | no `pano_height` (DC) | 1664 px | 6656 px | 8192 px | pooled |
+|---|---:|---:|---:|---:|---:|
+| era truth (2017–2020) | **2.802** (n = 223,814) | 2.060 (n = 272) | **2.785** (n = 36,617) | **2.351** (n = 121,177) | 2.636 |
+| modern truth (2021+) | – | – | 2.433 (n = 186) | **2.331** (n = 2,302) | 2.341 |
+
+Every group the run kept is in that table — the row counts sum to the pooled n, and a
+findings test asserts that they do, because a resolution quietly left out of a table about
+heterogeneity would be arguing the point by omission. The 1664-px group is 272 rows (0.07%
+of the era frame) and carries no weight in anything below; it is shown because it sits
+*lower* than either of the large groups, which widens the spread rather than narrowing it.
 
 The shipped constant is **2.3412 m**. The era truth's 8192-px subpopulation already
 implied **2.351 m** — within 1 cm of it, and within 2 cm of the modern measurement. The
@@ -338,12 +359,15 @@ python python/gbm_transfer_figures.py         # figure 28 (renders the committed
 pytest tests/test_gbm_transfer_contract.py tests/test_gbm_transfer_findings.py
 ```
 
-No network anywhere: the committed CSVs, the R-fixture split, and the committed #6 and
-Stage 4 summaries (for the comparability assertions) are the only inputs.
+No network anywhere. The complete input list: the committed era CSVs, the R-fixture split,
+`data/modern-truth-labels.csv.gz`, `distance-refit-summary.json` (the era blend coefficients),
+and the committed #6 and Stage 4 summaries (the shipped `final_coefficients`, and the
+comparability assertions).
 
 ---
 
-*Report generated with [Claude Code](https://claude.com/claude-code) (claude-opus-5[1m]);
+*Report generated with [Claude Code](https://claude.com/claude-code) — Opus 5 (1M context),
+`claude-opus-5[1m]`; review fixes by the same model;
 every headline number is asserted by `tests/test_gbm_transfer_findings.py` against
 `data/gbm-transfer-summary.json`, which regenerates deterministically from the committed
 data.*

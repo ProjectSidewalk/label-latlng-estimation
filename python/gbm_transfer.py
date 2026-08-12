@@ -59,6 +59,7 @@ import pandas as pd
 
 import distance_refit as dr
 import modern_truth as mt
+import run_gbm_ceiling as gc
 from pov_inversion import exact_depression_deg
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
@@ -67,10 +68,6 @@ SEED = 666                 # the repo-wide seed; also modern_truth.remedy_check'
 CALIBRATION_HEIGHT = 6656  # the fixed frame the era client and the deployed coefficients share
 N_BOOT = 2000              # cluster bootstrap resamples (by panorama)
 SCALE_MIN_DEP_DEG = 5.0    # remedy_check's implied-height stability floor, reused verbatim
-
-# The closed forms, then the boosters. Order is the report's table order.
-CLOSED_FORM_KEYS = ["A_deployed", "D_blend", "D_flat"]
-GBM_KEYS = ["gbm_l1", "gbm_dep_l1", "gbm_l2", "only_sv_image_y"]
 
 
 # ------------------------------------------------------------------- population and frame
@@ -94,12 +91,15 @@ def gated_human(labels: pd.DataFrame) -> pd.DataFrame:
 def to_era_frame(df: pd.DataFrame) -> pd.DataFrame:
     """Add the era feature columns the #6 boosters were trained on.
 
-    ``sv_image_y`` is the fixed-frame horizon offset derived in the module docstring;
-    ``sv_norm`` is then #4765's normalization expression applied to it *exactly as the
-    booster learned it* (``sv_image_y * 6656/pano_height``). That expression is arguably
-    a second normalization of an already-normalized column -- the refit's
-    ``fixed_frame_check`` is what established that -- but reproducing the feature the
-    model was fitted on is the whole point, so it is copied, not corrected.
+    ``sv_image_y`` is the fixed-frame horizon offset derived in the module docstring, and
+    it is the only feature this function has to get right: the booster's second vertical
+    input, ``sv_norm``, is derived FROM it inside ``run_gbm_ceiling.build_features``
+    (``sv_image_y * 6656/pano_height``, recomputed on every frame the booster ever sees),
+    so precomputing a column of that name here would be dead weight that the fitting code
+    ignores. That expression is arguably a second normalization of an already-normalized
+    column -- the refit's ``fixed_frame_check`` is what established that -- but
+    reproducing the feature the model was fitted on is the whole point, so it is left as
+    the era code computes it, not corrected.
 
     ``depression_deg_exact`` is the #5 projection (canvas + POV), which is what the era
     ``gbm_dep_l1`` variant ate; the file's own ``depression_deg`` is the pixel-derived
@@ -108,7 +108,6 @@ def to_era_frame(df: pd.DataFrame) -> pd.DataFrame:
     out = df.copy()
     h = out["pano_height"].astype(float)
     out["sv_image_y"] = (h / 2.0 - out["pano_y"].astype(float)) * (CALIBRATION_HEIGHT / h)
-    out["sv_norm"] = out["sv_image_y"] * (CALIBRATION_HEIGHT / h)
     out["depression_deg_exact"] = exact_depression_deg(out)
     return out
 
@@ -192,40 +191,37 @@ def flat_params(data_dir: str = DATA_DIR) -> dict:
             "blend_deg": fc["params"]["blend_deg"]}
 
 
-def rescaled_params(blend_params: dict, k: float) -> dict:
-    """The era per-type table with every height multiplied by k -- ``remedy_check``'s
-    ``rescale`` remedy, reproduced here so the held-out table is self-contained."""
-    return dict(blend_params,
-                height_by_type_m={t: k * h for t, h
-                                  in blend_params["height_by_type_m"].items()},
-                height_fallback_m=k * blend_params["height_fallback_m"])
-
-
 def closed_form_predictions(df: pd.DataFrame, data_dir: str = DATA_DIR) -> pd.DataFrame:
     """A_deployed and D_blend come straight off the committed file (they are what
-    ``run_modern_truth`` scored); D_flat is the shipped model, computed here."""
+    ``run_modern_truth`` scored); ``D_flat_shipped`` is the shipped model.
+
+    The name carries the ``_shipped`` suffix from birth because the runner needs a second
+    flat model under the bare name ``D_flat``: the same functional form with its height
+    refitted on the train half, which is the only one of the two that is held out on the
+    rows it is scored against. Two models, two names, no reassignment in between.
+    """
     out = pd.DataFrame(index=df.index)
     out["A_deployed"] = df["A_deployed"].to_numpy(float)
     out["D_blend"] = df["D_blend"].to_numpy(float)
-    out["D_flat"] = dr.predict_dist(flat_params(data_dir), df)
+    out["D_flat_shipped"] = dr.predict_dist(flat_params(data_dir), df)
     return out
 
 
-def gbm_predictions(gbms: dict, df: pd.DataFrame, predict) -> pd.DataFrame:
+def gbm_predictions(gbms: dict, df: pd.DataFrame) -> pd.DataFrame:
     """Each frozen booster's distance on the modern rows.
 
-    ``predict`` is ``run_gbm_ceiling.predict_gbm`` handed in by the runner rather than
-    imported here: the boosters must be driven by the same feature-building and clipping
-    code that produced the #6 numbers, and the lesson from #6's own noise sweep is that a
-    second copy of that code drifts. ``gbm_dep_l1`` additionally wants a
-    ``depression_deg`` column holding the EXACT projection, which is the era column it was
-    trained on, so it is swapped in for that one model only.
+    Driven through ``run_gbm_ceiling.predict_gbm`` itself, not a local reimplementation:
+    the boosters must see the same feature-building and the same clipping that produced
+    the #6 numbers, and the lesson from #6's own noise sweep is that a second copy of that
+    code drifts. ``gbm_dep_l1`` additionally wants a ``depression_deg`` column holding the
+    EXACT projection, which is the era column it was trained on, so it is swapped in for
+    that one model only.
     """
     out = pd.DataFrame(index=df.index)
     swapped = df.assign(depression_deg=df["depression_deg_exact"])
     for key, model in gbms.items():
         frame = swapped if "depression_deg" in model["cols"] else df
-        out[key] = predict(model, frame)
+        out[key] = gc.predict_gbm(model, frame)
     return out
 
 
@@ -323,25 +319,27 @@ def bootstrap_medians(preds: pd.DataFrame, truth: np.ndarray, pano_id: np.ndarra
 
     Rows cluster hard by panorama (one pano carries up to a few dozen labels sharing a
     camera pose, a vintage and a ground plane), so a row bootstrap would understate the
-    interval. When ``reference`` is given, the same resample also carries the paired
-    difference against it -- paired on identical rows, which is the only comparison that
-    can separate two models this close together.
+    interval. When ``reference`` is given -- it must be one of ``keys`` -- the paired
+    difference against it is taken WITHIN each resample, on identical rows, which is the
+    only comparison that can separate two models this close together. That pairing is
+    just a subtraction of two columns of ``draws``: both medians were already computed on
+    the same ``idx``, so differencing them afterwards is exactly the within-draw
+    difference, without medianing anything twice.
     """
+    if reference is not None and reference not in keys:
+        raise ValueError(f"reference {reference!r} must be one of keys {keys!r}")
     rng = np.random.default_rng(seed)
     panos, inv = np.unique(pano_id, return_inverse=True)
     rows_by_pano = [np.flatnonzero(inv == i) for i in range(len(panos))]
     errs = {k: preds[k].to_numpy(float) - truth for k in keys}
 
     draws = {k: np.empty(n_boot) for k in keys}
-    diffs = {k: np.empty(n_boot) for k in keys if reference and k != reference}
     for b in range(n_boot):
         pick = rng.integers(0, len(panos), len(panos))
         idx = np.concatenate([rows_by_pano[i] for i in pick])
         for k in keys:
             draws[k][b] = np.median(np.abs(errs[k][idx]))
-        for k in diffs:
-            diffs[k][b] = (np.median(np.abs(errs[k][idx]))
-                           - np.median(np.abs(errs[reference][idx])))
+    diffs = {k: draws[k] - draws[reference] for k in keys if reference and k != reference}
 
     out = {"n_boot": n_boot, "seed": seed, "cluster": "pano_id",
            "n_panos": int(len(panos)), "ci": {}}
@@ -388,7 +386,7 @@ def implied_height_by_resolution(df: pd.DataFrame, truth_col: str, dep_col: str,
     return out
 
 
-DIST_BIN_EDGES = [0.0, 2.0, 5.0, 10.0, 15.0, 20.0, 30.0, 50.0]  # #6's bins, verbatim
+DIST_BIN_EDGES = gc.DIST_BIN_EDGES  # #6's bins, imported rather than copied
 
 
 def error_vs_distance(preds: pd.DataFrame, truth: np.ndarray, keys: list[str],

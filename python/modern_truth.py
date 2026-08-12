@@ -531,6 +531,19 @@ def curb_sensitivity(scored: pd.DataFrame, camera_height_m: float,
     }
 
 
+def rescaled_blend_params(blend_params: dict, k: float) -> dict:
+    """The ``rescale`` remedy's parameters: the era per-type height table with every
+    height (and the fallback) multiplied by k, everything else untouched.
+
+    Split out of ``remedy_check`` so that anything scoring that remedy outside this
+    module -- the issue #6 transfer harness does -- applies the same k the same way
+    rather than reconstructing the dict beside it."""
+    return dict(blend_params,
+                height_by_type_m={t: k * h for t, h
+                                  in blend_params["height_by_type_m"].items()},
+                height_fallback_m=k * blend_params["height_fallback_m"])
+
+
 def remedy_check(labels: pd.DataFrame, blend_params: dict, seed: int = SEED,
                  min_dep_deg: float = 5.0) -> dict:
     """Candidate recalibrations of the blend's height scale, scored held-out.
@@ -564,10 +577,7 @@ def remedy_check(labels: pd.DataFrame, blend_params: dict, seed: int = SEED,
     k = float(np.median(implied / assigned))
     flat_h = float(np.median(implied))
 
-    rescaled = dict(blend_params,
-                    height_by_type_m={t: k * h for t, h in
-                                      blend_params["height_by_type_m"].items()},
-                    height_fallback_m=k * blend_params["height_fallback_m"])
+    rescaled = rescaled_blend_params(blend_params, k)
     flat = {"form": "blend", "blend_deg": blend_params["blend_deg"],
             "height_m": flat_h}
 

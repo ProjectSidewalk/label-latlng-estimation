@@ -16,7 +16,10 @@ treatment (and the same split) ``modern_truth.remedy_check`` gave the blend, so 
 held-out table's closed-form rows are asserted equal to the committed
 ``modern-truth-summary.json`` remedies block.
 
-Offline: committed CSVs, the R-fixture split, and two committed summaries. No network.
+Offline, and this is the complete input list: the era CSVs, the R-fixture split,
+``data/modern-truth-labels.csv.gz``, ``distance-refit-summary.json`` (the era blend
+coefficients, via ``modern_truth.load_blend_params``), ``gbm-ceiling-summary.json`` and
+``modern-truth-summary.json``. No network.
 """
 
 from __future__ import annotations
@@ -51,6 +54,19 @@ VARIANTS = {
     "only_sv_image_y": (["sv_image_y"], "regression_l1"),
 }
 SCALED_KEYS = [f"{k}_scaled" for k in VARIANTS]
+
+# The models handed the two richer recalibrations, and the recalibrations themselves. Every
+# key roster below is derived from these three lines, so an arm cannot be added to the run
+# and then quietly missed by a scoring table, a bootstrap or the best-arm search.
+RECAL_MODELS = ["gbm_l1", "gbm_dep_l1", "D_flat"]
+RECAL_FORMS = ["affine", "quantile"]
+RECAL_KEYS = {m: [f"{m}_{f}" for f in RECAL_FORMS] for m in RECAL_MODELS}
+# Every booster arm that got a modern parameter: one scale each, then the richer maps, then
+# the modern-trained control. This is the set "the best recalibrated GBM" is chosen from.
+RECALIBRATED_GBM_KEYS = (SCALED_KEYS
+                         + [k for m in RECAL_MODELS if m.startswith("gbm")
+                            for k in RECAL_KEYS[m]]
+                         + ["gbm_modern"])
 
 
 def main() -> None:
@@ -103,8 +119,7 @@ def main() -> None:
     pano = human["pano_id"].to_numpy()
 
     preds = pd.concat([gt.closed_form_predictions(human, args.data_dir),
-                       gt.gbm_predictions(gbms, human, gc.predict_gbm)], axis=1)
-    preds = preds.rename(columns={"D_flat": "D_flat_shipped"})
+                       gt.gbm_predictions(gbms, human)], axis=1)
 
     population = {
         "n_gated_human": int(len(human)),
@@ -154,17 +169,16 @@ def main() -> None:
     for k, s in scales.items():
         preds[f"{k}_scaled"] = preds[k].to_numpy(float) * s
 
-    # remedy_check's own remedies, recomputed here so the table is self-contained
+    # remedy_check's own remedies, from remedy_check itself rather than a second copy of
+    # its arithmetic: same seed, same depression floor, so its train half IS the half the
+    # scales above were fitted on, and the two parameters below are the ones the committed
+    # Stage 4 table was built from. The assertions further down hold that to float precision.
     blend_params = mt.load_blend_params(args.data_dir)
-    tr = human[in_train]
-    tr = tr[tr["depression_deg"] >= gt.SCALE_MIN_DEP_DEG]
-    implied = (tr["truth_m"].to_numpy(float)
-               * np.tan(np.radians(tr["depression_deg"].to_numpy(float))))
-    assigned = (tr["label_type"].map(blend_params["height_by_type_m"])
-                .fillna(blend_params["height_fallback_m"]).to_numpy(float))
-    k_rescale = float(np.median(implied / assigned))
-    flat_h = float(np.median(implied))
-    preds["D_rescaled"] = dr.predict_dist(gt.rescaled_params(blend_params, k_rescale), human)
+    remedy = mt.remedy_check(labels, blend_params, seed=gt.SEED,
+                             min_dep_deg=gt.SCALE_MIN_DEP_DEG)
+    k_rescale, flat_h = remedy["k_rescale"], remedy["flat_height_m"]
+    preds["D_rescaled"] = dr.predict_dist(
+        mt.rescaled_blend_params(blend_params, k_rescale), human)
     preds["D_flat"] = dr.predict_dist(
         {"form": "blend", "blend_deg": blend_params["blend_deg"], "height_m": flat_h}, human)
 
@@ -173,31 +187,39 @@ def main() -> None:
     # AND to the shipped closed form, so every rung of generosity is like-for-like.
     step("richer recalibrations (affine, monotone quantile map) on the same train half...")
     recal = {}
-    for key in ("gbm_l1", "gbm_dep_l1", "D_flat"):
+    for key in RECAL_MODELS:
         p, t = preds[key].to_numpy(float), truth
         a, b = gt.affine_l1(p[in_train], t[in_train])
-        preds[f"{key}_affine"] = a + b * p
-        preds[f"{key}_quantile"] = gt.quantile_map(p[in_train], t[in_train])(p)
+        fitted = {"affine": a + b * p,
+                  "quantile": gt.quantile_map(p[in_train], t[in_train])(p)}
+        for form in RECAL_FORMS:
+            preds[f"{key}_{form}"] = fitted[form]
         recal[key] = {"affine_a": a, "affine_b": b}
 
     # The underpowered control a reader will ask for: a booster that sees modern truth
     # itself. 1,293 training rows against the era split's 316,118 — this is a FLOOR on what
     # modern data supports, not the modern ceiling, and it is labelled that way everywhere.
+    #
+    # It carries a SECOND handicap, and it is not the sample size: gc.fit_gbm builds its
+    # features with gc.build_features, which pins label_type to the era's seven categories
+    # (dr.LABEL_TYPES). Crosswalk and Signal — 433 rows, 16.3% of this population — are
+    # therefore a missing category in this booster's own TRAINING data, not just at
+    # prediction time as they are for the era boosters. Both handicaps push the same way
+    # (a fairer control would score better, and this one already loses to the closed form),
+    # so the reading is conservative; §6 of the report says so rather than leaving the
+    # arm's weakness attributed entirely to its row count.
     step("control: a booster trained on the modern train half (underpowered by design)...")
     modern_fit = human.assign(pano_dist=truth)
     gbm_modern = gc.fit_gbm(modern_fit[in_train], gc.FEATURES_FULL, "regression_l1")
     preds["gbm_modern"] = gc.predict_gbm(gbm_modern, human)
 
-    held_keys = (["A_deployed", "D_blend", "D_rescaled", "D_flat",
-                  "D_flat_affine", "D_flat_quantile"]
-                 + list(VARIANTS) + SCALED_KEYS
-                 + ["gbm_l1_affine", "gbm_l1_quantile",
-                    "gbm_dep_l1_affine", "gbm_dep_l1_quantile", "gbm_modern"])
+    held_keys = (["A_deployed", "D_blend", "D_rescaled", "D_flat"] + RECAL_KEYS["D_flat"]
+                 + list(VARIANTS) + RECALIBRATED_GBM_KEYS)
     test_preds = preds[in_test]
     held = gt.score_frame(test_preds, truth[in_test], held_keys)
     held_boot = gt.bootstrap_medians(test_preds, truth[in_test], pano[in_test],
-                                     ["D_flat", "D_rescaled", "gbm_l1_affine",
-                                      "gbm_l1_quantile", "gbm_modern"] + SCALED_KEYS,
+                                     ["D_flat", "D_rescaled"] + RECAL_KEYS["gbm_l1"]
+                                     + ["gbm_modern"] + SCALED_KEYS,
                                      reference="D_flat")
 
     step("asserting the closed-form rows equal the committed Stage 4 remedy table...")
@@ -233,9 +255,7 @@ def main() -> None:
                       / pooled["gbm_l1"]["median_abs_m"] - 1.0) * 100.0
     modern_cal_gap = (held["D_flat"]["median_abs_m"]
                       / held["gbm_l1_scaled"]["median_abs_m"] - 1.0) * 100.0
-    best_gbm_key = min(SCALED_KEYS + ["gbm_l1_affine", "gbm_l1_quantile", "gbm_dep_l1_affine",
-                                      "gbm_dep_l1_quantile", "gbm_modern"],
-                       key=lambda k: held[k]["median_abs_m"])
+    best_gbm_key = min(RECALIBRATED_GBM_KEYS, key=lambda k: held[k]["median_abs_m"])
     # What the interaction structure is worth, measured the same way in both truth frames:
     # the full booster's edge over the single-signal booster. This is the load-bearing
     # comparison — it is internal to the GBM family, so no closed form's calibration enters.

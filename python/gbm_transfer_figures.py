@@ -86,9 +86,17 @@ def main():
 
     # ---- middle: the mechanism — implied camera height by panorama resolution
     diag = s["truth_scale_by_resolution"]
-    groups = ["missing", "6656", "8192"]
-    labels = ["no pano_height\n(DC)", "6656 px", "8192 px"]
+    # Every group the run kept, not a hand-picked three: the panel's whole claim is that
+    # this axis is heterogeneous, so silently dropping a resolution would argue the point
+    # by omission. "missing" (DC, which stores no pano_height) leads; the rest sort by
+    # raster height.
+    groups = ["missing"] + sorted(
+        {g for block in ("era_truth", "modern_truth")
+         for g in diag[block]["by_pano_height"] if g != "missing"}, key=int)
+    labels = ["pano_height\nabsent (DC)" if g == "missing" else f"{g} px" for g in groups]
     xs = np.arange(len(groups))
+    # the panel keeps one width whatever the run finds, so the type has to give way instead
+    fs = 9.0 if len(groups) <= 3 else 8.0
     for off, (key, label, color) in ((-0.19, ("era_truth", "era truth (2017–2020)", C_ERA)),
                                      (+0.19, ("modern_truth", "modern truth (2021+)", C_MODERN))):
         block = diag[key]["by_pano_height"]
@@ -97,20 +105,20 @@ def main():
         ax2.bar(xs + off, vals, width=0.34, color=color, label=label, zorder=3)
         for x, v, n in zip(xs, vals, ns):
             if np.isfinite(v):
-                ax2.text(x + off, v + 0.05, f"{v:.2f}", ha="center", fontsize=9,
+                ax2.text(x + off, v + 0.05, f"{v:.2f}", ha="center", fontsize=fs,
                          color=SECONDARY)
                 compact = (f"{n/1000:.0f}k" if n >= 10000 else
                            f"{n/1000:.1f}k" if n >= 1000 else f"{n}")
-                ax2.text(x + off, 0.12, compact, ha="center", fontsize=8,
+                ax2.text(x + off, 0.12, compact, ha="center", fontsize=fs - 1.0,
                          color="#fcfcfb", zorder=4)
     shipped = diag["shipped_flat_height_m"]
     ax2.axhline(shipped, color=INK, lw=1.1, ls=(0, (4, 3)), zorder=5)
     ax2.text(-0.44, shipped + 0.06, f"shipped {shipped:.3f} m", ha="left", fontsize=8.5,
              color=INK)
     ax2.set_xticks(xs)
-    ax2.set_xticklabels(labels, fontsize=9)
+    ax2.set_xticklabels(labels, fontsize=fs)
     ax2.set_ylim(0, 3.5)
-    ax2.set_xlim(-0.55, 2.55)
+    ax2.set_xlim(-0.55, len(groups) - 0.45)
     ax2.set_ylabel("implied camera height, median(truth · tan dep) (m)")
     ax2.set_title("the era truth's scale is not one scale", loc="left")
     ax2.legend(loc="upper right", fontsize=8.5)

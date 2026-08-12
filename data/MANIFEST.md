@@ -236,14 +236,18 @@ reruns), both locked by their `tests/test_*_findings.py`.
 `reports/2026-08-10-gbm-transfer.md`, `python python/run_gbm_transfer.py --write`, 2-7 min depending on available cores —
 four LightGBM refits — and byte-identical across reruns):
 the same boosters scored against the modern-truth rows below, asking whether that ceiling
-was scene structure or the era truth frame's own. It adds no data of its own and reads three
-committed artifacts — the era CSVs and the R-fixture split (to refit the boosters),
-`gbm-ceiling-summary.json` (the runner refuses to proceed unless its boosters reproduce those
-era-test medians to float precision), and `modern-truth-summary.json` (its closed-form rows
-are asserted equal to the committed Stage 4 remedy table, so the booster rows are *added* to
-that table rather than compared against a re-derivation of it). The only parameter fitted on
-modern data anywhere in it is one scale per model, on a train half of panoramas, scored on
-the disjoint half. Locked by `tests/test_gbm_transfer_findings.py`, with the era→modern
+was scene structure or the era truth frame's own. It adds no data of its own; its complete
+input list is the era CSVs and the R-fixture split (to refit the boosters),
+`modern-truth-labels.csv.gz` (the rows it scores), `distance-refit-summary.json` (the era
+blend coefficients behind `D_blend` and `D_rescaled`, read through
+`modern_truth.load_blend_params`), `gbm-ceiling-summary.json` (the runner refuses to proceed
+unless its boosters reproduce those era-test medians to float precision), and
+`modern-truth-summary.json` (both the shipped `final_coefficients` behind `D_flat` and the
+Stage 4 remedy table, which its closed-form rows are asserted equal to, so the booster rows
+are *added* to that table rather than compared against a re-derivation of it). Nothing else,
+and no network. The only parameter fitted on modern data anywhere in it is one scale per
+model, on a train half of panoramas, scored on the disjoint half. Locked by
+`tests/test_gbm_transfer_findings.py`, with the era→modern
 feature-frame mapping — the one thing here that could be wrong silently, since raw `pano_y`
 would reintroduce #4765's defect without raising anything — pinned separately by
 `tests/test_gbm_transfer_contract.py`.

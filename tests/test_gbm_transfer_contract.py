@@ -66,6 +66,23 @@ def test_mapping_is_resolution_invariant():
     assert not np.allclose(a, raw, atol=1.0)  # the discriminating alternative must differ
 
 
+def _era_pixel_residuals(df: pd.DataFrame) -> dict:
+    """Median (stored sv_image_y − candidate offset) per height group, for both candidates.
+
+    ``mapped`` is the conversion this module ships; ``raw`` is the discriminating
+    alternative (the unmapped ``pano_height/2 − pano_y``), which must fail at 8192 px.
+    """
+    out = {}
+    for h, g in df[df["pano_height"].isin([6656, 8192])].groupby("pano_height"):
+        pano_y = g["current_pano_y"].astype(float)
+        raw = float(h) / 2.0 - pano_y
+        mapped = raw * (gt.CALIBRATION_HEIGHT / float(h))
+        out[int(h)] = {"n": int(len(g)),
+                       "mapped": float((g["sv_image_y"] - mapped).median()),
+                       "raw": float((g["sv_image_y"] - raw).median())}
+    return out
+
+
 def test_mapping_agrees_with_the_era_columns_own_real_pixels():
     """On real era rows, the mapped offset lands on the stored sv_image_y in BOTH height
     groups, and the unmapped one does so only at 6656 px.
@@ -78,18 +95,56 @@ def test_mapping_agrees_with_the_era_columns_own_real_pixels():
     df = pd.read_csv(os.path.join(DATA_DIR, "labels-seattle-latlng.csv.gz"),
                      usecols=["sv_image_y", "current_pano_y", "pano_height"],
                      low_memory=False).dropna()
-    df = df[df["pano_height"].isin([6656, 8192])]
-    residuals = {}
-    for h, g in df.groupby("pano_height"):
-        mapped = (h / 2.0 - g["current_pano_y"]) * (gt.CALIBRATION_HEIGHT / h)
-        raw = h / 2.0 - g["current_pano_y"]
-        residuals[int(h)] = {"mapped": float((g["sv_image_y"] - mapped).median()),
-                             "raw": float((g["sv_image_y"] - raw).median())}
+    residuals = _era_pixel_residuals(df)
     assert set(residuals) == {6656, 8192}
     for h, r in residuals.items():
         assert abs(r["mapped"]) < 40.0, (h, r)          # ~1 degree of pano drift, no more
     assert abs(residuals[6656]["mapped"] - residuals[8192]["mapped"]) < 10.0
     assert abs(residuals[8192]["raw"]) > 100.0          # the wrong frame is not subtle
+
+
+# The report's §3 table publishes this check's numbers over the whole era analysis frame,
+# so they are locked here rather than left as prose. Recomputed by the RUN_SLOW test below;
+# the fast Seattle test above is the cheap early-warning version of the same comparison.
+ERA_FRAME_RESIDUALS_PX = {
+    "n_rows": 162846,
+    6656: {"n": 37494, "mapped": 15.000, "raw": 15.000},
+    8192: {"n": 125352, "mapped": 14.562, "raw": 140.000},
+}
+
+
+@pytest.mark.skipif(
+    os.environ.get("RUN_SLOW") != "1",
+    reason="loads and cleans the whole era frame (~1 min, several GB); set RUN_SLOW=1",
+)
+def test_era_frame_residuals_match_the_published_table():
+    """The report's third frame-mapping check, recomputed from the committed CSVs.
+
+    §3 of `reports/2026-08-10-gbm-transfer.md` publishes exact figures for this — 162,846
+    era rows, +15.0 px at 6656 and +14.6 px at 8192, against +140 px for the unmapped
+    offset at 8192 — and a published number with no artifact behind it is the defect this
+    repo's archival rule exists to prevent. The population is the *cleaned* analysis frame
+    (what the boosters are fitted on), restricted to rows carrying a current real-pixel
+    row, which is what makes it 162,846 rather than the 195,242 raw rows on disk.
+    """
+    from label_latlng_estimation import clean_data, load_data  # noqa: PLC0415
+
+    cleaned, _ = clean_data(load_data(DATA_DIR))
+    df = cleaned.dropna(subset=["sv_image_y", "current_pano_y", "pano_height"])
+    residuals = _era_pixel_residuals(df)
+
+    assert set(residuals) == {6656, 8192}
+    assert (sum(r["n"] for r in residuals.values())
+            == ERA_FRAME_RESIDUALS_PX["n_rows"])
+    for h in (6656, 8192):
+        want = ERA_FRAME_RESIDUALS_PX[h]
+        assert residuals[h]["n"] == want["n"], (h, residuals[h])
+        assert abs(residuals[h]["mapped"] - want["mapped"]) < 5e-3, (h, residuals[h])
+        assert abs(residuals[h]["raw"] - want["raw"]) < 5e-3, (h, residuals[h])
+    # the whole point: one small drift in both groups for the mapping, a 23% frame error
+    # for the alternative, and only at the resolution that discriminates them
+    assert abs(residuals[6656]["mapped"] - residuals[8192]["mapped"]) < 1.0
+    assert residuals[8192]["raw"] > 100.0
 
 
 def test_frame_mapping_evidence_reports_both_checks():

@@ -33,7 +33,7 @@ beautifully on held-out rows drawn from the same pipeline, and evaporate the mom
 truth changes. This repo has been caught by exactly that twice:
 
 - the era fit's **per-type camera-height table** was worth 4 cm on the era test split and
-  **nothing at all** on modern truth (`reports/2026-08-07-modern-truth.md` §7); and
+  **nothing at all** on modern truth (`reports/2026-08-07-modern-truth.md` §9); and
 - the **entire 0.4 m GBM ceiling** of `reports/2026-08-07-gbm-ceiling.md` turned out to be
   the era truth's own resolution-conditioned scale. Once each side carried one modern
   parameter, the two-parameter closed form *beat* the booster
