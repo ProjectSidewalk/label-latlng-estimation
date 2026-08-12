@@ -370,7 +370,7 @@ the booster *did* see, the closed form still wins â€” 0.389 m against 0.478 m â€
 ## Reproducing this report
 
 ```bash
-python scripts/setup_venv.py                  # includes lightgbm (benchmark-only)
+pip install -r python/requirements.txt        # includes lightgbm (benchmark-only)
 python python/run_gbm_transfer.py --write     # 2-7 min, offline
 python python/gbm_transfer_figures.py         # figure 28 (renders the committed summary)
 pytest tests/test_gbm_transfer_contract.py tests/test_gbm_transfer_findings.py

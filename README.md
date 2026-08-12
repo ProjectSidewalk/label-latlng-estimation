@@ -40,7 +40,8 @@ see the notes in `python/label_latlng_estimation.py`. The 2026-08-07 refit picke
 ## Quick start
 
 ```bash
-python scripts/setup_venv.py         # build .venv, then activate it — see "Python environment"
+python -m venv .venv && source .venv/bin/activate  # see "Python environment" for Windows
+pip install -r python/requirements.txt
 python python/run_analysis.py        # seven-estimator comparison + coefficients vs published 2021
 python python/run_distance_refit.py  # the issue #3 candidate ladder vs the 2021 distance half
 python python/run_triangulation.py build --write  # the issue #7 depth-free bearing anchor
@@ -57,33 +58,42 @@ Rscript scripts/rerun-analysis.R     # regenerates tests/fixtures/r-baseline/
 
 ### Python environment
 
-`scripts/setup_venv.py` builds `.venv` from `python/requirements.txt` and reports the
-resolved versions. It is Python rather than a shell script because this repo is developed
-across macOS, WSL and native Windows, and one command should work in all three:
+Standard venv, no repo-specific tooling. Python ≥ 3.10; developed across macOS, WSL and
+native Windows.
 
 ```bash
-python scripts/setup_venv.py               # macOS / WSL / Windows alike
-source .venv/bin/activate                  # macOS, WSL
-.venv\Scripts\Activate.ps1                 # Windows PowerShell
+python -m venv .venv
+source .venv/bin/activate     # macOS, WSL
+.venv\Scripts\Activate.ps1    # Windows PowerShell  (.venv\Scripts\activate.bat for cmd)
+pip install -r python/requirements.txt
 ```
 
 A venv links against one platform's binaries, so a checkout shared between native Windows
-and WSL needs one each — `python scripts/setup_venv.py --venv .venv-wsl`. Anything matching
-`.venv*` is gitignored. `--recreate` rebuilds from scratch.
+and WSL needs one each — `python -m venv .venv-wsl` beside it. Anything matching `.venv*` is
+gitignored.
 
-The setup also checks the one dependency that installs cleanly and then fails to load:
-**LightGBM's wheels need an OpenMP runtime pip cannot ship.** On macOS that is
-`brew install libomp`, without which `import lightgbm` dies at `dlopen` on
-`@rpath/libomp.dylib`; on Debian/Ubuntu/WSL it is `libgomp1`; on Windows it comes with the
-VC++ redistributable. LightGBM is benchmark-only (issue #6), so everything else runs
-without it.
+One dependency installs cleanly and then fails to load: **LightGBM's wheels need an OpenMP
+runtime pip cannot ship**, and its absence surfaces as a `dlopen` error on
+`@rpath/libomp.dylib` (or the platform equivalent) rather than as a failed install.
+
+| platform | fix |
+|---|---|
+| macOS | `brew install libomp` |
+| Debian / Ubuntu / WSL | `sudo apt-get install libgomp1` |
+| Windows | ships with the Visual C++ redistributable (x64) |
+
+LightGBM is benchmark-only (issue #6): only `run_gbm_ceiling.py` and `run_gbm_transfer.py`
+need it, and everything else — including the rest of the test suite — runs without it.
 
 Two caveats worth knowing before you regenerate anything under `data/`:
 
 - **`requirements.txt` gives lower bounds, not pins.** Fine for reading and for the test
   suite; not a guarantee for regenerating a committed summary. Both LightGBM runners record
   the host and library versions they ran under in their summary's `meta.host`, so a
-  regeneration that lands somewhere different is diagnosable.
+  regeneration that lands somewhere different is diagnosable. A committed lockfile would make
+  a *same-platform* rerun exact and is still worth having; what
+  [#22](https://github.com/ProjectSidewalk/label-latlng-estimation/issues/22) measured is that
+  no lockfile can make a *cross-platform* one exact — see the next bullet.
 - **The LightGBM benchmarks do not reproduce bit-for-bit across hosts — by nature, not by
   neglect.** On an Apple-silicon macOS host in August 2026, refitting the #6 boosters
   reproduced `gbm-ceiling-summary.json`'s `best_iteration` for all four variants and its
