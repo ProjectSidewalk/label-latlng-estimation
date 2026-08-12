@@ -40,12 +40,12 @@ see the notes in `python/label_latlng_estimation.py`. The 2026-08-07 refit picke
 ## Quick start
 
 ```bash
-pip install -r python/requirements.txt
+python scripts/setup_venv.py         # build .venv, then activate it — see "Python environment"
 python python/run_analysis.py        # seven-estimator comparison + coefficients vs published 2021
 python python/run_distance_refit.py  # the issue #3 candidate ladder vs the 2021 distance half
 python python/run_triangulation.py build --write  # the issue #7 depth-free bearing anchor
                                      #   (~12 min, offline; regenerates data/triangulation-summary.json)
-pytest                               # 431 tests — see "Tests" below
+pytest                               # 467 tests — see "Tests" below
 ```
 
 The R side needs R ≥ 4.x with readr/dplyr/tidyr/tibble/purrr/geosphere/lme4/jsonlite
@@ -54,6 +54,49 @@ The R side needs R ≥ 4.x with readr/dplyr/tidyr/tibble/purrr/geosphere/lme4/js
 ```bash
 Rscript scripts/rerun-analysis.R     # regenerates tests/fixtures/r-baseline/
 ```
+
+### Python environment
+
+`scripts/setup_venv.py` builds `.venv` from `python/requirements.txt` and reports the
+resolved versions. It is Python rather than a shell script because this repo is developed
+across macOS, WSL and native Windows, and one command should work in all three:
+
+```bash
+python scripts/setup_venv.py               # macOS / WSL / Windows alike
+source .venv/bin/activate                  # macOS, WSL
+.venv\Scripts\Activate.ps1                 # Windows PowerShell
+```
+
+A venv links against one platform's binaries, so a checkout shared between native Windows
+and WSL needs one each — `python scripts/setup_venv.py --venv .venv-wsl`. Anything matching
+`.venv*` is gitignored. `--recreate` rebuilds from scratch.
+
+The setup also checks the one dependency that installs cleanly and then fails to load:
+**LightGBM's wheels need an OpenMP runtime pip cannot ship.** On macOS that is
+`brew install libomp`, without which `import lightgbm` dies at `dlopen` on
+`@rpath/libomp.dylib`; on Debian/Ubuntu/WSL it is `libgomp1`; on Windows it comes with the
+VC++ redistributable. LightGBM is benchmark-only (issue #6), so everything else runs
+without it.
+
+Two caveats worth knowing before you regenerate anything under `data/`:
+
+- **`requirements.txt` gives lower bounds, not pins.** Fine for reading and for the test
+  suite; not a guarantee for regenerating a committed summary. If you regenerate one, note
+  the versions you used — `run_gbm_transfer.py` writes its `lightgbm_version` into the
+  summary for exactly this reason.
+- **The LightGBM benchmarks have been observed not to reproduce across hosts.** On an
+  Apple-silicon macOS host in August 2026, refitting the #6 boosters reproduced
+  `gbm-ceiling-summary.json`'s `best_iteration` for all four variants and its metrics to
+  ~1e-9 for three of them — but `gbm_dep_l1`, the one variant that eats the trig-derived
+  `depression_deg`, landed 5.9e-5 m away on the test median. That gap was identical across
+  8 thread counts, two Python versions (3.10, 3.14) and two NumPy/pandas stacks, so it is
+  not thread count and not library version: a ULP-level difference in the feature is enough
+  to move a split. `run_gbm_transfer.py` asserts its refitted boosters reproduce the
+  committed medians to 1e-9 *before* it scores a single modern row, so this surfaces as a
+  hard stop rather than as quietly different published numbers — which is the behaviour you
+  want, but it does mean regenerating `gbm-*-summary.json` needs the host they were built
+  on. Tracked in
+  [#22](https://github.com/ProjectSidewalk/label-latlng-estimation/issues/22).
 
 ## Reports — the 2026 investigation
 
@@ -72,6 +115,7 @@ ones before it.
 | 2026-08-07 | [GBM ceiling](reports/2026-08-07-gbm-ceiling.md) | A LightGBM benchmark on the same split bounds the refit from above: how much accuracy the closed form leaves on the table. ([#6](https://github.com/ProjectSidewalk/label-latlng-estimation/issues/6)) |
 | 2026-08-07 | [Modern truth](reports/2026-08-07-modern-truth.md) | The absolute check self-consistency provably could not do: post-2021 human clicks in 49 city schemas against fresh GSV depth. The blend's geometry survives; its *scale* is the era fleet's (a uniform +13%, traced to the era payloads' pinned 2.50 m ground planes), one held-out constant fixes it to 0.41 m median error, and the decision — a single flat 2.34 m height, tradeoffs in §9 — ships as `final_coefficients`. Stored positions are the estimator's own echo in both front-end eras. ([#3](https://github.com/ProjectSidewalk/label-latlng-estimation/issues/3) close-out) |
 | 2026-08-08 | [Bearing-only triangulation](reports/2026-08-08-bearing-only-triangulation.md) | The external anchor `final_coefficients` asked for: object positions fixed by the *intersection of bearings*, using no vertical model, no camera height, no depth and no resolution. The ecosystem's assumed 2.6 m camera height is too tall on all six auto-labeler runs; the shipped 2.3412 m is bracketed to ~8% but not confirmed more tightly; and depth and bearings disagree by 13.8% at identical pixels — a multiplicative gap whose shape points at the depth model's scale, not adjudicated absolutely. ([#7](https://github.com/ProjectSidewalk/label-latlng-estimation/issues/7)) |
+| 2026-08-10 | [GBM transfer](reports/2026-08-10-gbm-transfer.md) | The ceiling above, re-asked against a second truth frame: it does not survive. With one modern parameter on each side, the shipped two-parameter closed form beats the booster (0.410 m vs 0.498 m) and every richer recalibration of it. The mechanism is that the era truth is not one scale — it implies 2.80 m of camera height at DC and 6656-px panoramas but 2.35 m at 8192 px — so what looked like interaction structure was a booster reading which subpopulation answers on which scale. What does transfer is the tail (p90 3.55 m → 2.80 m for the transferred booster, 1.99 m for one trained on modern truth), and — much more weakly — the far field beyond 15 m. ([#6](https://github.com/ProjectSidewalk/label-latlng-estimation/issues/6)) |
 
 ## Repository layout
 
@@ -101,6 +145,7 @@ JSON to `data/`:
 | `run_distance_refit.py` (+ `distance_refit.py`) | The distance-half refit: the geometry-shaped candidate ladder, both losses, Stage-2 robustness scoring. | [#3](https://github.com/ProjectSidewalk/label-latlng-estimation/issues/3) |
 | `run_mapillary_falsification.py` (+ `mapillary_falsification.py`) | Stage 3 falsification: Mapillary metadata census, #4766's scale-free diagnostics reimplemented, per-sequence camera heights. | [#3](https://github.com/ProjectSidewalk/label-latlng-estimation/issues/3) |
 | `run_gbm_ceiling.py` | Benchmark-only LightGBM accuracy ceiling on the refit's split. | [#6](https://github.com/ProjectSidewalk/label-latlng-estimation/issues/6) |
+| `run_gbm_transfer.py` (+ `gbm_transfer.py`) | Scores those same boosters against modern-truth rows they were never fitted on, to separate scene structure from era-truth-frame structure. | [#6](https://github.com/ProjectSidewalk/label-latlng-estimation/issues/6) |
 | `run_modern_truth.py` (+ `modern_truth.py`) | The absolute close-out: stratified modern-label sample, heading-centred depth lookup (shared bit-for-bit with the legacy path via `depth_validation.classify_depth_pixel`), era-aware circularity guard, held-out remedy check. | [#3](https://github.com/ProjectSidewalk/label-latlng-estimation/issues/3) |
 | `run_triangulation.py` (+ `triangulation.py`, `triangulation_depth.py`) | Bearing-only triangulation: leave-one-out ray intersection as a depth-free range truth, its error budget and bias validation, and the same-pixel depth cross-check. | [#7](https://github.com/ProjectSidewalk/label-latlng-estimation/issues/7) |
 
@@ -125,11 +170,11 @@ provenance, caveats, and regeneration instructions: **`data/MANIFEST.md`**.
 
 ## Tests
 
-`pytest` runs 431 tests: data contract, R↔Python equivalence, findings-vs-published, depth
+`pytest` runs 467 tests: data contract, R↔Python equivalence, findings-vs-published, depth
 pilot, depth validation, coordinate conventions, POV inversion, distance refit (findings +
-invariants), Mapillary falsification, GBM ceiling, modern truth (findings + invariants), and
+invariants), Mapillary falsification, GBM ceiling, modern truth (findings + invariants),
 bearing-only triangulation (estimator invariants on known geometry + findings + the
-conclusions-page build).
+conclusions-page build), and GBM transfer (frame-mapping contract + findings).
 
 `RUN_SLOW=1 pytest` additionally re-derives the coordinate-conventions evidence in full from
 the committed bytes, re-reads every modern-truth label's truth from its payload, and rebuilds

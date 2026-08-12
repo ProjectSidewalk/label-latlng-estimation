@@ -13,6 +13,13 @@ scripts/*_cache/
 __pycache__/
 .pytest_cache/
 
+# Python environments built by scripts/setup_venv.py. The versions that define them belong
+# in python/requirements.txt, which IS committed; the installed tree never is. The glob
+# covers the per-platform variants a checkout shared between Windows and WSL needs
+# (.venv-win, .venv-wsl, ...), since a venv cannot span the two.
+.venv*/
+venv/
+
 # The depth-validation fetch cache (raw tiles + photometa). The committed
 # data/depth-validation-tiles.jsonl.gz holds the same tile bytes verbatim, so `build`
 # and every downstream stage replay offline without it.
