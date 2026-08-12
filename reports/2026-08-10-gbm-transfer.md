@@ -188,10 +188,19 @@ why the honest comparison waits for §6):
 | A deployed (2021 production) | 1.228 | −0.472 | 5.240 | −0.438 |
 | D era blend (#3 Stage 2) | 1.291 | +1.067 | 3.976 | −0.341 |
 | **GBM L1 (#6)** | **0.594** | −0.154 | 3.217 | −0.326 |
-| GBM L1 + exact depression | 0.564 | −0.154 | 3.255 | −0.327 |
+| GBM L1 + exact depression † | 0.564 | −0.154 | 3.255 | −0.327 |
 | GBM L2 | 0.709 | −0.320 | 3.973 | −0.340 |
 | GBM, `sv_image_y` only | 1.080 | +0.992 | 3.289 | −0.247 |
 | *D flat (shipped; in-sample here)* | *0.444* | *−0.172* | *4.127* | *−0.436* |
+
+† **The `gbm_dep_l1` rows are the one host-sensitive thing in this report**, and they are
+marked wherever they appear. That variant is the only one that eats a trig-derived feature,
+which is the whole mechanism of [#22](https://github.com/ProjectSidewalk/label-latlng-estimation/issues/22):
+two platforms' `libm` disagree on `arctan` in the last bit, LightGBM picks splits at
+histogram bin boundaries, and one such bit moves a split. Regenerated on Apple-silicon
+macOS, this row reads 0.578 / 3.294 rather than 0.564 / 3.255. Nothing else in the table
+moves — the other three variants reproduce to ~1e-9 — and no claim in this report rests on
+the dep variant, which is why the guard admits the difference rather than stopping on it.
 
 The era-frame margin survives intact: **+108% in the era frame, +118% here**. Whatever
 this booster learned, it was not noise that evaporates the moment the rows change.
@@ -219,12 +228,18 @@ committed Stage 4 table:
 | GBM L1 + affine | 2 | 0.461 | 0.417–0.512 | **+0.014 … +0.080** | 2.693 |
 | GBM 1-D + scale | 1 | 0.487 | 0.437–0.548 | **+0.045 … +0.104** | 2.776 |
 | GBM L1 + scale | 1 | 0.498 | 0.443–0.568 | **+0.049 … +0.130** | 2.800 |
-| GBM L1 + dep + scale | 1 | 0.505 | 0.441–0.569 | **+0.053 … +0.131** | 2.756 |
+| GBM L1 + dep + scale † | 1 | 0.505 | 0.441–0.569 | **+0.053 … +0.131** | 2.756 |
 | GBM L1 + quantile map | nonparametric monotone | 0.542 | 0.500–0.593 | **+0.090 … +0.160** | 2.876 |
 
 (The flat height fitted on the train half is 2.3416 m against the shipped 2.3412 m — the
 shipped constant is the full-sample median, so it is scored here in its held-out form
 rather than in-sample.)
+
+† Host-sensitive, per §5's footnote: on macOS this row's p90 reads 2.813 rather than 2.756.
+Its median — the column the comparison is decided on — is 0.505 on both hosts, and it is
+the *seventh* arm either way. Every other row here reproduces exactly; verified by
+regenerating this summary on macOS and re-running the findings tests against it, which pass
+unchanged.
 
 **The two-parameter closed form wins every comparison.** Read the two interval columns
 together, because they say different things and only one of them is the test: the marginal

@@ -289,7 +289,12 @@ the committed ceiling matrix. That makes it the tripwire for **both** artifacts:
 
 **So, for a reproducer:** `python python/run_gbm_transfer.py --write` runs anywhere, and its
 numbers support every claim in both reports. An empty `git diff` afterwards is expected only
-on the host in `meta.host`. The same is true of `figures/fig28-gbm-transfer.png` for an
+on the host in `meta.host`. Confirmed end-to-end on 2026-08-12: the macOS regeneration
+completes, and the findings and contract tests pass against *its* artifact rather than the
+committed one. What moves is confined to the `gbm_dep_l1` arms — 167 of 437 numeric leaves,
+worst 0.113 m on a modern p90 — and reaches print in exactly three cells of the transfer
+report's §5 and §6 tables, which carry a footnote saying so. Every headline quantity, and
+every number any claim rests on, is identical to within 3e-7. The same is true of `figures/fig28-gbm-transfer.png` for an
 unrelated and more mundane reason — matplotlib substitutes fonts differently per machine, so
 re-rendering it moves its bytes without moving a pixel of data. No claim anywhere rests on a
 figure's bytes; re-render only when the summary behind it changes.
