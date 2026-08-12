@@ -46,7 +46,7 @@ python python/run_analysis.py        # seven-estimator comparison + coefficients
 python python/run_distance_refit.py  # the issue #3 candidate ladder vs the 2021 distance half
 python python/run_triangulation.py build --write  # the issue #7 depth-free bearing anchor
                                      #   (~12 min, offline; regenerates data/triangulation-summary.json)
-pytest                               # 467 tests — see "Tests" below
+pytest                               # 477 tests — see "Tests" below
 ```
 
 The R side needs R ≥ 4.x with readr/dplyr/tidyr/tibble/purrr/geosphere/lme4/jsonlite
@@ -88,24 +88,27 @@ need it, and everything else — including the rest of the test suite — runs w
 Two caveats worth knowing before you regenerate anything under `data/`:
 
 - **`requirements.txt` gives lower bounds, not pins.** Fine for reading and for the test
-  suite; not a guarantee for regenerating a committed summary. If you regenerate one, note
-  the versions you used — `run_gbm_transfer.py` writes its `lightgbm_version` into the
-  summary for exactly this reason. A committed lockfile is the real fix and belongs with
-  the host that reproduces the artifacts, which is
-  [#22](https://github.com/ProjectSidewalk/label-latlng-estimation/issues/22).
-- **The LightGBM benchmarks have been observed not to reproduce across hosts.** On an
-  Apple-silicon macOS host in August 2026, refitting the #6 boosters reproduced
-  `gbm-ceiling-summary.json`'s `best_iteration` for all four variants and its metrics to
-  ~1e-9 for three of them — but `gbm_dep_l1`, the one variant that eats the trig-derived
-  `depression_deg`, landed 5.9e-5 m away on the test median. That gap was identical across
-  8 thread counts, two Python versions (3.10, 3.14) and two NumPy/pandas stacks, so it is
-  not thread count and not library version: a ULP-level difference in the feature is enough
-  to move a split. `run_gbm_transfer.py` asserts its refitted boosters reproduce the
-  committed medians to 1e-9 *before* it scores a single modern row, so this surfaces as a
-  hard stop rather than as quietly different published numbers — which is the behaviour you
-  want, but it does mean regenerating `gbm-*-summary.json` needs the host they were built
-  on. Tracked in
-  [#22](https://github.com/ProjectSidewalk/label-latlng-estimation/issues/22).
+  suite; not a guarantee for regenerating a committed summary. Both LightGBM runners record
+  the host and library versions they ran under in their summary's `meta.host`, so a
+  regeneration that lands somewhere different is diagnosable. A committed lockfile would make
+  a *same-platform* rerun exact and is still worth having; what
+  [#22](https://github.com/ProjectSidewalk/label-latlng-estimation/issues/22) measured is that
+  no lockfile can make a *cross-platform* one exact — see the next bullet.
+- **The LightGBM benchmarks do not reproduce bit-for-bit across hosts — by nature, not by
+  neglect.** On an Apple-silicon macOS host in August 2026, refitting the #6 boosters
+  reproduced `gbm-ceiling-summary.json`'s `best_iteration` for all four variants and its
+  metrics to ~1e-9 for three of them — but `gbm_dep_l1`, the one variant that eats the
+  trig-derived `depression_deg`, landed 5.9e-5 m away on the test median. That gap was
+  identical across 8 thread counts, two Python versions (3.10, 3.14) and two NumPy/pandas
+  stacks, so it is neither: LightGBM picks splits at histogram bin boundaries and a ULP of
+  `arctan` is enough to move one. **What changed in
+  [#22](https://github.com/ProjectSidewalk/label-latlng-estimation/issues/22):** the guard in
+  `run_gbm_transfer.py` used to assert bit-identity (1e-9) before scoring a modern row, which
+  turned a 0.059 mm difference into a hard stop and left these two artifacts regenerable on
+  one machine. It now asserts the tolerance the findings actually rest on — 1 mm on medians,
+  2 cm on p90s, against a 0.40 m headline — stops past that, and *records* whether the run
+  was bit-identical instead of demanding it. So `gbm-*-summary.json` regenerates anywhere;
+  only its bytes are the recorded host's. Full reasoning in `data/MANIFEST.md`.
 
 ## Reports — the 2026 investigation
 
@@ -179,12 +182,14 @@ provenance, caveats, and regeneration instructions: **`data/MANIFEST.md`**.
 
 ## Tests
 
-`pytest` runs 467 tests: data contract, R↔Python equivalence, findings-vs-published, depth
+`pytest` runs 477 tests: data contract, R↔Python equivalence, findings-vs-published, depth
 pilot, depth validation, coordinate conventions, POV inversion, distance refit (findings +
 invariants), Mapillary falsification, GBM ceiling, modern truth (findings + invariants),
 bearing-only triangulation (estimator invariants on known geometry + findings + the
-conclusions-page build), and GBM transfer (frame-mapping contract + findings).
+conclusions-page build), and GBM transfer (frame-mapping contract + the frozen-booster
+guard + findings).
 
 `RUN_SLOW=1 pytest` additionally re-derives the coordinate-conventions evidence in full from
-the committed bytes, re-reads every modern-truth label's truth from its payload, and rebuilds
-the issue-#7 conclusions page byte-for-byte from the committed bundles.
+the committed bytes, re-reads every modern-truth label's truth from its payload, rebuilds
+the issue-#7 conclusions page byte-for-byte from the committed bundles, and recomputes the
+era-frame pixel residuals behind the #6 transfer report's frame-mapping table.

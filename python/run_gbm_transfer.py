@@ -6,9 +6,14 @@ Usage (from the repo root):
 
 The boosters are refitted in-process by ``run_gbm_ceiling.fit_gbm`` -- the same code, same
 seed, same two-pass early stopping -- and then REQUIRED to reproduce the committed
-``data/gbm-ceiling-summary.json`` era-test medians to float precision before a single
-modern row is scored. That assertion is what makes "the #6 model" a meaningful phrase
-here: if it fails, this run is not benchmarking the model the report describes.
+``data/gbm-ceiling-summary.json`` era-test numbers, to ``gbm_transfer.CEILING_TOL_M``,
+before a single modern row is scored. That check is what makes "the #6 model" a meaningful
+phrase here: if it fails, this run is not benchmarking the model the report describes, and
+it stops rather than publishing a different model under the same name. The tolerance is
+1 mm on medians and 2 cm on p90s -- far inside anything either report claims, and wide
+enough to survive the last-bit ``libm`` differences that stop LightGBM reproducing
+bit-for-bit across platforms (issue #22). Whether a given run WAS bit-identical is recorded
+in the summary's ``meta.boosters_match_committed_ceiling``, alongside the host that ran it.
 
 Nothing is refitted on modern data. The one parameter this runner ever fits is a global
 scale per booster, on a train half of panoramas, scored on the disjoint half -- the same
@@ -42,6 +47,7 @@ import distance_refit as dr  # noqa: E402
 import gbm_transfer as gt  # noqa: E402
 import modern_truth as mt  # noqa: E402
 import run_gbm_ceiling as gc  # noqa: E402
+from provenance import host_provenance  # noqa: E402
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 
@@ -93,17 +99,32 @@ def main() -> None:
         gbms[key] = gc.fit_gbm(era_train, cols, objective)
         step(f"  {key}: {gbms[key]['best_iteration']} rounds")
 
-    step("asserting the boosters reproduce the committed #6 era-test numbers...")
+    step("checking the boosters against the committed #6 era-test numbers...")
     era_scored = gc.score_models(gbms, {}, era_train, era_test)
     era_matrix = {k: gc.metrics(era_scored, k) for k in gbms}
     with open(os.path.join(args.data_dir, "gbm-ceiling-summary.json"), encoding="utf-8") as f:
         ceiling = json.load(f)
-    for key in gbms:
-        for metric in ("latlng_median_m", "latlng_p90_m", "dist_median_m", "dist_p90_m"):
-            got, want = era_matrix[key][metric], ceiling["matrix"][key][metric]
-            assert abs(got - want) < 1e-9, (key, metric, got, want)
+    verdict = gt.compare_to_committed_ceiling(
+        era_matrix, ceiling, {k: v["best_iteration"] for k, v in gbms.items()})
+    if not verdict["within_tolerance"]:
+        raise SystemExit(
+            "!! the refitted boosters are not the committed #6 boosters: "
+            + ", ".join(f"{k} off by {v:+.2e} m" for k, v in verdict["exceeded"].items())
+            + f"\n!! tolerance {verdict['tolerance_m']}; this run would publish a different"
+              " model under the same name, so it stops here.")
+    if verdict["bit_identical"]:
+        step("  bit-identical to the committed matrix (the host that built it)")
+    else:
+        # Not a warning about correctness -- see CEILING_TOL_M. It IS worth printing,
+        # because it is the difference between a rerun on the recorded host and a rerun
+        # somewhere else, and the reader should not have to open the JSON to find out which.
+        step(f"  within tolerance but NOT bit-identical: worst {verdict['worst_metric']} "
+             f"off by {verdict['max_abs_delta_m']:.2e} m. Expected off the host recorded in "
+             f"meta.host of gbm-ceiling-summary.json; see issue #22.")
     era_reference = {
-        "source": "data/gbm-ceiling-summary.json (reproduced in-process, asserted equal)",
+        "source": "data/gbm-ceiling-summary.json (refitted in-process and checked against "
+                  "it to CEILING_TOL_M -- see meta.boosters_match_committed_ceiling for "
+                  "what this run actually landed on)",
         "n_test": ceiling["meta"]["n_test"],
         "models": {k: {m: ceiling["matrix"][k][m]
                        for m in ("dist_median_m", "dist_p90_m", "latlng_median_m")}
@@ -136,7 +157,11 @@ def main() -> None:
         "label_types": gt.label_type_census(human),
         "support_shift": gt.support_shift(era_train, human),
     }
-    frame = gt.frame_mapping_evidence(human)
+    # Two checks on the modern rows, plus the era frame's own real pixels -- the third is
+    # the discriminating one and §3 publishes its numbers, so it is emitted rather than
+    # left to prose. `cleaned` is already in memory from the refit above.
+    frame = {**gt.frame_mapping_evidence(human),
+             "era_frame_residuals_px": gt.era_pixel_residuals(cleaned)}
 
     # Why the booster arrives on modern truth almost unbiased while the era blend arrives
     # 1.07 m long: the era truth's own implied scale is not constant across resolutions.
@@ -303,7 +328,12 @@ def main() -> None:
             "scale_min_dep_deg": gt.SCALE_MIN_DEP_DEG,
             "calibration_height_px": gt.CALIBRATION_HEIGHT,
             "best_iterations": {k: v["best_iteration"] for k, v in gbms.items()},
-            "boosters_match_committed_ceiling": True,
+            # Which machine produced these bytes, and how close its refit landed to the
+            # committed #6 matrix. Both are records rather than inferences (issue #22):
+            # LightGBM is the one thing here that does not reproduce bit-for-bit across
+            # platforms, so "same numbers?" needs an answer with a tolerance attached.
+            "host": host_provenance(),
+            "boosters_match_committed_ceiling": verdict,
             "closed_forms_match_committed_remedies": True,
             "nothing_refitted_on_modern_data": "the boosters are the #6 boosters; the only "
                                                "modern parameter is one scale per model, "
@@ -332,7 +362,16 @@ def main() -> None:
                 "best_iteration": gbm_modern["best_iteration"],
                 "n_train_rows": int(in_train.sum()),
                 "caveat": "trained on 1,293 modern rows against the era split's 316,118: a "
-                          "FLOOR on what modern data supports, never a modern ceiling",
+                          "FLOOR on what modern data supports, never a modern ceiling. It "
+                          "carries a SECOND handicap beyond the row count: gc.fit_gbm "
+                          "builds features with gc.build_features, which pins label_type "
+                          "to the era's seven categories, so Crosswalk and Signal (433 "
+                          "rows, 16.3% of this population) are a missing category in this "
+                          "booster's own TRAINING data, not just at prediction time as "
+                          "they are for the era boosters. Both handicaps push the same "
+                          "way -- a fairer control would score better, and this one "
+                          "already loses to the closed form -- so the reading is "
+                          "conservative; report section 6 says so",
             },
             "models": held,
             "bootstrap": held_boot,

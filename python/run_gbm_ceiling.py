@@ -49,6 +49,7 @@ from label_latlng_estimation import (  # noqa: E402
 )
 import distance_refit as dr  # noqa: E402
 from pov_inversion import pov_if_centered  # noqa: E402
+from provenance import host_provenance  # noqa: E402
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 SEED = 666  # the repo-wide seed (same one the #3 noise sweep uses)
@@ -262,6 +263,10 @@ def main() -> None:
     matrix = {k: metrics(scored, k) for k in list(fits) + list(gbms)}
 
     # Lock the comparison: the recomputed baselines must equal the committed #3 summary.
+    # Still 1e-9, deliberately, where the booster guard in run_gbm_transfer.py is not: these
+    # two are closed forms over fixed rows, and closed forms DO reproduce bit-for-bit across
+    # platforms -- the macOS run in issue #22 passed every one of them. It is the boosters'
+    # data-dependent split search that does not, so only that guard carries a tolerance.
     with open(os.path.join(args.data_dir, "distance-refit-summary.json"), encoding="utf-8") as f:
         ref = json.load(f)
     for key in ("A_ols", "D_blend_type_l1"):
@@ -324,6 +329,10 @@ def main() -> None:
             "era_cal_delta_deg": scored.attrs["era_cal_delta_deg"],
             "dist_cap_m": dr.DIST_CAP_M,
             "lightgbm_version": lgb.__version__,
+            # Which machine produced these bytes. The boosters below are the one thing in
+            # this repo measured NOT to reproduce bit-for-bit across platforms (issue #22),
+            # so the host is part of the artifact rather than an inference from a comment.
+            "host": host_provenance(),
             "lgb_params": {k: v for k, v in LGB_PARAMS.items()},
             "max_rounds": MAX_ROUNDS, "stopping_rounds": STOPPING_ROUNDS,
             "inner_valid_frac": INNER_VALID_FRAC, "seed": SEED,

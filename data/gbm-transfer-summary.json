@@ -12,12 +12,57 @@
       "gbm_l2": 621,
       "only_sv_image_y": 150
     },
-    "boosters_match_committed_ceiling": true,
+    "host": {
+      "platform": "Windows-11-10.0.26200-SP0",
+      "machine": "AMD64",
+      "python": "3.12.10",
+      "python_build": "3.12.10 (tags/v3.12.10:0cc8128, Apr 8 2025, 12:21:36) [MSC v.1943 64 bit (AMD64)]",
+      "libraries": {
+        "numpy": "2.5.0",
+        "pandas": "3.0.5",
+        "scipy": "1.18.0",
+        "lightgbm": "4.7.0"
+      },
+      "note": "recorded so a rerun that lands on different numbers is diagnosable rather than forensic (issue #22)"
+    },
+    "boosters_match_committed_ceiling": {
+      "within_tolerance": true,
+      "bit_identical": true,
+      "best_iterations_match": true,
+      "best_iterations_refit_vs_committed": {
+        "gbm_l1": [
+          1376,
+          1376
+        ],
+        "gbm_dep_l1": [
+          1341,
+          1341
+        ],
+        "gbm_l2": [
+          621,
+          621
+        ],
+        "only_sv_image_y": [
+          150,
+          150
+        ]
+      },
+      "max_abs_delta_m": 0.0,
+      "worst_metric": "gbm_l1.latlng_median_m",
+      "tolerance_m": {
+        "latlng_median_m": 0.001,
+        "latlng_p90_m": 0.02,
+        "dist_median_m": 0.001,
+        "dist_p90_m": 0.02
+      },
+      "exceeded": {},
+      "meaning": "within_tolerance is the precondition this run enforces: the refitted boosters answer the era test the same way the committed #6 matrix does, to far inside anything either report claims. bit_identical is recorded, not required -- LightGBM's splits are not reproducible bit-for-bit across platforms (issue #22), so requiring it would make this artifact regenerable on one machine rather than on any"
+    },
     "closed_forms_match_committed_remedies": true,
     "nothing_refitted_on_modern_data": "the boosters are the #6 boosters; the only modern parameter is one scale per model, fitted on the train half of panoramas"
   },
   "era_reference": {
-    "source": "data/gbm-ceiling-summary.json (reproduced in-process, asserted equal)",
+    "source": "data/gbm-ceiling-summary.json (refitted in-process and checked against it to CEILING_TOL_M -- see meta.boosters_match_committed_ceiling for what this run actually landed on)",
     "n_test": 79029,
     "models": {
       "gbm_l1": {
@@ -187,6 +232,22 @@
       "median": 0.0017414103384680857,
       "p10": -0.3303098255804343,
       "p90": 0.33493644697200575
+    },
+    "era_frame_residuals_px": {
+      "n_rows": 162846,
+      "by_pano_height": {
+        "6656": {
+          "n": 37494,
+          "mapped_px": 15.0,
+          "raw_px": 15.0
+        },
+        "8192": {
+          "n": 125352,
+          "mapped_px": 14.5625,
+          "raw_px": 140.0
+        }
+      },
+      "reading": "the mapping leaves the same small drift in both height groups; the unmapped alternative leaves it only at 6656 px, where the two expressions coincide, and is off by ~23% of the offset at 8192"
     }
   },
   "truth_scale_by_resolution": {
@@ -382,7 +443,7 @@
     "gbm_modern": {
       "best_iteration": 476,
       "n_train_rows": 1293,
-      "caveat": "trained on 1,293 modern rows against the era split's 316,118: a FLOOR on what modern data supports, never a modern ceiling"
+      "caveat": "trained on 1,293 modern rows against the era split's 316,118: a FLOOR on what modern data supports, never a modern ceiling. It carries a SECOND handicap beyond the row count: gc.fit_gbm builds features with gc.build_features, which pins label_type to the era's seven categories, so Crosswalk and Signal (433 rows, 16.3% of this population) are a missing category in this booster's own TRAINING data, not just at prediction time as they are for the era boosters. Both handicaps push the same way -- a fairer control would score better, and this one already loses to the closed form -- so the reading is conservative; report section 6 says so"
     },
     "models": {
       "A_deployed": {
