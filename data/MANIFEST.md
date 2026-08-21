@@ -123,6 +123,12 @@ They exist so the conclusions can be re-derived rather than trusted: `fetch` is 
 stage, and `build` / `figures` / `gallery` / `verify_depth_conventions.py` all replay these bytes
 with the cache deleted and no network at all.
 
+- `depth-validation-sample.json` — the pano ids actually fetched, per set. `build` reads this in
+  preference to redrawing, because `choose_samples` stratifies on the #4 pano table's `pano_class`:
+  any correction upstream reshuffles the strata and draws panoramas the committed tiles do not
+  cover, which would silently score a different set rather than fail. Pinning the draw is what lets
+  a fresh clone replay the fetch it actually has. (Added 2026-08-13, when the `in_cleaned` fix moved
+  3 panoramas between classes and shifted 13 of the 40 scoring ids.)
 - `depth-validation-tiles.jsonl.gz` — **the replication artifact.** One line per panorama-zoom
   record: pano id, set (`scoring` 60 panos / `adjudication` 24), zoom index, pixel dimensions, tile
   grid, and the **verbatim JPEG bytes of each tile as Google served them**, base64-encoded. Not a

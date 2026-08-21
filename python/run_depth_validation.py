@@ -192,6 +192,19 @@ def tile_grid(pano, zoom):
 
 # ---------------------------------------------------------------------------- sampling
 
+def committed_sample_path(data_dir):
+    return os.path.join(data_dir, "depth-validation-sample.json")
+
+
+def load_committed_sample(data_dir):
+    """The pano ids actually fetched, or None. This is the archival record of the draw."""
+    path = committed_sample_path(data_dir)
+    if not os.path.exists(path):
+        return None
+    with open(path, encoding="utf-8") as f:
+        return json.load(f)
+
+
 def choose_samples(data_dir):
     """Deterministic scoring / adjudication / cross-vintage sets from the #4 artifacts.
 
@@ -239,8 +252,10 @@ def cmd_fetch(args):
 
     sample = choose_samples(args.data_dir)
     os.makedirs(args.cache_dir, exist_ok=True)
-    with open(os.path.join(args.cache_dir, "sample.json"), "w", encoding="utf-8") as f:
-        json.dump(sample, f, indent=2, sort_keys=True)
+    for path in (os.path.join(args.cache_dir, "sample.json"), committed_sample_path(args.data_dir)):
+        with open(path, "w", encoding="utf-8", newline="\n") as f:
+            json.dump(sample, f, indent=2, sort_keys=True)
+            f.write("\n")
 
     throttle = Throttle(args.rps)
     session = requests.Session()
@@ -628,12 +643,18 @@ def cross_vintage_residuals(payload_a, lat_a, lng_a, payload_b, lat_b, lng_b, st
 # ---------------------------------------------------------------------------- build
 
 def cmd_build(args):
-    sample_path = os.path.join(args.cache_dir, "sample.json")
-    if os.path.exists(sample_path):
-        with open(sample_path, encoding="utf-8") as f:
-            sample = json.load(f)
-    else:
-        sample = choose_samples(args.data_dir)
+    # The committed sample first, the fetch cache second, a fresh draw only as a last
+    # resort. choose_samples() strata come from the #4 pano table's pano_class, so any
+    # correction upstream redraws it -- and the committed tiles only cover the panos that
+    # were actually fetched. Recomputing would silently score a different, tile-less set.
+    sample = load_committed_sample(args.data_dir)
+    if sample is None:
+        sample_path = os.path.join(args.cache_dir, "sample.json")
+        if os.path.exists(sample_path):
+            with open(sample_path, encoding="utf-8") as f:
+                sample = json.load(f)
+        else:
+            sample = choose_samples(args.data_dir)
 
     partners_path = os.path.join(args.cache_dir, "partners.json")
     if os.path.exists(partners_path):

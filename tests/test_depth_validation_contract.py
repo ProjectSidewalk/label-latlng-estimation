@@ -79,6 +79,22 @@ def test_every_scored_panorama_has_committed_imagery(tiles, panos):
     assert scored <= have
 
 
+def test_committed_sample_is_covered_by_committed_tiles(tiles):
+    """The pinned draw and the committed imagery must describe the same panoramas.
+
+    `choose_samples` stratifies on the #4 pano table's `pano_class`, so an upstream
+    correction reshuffles the strata and draws ids nothing in the repo covers. Pinning the
+    sample is only worth anything if the tiles actually back it, so assert that here.
+    """
+    from run_depth_validation import load_committed_sample
+
+    sample = load_committed_sample(DATA)
+    assert sample is not None, "data/depth-validation-sample.json is the archival draw"
+    have = {rec["pano_id"] for rec in tiles}
+    assert set(sample["scoring_a"]) | set(sample["scoring_b"]) <= have
+    assert set(sample["adjudication"]) <= have
+
+
 def test_panometa_covers_every_payload(tiles):
     """The yaw table must cover every panorama the conventions checks touch."""
     meta = pd.read_csv(os.path.join(DATA, "depth-validation-panometa.csv.gz"))

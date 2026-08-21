@@ -47,10 +47,10 @@ image row `height/2`.
 north-referenced coordinate against a heading-centred map. If the frames are as established above,
 the stored *bearing* is right (the client derived it from the same coordinate) but the stored
 *distance* was sampled from a column `(180 − pano_yaw)/360 × 512` away. Re-reading every label
-(the 837 pilot labels that survive cleaning) at the heading-centred column moves the median
+(the 785 pilot labels that survive cleaning) at the heading-centred column moves the median
 distance by **0.00 m** and 85% by under 1 m — because
 the model is nearly flat earth, so range is set by the depression angle and barely by azimuth — but
-**6.6% move by more than 3 m** (p95 = 4.1 m). This wants a second reviewer before it is treated as
+**6.4% move by more than 3 m** (p95 = 4.0 m). This wants a second reviewer before it is treated as
 settled; it bears directly on the ground truth behind
 [#3](https://github.com/ProjectSidewalk/label-latlng-estimation/issues/3).
 
@@ -90,8 +90,8 @@ row_depth = int(round(pano_y / pano_height * 256))        # row 128 is the horiz
 
 `gsv_depth.decode_depth_payload` accepts both and records which it saw in `was_compressed`, so the
 two are directly comparable. The #4 pilot measured the *content* agreement against label positions
-computed by the old pipeline in 2017–2020: **23% of surviving panoramas are bit-stable** (agreement
-at the float32 storage floor) and the rest drift under Google's reprocessing, 0.98 m median overall.
+computed by the old pipeline in 2017–2020: **24% of surviving panoramas are bit-stable** (agreement
+at the float32 storage floor) and the rest drift under Google's reprocessing, 0.99 m median overall.
 So it is the same synthetic product, re-served; it is not frozen, and older captures have drifted
 more.
 

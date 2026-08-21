@@ -61,11 +61,11 @@
     "payload_order_median_violation": 0.0061
   },
   "G_frame_impact": {
-    "frac_beyond_3m": 0.0657,
-    "frac_within_1m": 0.853,
-    "labels": 837,
+    "frac_beyond_3m": 0.0637,
+    "frac_within_1m": 0.851,
+    "labels": 785,
     "median_shift_m": 0.0,
-    "p90_shift_m": 1.987,
-    "p95_shift_m": 4.107
+    "p90_shift_m": 1.991,
+    "p95_shift_m": 3.972
   }
 }

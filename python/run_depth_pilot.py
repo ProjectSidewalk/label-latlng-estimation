@@ -173,6 +173,20 @@ def now_utc():
 
 # ---------------------------------------------------------------------------- sampling
 
+def in_cleaned_flag(raw, cleaned):
+    """Did this exact label survive cleaning? Membership on (city, label_id).
+
+    `label_id` is a per-schema serial -- each city's `label` table numbers from 1 -- so
+    67.8% of era rows carry one that also exists in another city. A bare
+    `isin(set(cleaned["label_id"]))` therefore marks a row cleaned whenever ANY city kept
+    that id, and being only a flag it inflates nothing and raises nothing. It was wrong on
+    45,237 rows (9.65%) before this was keyed properly.
+    """
+    return pd.MultiIndex.from_arrays([raw["city"], raw["label_id"]]).isin(
+        pd.MultiIndex.from_arrays([cleaned["city"], cleaned["label_id"]])
+    )
+
+
 def load_frames(data_dir):
     """(raw with cleaned-style column names + flags, cleaned) for the whole repo."""
     raw = load_data(data_dir)
@@ -181,7 +195,7 @@ def load_frames(data_dir):
         "panorama_lat": "pano_lat", "panorama_lng": "pano_lng",
         "gsv_panorama_id": "pano_id",
     })
-    raw["in_cleaned"] = raw["label_id"].isin(set(cleaned["label_id"]))
+    raw["in_cleaned"] = in_cleaned_flag(raw, cleaned)
     raw["stored_absurd"] = ~(
         raw["lat"].between(-90, 90) & raw["lng"].between(-180, 180)
     ) | raw["lat"].isna() | raw["lng"].isna()

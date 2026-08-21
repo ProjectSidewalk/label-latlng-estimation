@@ -131,6 +131,20 @@ def test_label_ids_unique_within_city(labels):
     assert not labels.duplicated(subset=["city", "label_id"]).any()
 
 
+def test_in_cleaned_is_keyed_on_city_not_the_bare_label_id():
+    """The flag asks whether THIS label survived cleaning, not whether some city's did.
+
+    A row-uniqueness check cannot catch this: the bug was a correctly-shaped frame with a
+    wrongly-computed boolean. seattle:1 is cleaned and chicago:1 is not, so a bare
+    isin() on label_id marks both -- which is what shipped, on 9.65% of era rows.
+    """
+    from run_depth_pilot import in_cleaned_flag
+
+    raw = pd.DataFrame({"city": ["seattle", "chicago", "chicago"], "label_id": [1, 1, 2]})
+    cleaned = pd.DataFrame({"city": ["seattle", "chicago"], "label_id": [1, 2]})
+    assert in_cleaned_flag(raw, cleaned).tolist() == [True, False, True]
+
+
 def test_comparable_labels_have_full_comparison(labels):
     comp = labels[labels["disagreement_m"].notna()]
     assert comp["dlat_ulp"].notna().all()

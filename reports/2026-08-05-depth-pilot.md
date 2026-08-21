@@ -9,8 +9,8 @@ imagery serves.
 
 | | |
 |---|---|
-| **0.98 m** | median disagreement between recomputed and stored label positions across all 195 surviving panos — below the deployed estimator's own 1.46 m median error |
-| **23%** | of surviving panos are bit-stable: agreement at the float32 storage floor (median 0.34 m ≈ 1 ulp), i.e. the payload is the same bytes-for-purposes as in 2017–2020 |
+| **0.99 m** | median disagreement between recomputed and stored label positions across all 194 surviving panos — below the deployed estimator's own 1.46 m median error |
+| **24%** | of surviving panos are bit-stable: agreement at the float32 storage floor (median 0.36 m ≈ 1 ulp), i.e. the payload is the same bytes-for-purposes as in 2017–2020 |
 | **200 / 200** | modern label locations with a current pano — every one serves depth, 96.5% at 16384×8192 |
 | **2.37 m** | median per-pano camera height measured from the payload's plane list — the auto-labeler's hardcoded 2.6 m is above nearly every measured rig |
 
@@ -44,22 +44,22 @@ resolution class with a separate edge-case stratum; ~1,000 throttled requests to
 ## §2 · Part A: fresh payloads reproduce the 2020 ground truth
 
 Of 576 headline-stratum ids, **196 still resolve (34%) — and every single one serves depth**.
-Per-pano classification of the 195 with comparable labels:
+Per-pano classification of the 194 with comparable labels:
 
 | class | panos | meaning |
 |---|---:|---|
-| unchanged | 45 (23%) | every label within 2 ulp — the payload is bit-stable since labeling |
+| unchanged | 47 (24%) | every label within 2 ulp — the payload is bit-stable since labeling |
 | mostly unchanged | 27 (14%) | ≥ 2/3 of labels at the floor; local plane edits |
-| changed | 123 (63%) | the payload has drifted under Google reprocessing |
+| changed | 120 (62%) | the payload has drifted under Google reprocessing |
 
 ![Fig 7 — the cross-check](../figures/fig7-depth-crosscheck.png)
 
 *Fig 7 — left: agreement by class against the float32 floor (shaded) and the estimator's 1.46 m
-median error (dashed). Right: drift tracks payload age — 2019 captures sit at 0.63 m per-pano
+median error (dashed). Right: drift tracks payload age — 2019 captures sit at 0.61 m per-pano
 median (n=70), 2014–2018 at 1.2–1.7 m.*
 
 The "changed" majority is **small, partially coherent drift, not replacement**: per-pano median
-1.35 m (p90 3.4 m), with within-pano shift vectors ~70% explained by a common translation —
+1.43 m (p90 3.5 m), with within-pano shift vectors ~70% explained by a common translation —
 consistent with Google re-bundling camera poses and refitting planes over the years. Two
 corroborating signals: the panos themselves have been re-registered (stored vs fresh position:
 median **0.77 m**), and drift is smallest for the newest captures, which have been reprocessed
@@ -67,7 +67,7 @@ least. A replication bug would not correlate with capture vintage.
 
 **The conditional-equivalence claim** (the strongest honest one): for the panos that survive,
 streetlevel's photometa endpoint serves the same synthetic depth product whose label positions the
-2021 analysis measured at 1.46 m median error — bit-stable on 23% of panos, and within 0.98 m
+2021 analysis measured at 1.46 m median error — bit-stable on 24% of panos, and within 0.99 m
 median (67% of labels under 1.46 m) even pooling the drifted ones. Part A validates **transport
 and stability**, not depth accuracy: how well GSV depth locates a physical curb is a separate
 question this pilot does not touch.
@@ -118,7 +118,7 @@ refines the issue-comment finding in three ways:
 
 ## §6 · Verdict for #3, and what is committed
 
-**Trustworthy as held-out validation, with conditions.** Use the 45 bit-stable panos as strict
+**Trustworthy as held-out validation, with conditions.** Use the 47 bit-stable panos as strict
 held-out truth (agreement at the storage floor); treat the full surviving sample as truth with a
 ~1 m uncertainty budget — comfortably below the 1.5–4.5 m separations #3's candidate ladder needs
 to resolve. Fetch by location (not stored id) when extending to modern imagery, and treat the

@@ -114,7 +114,7 @@ read of the data was right.**
 
 ![Fig 12 — label consequences](../figures/fig12-label-consequences.png)
 
-Of 166 labels on the sampled panoramas: 104 land on the dominant ground plane, 54 on another
+Of 165 labels on the sampled panoramas: 103 land on the dominant ground plane, 54 on another
 near-horizontal plane, 6 on a wall, 1 on an oblique surface, 1 on sky. Median distance 7.7 m. And **85% are within 1 m of
 what flat earth alone predicts** — so the 2021 estimator was largely fitting a relationship the
 payload had already reduced to trigonometry. That is the honest ceiling context for #3.

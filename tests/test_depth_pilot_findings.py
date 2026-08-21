@@ -59,8 +59,8 @@ def test_attrition_and_availability(summary):
 def test_pano_classification(summary):
     counts = summary["part_a"]["pano_class_counts"]
     assert counts == {
-        "changed": 123, "mostly_unchanged": 27,
-        "no_comparable_labels": 1, "unchanged": 45,
+        "changed": 120, "mostly_unchanged": 27,
+        "no_comparable_labels": 2, "unchanged": 47,
     }
 
 
@@ -68,23 +68,23 @@ def test_bit_stable_panos_sit_at_storage_floor(summary):
     # On unchanged panos the median disagreement is ~1 float32 ulp (~0.4 m) --
     # the storage lattice, not a physical error.
     med = summary["part_a"]["label_median_disagreement_m_unchanged_panos"]
-    assert med == pytest.approx(0.3403, abs=1e-3)
+    assert med == pytest.approx(0.3577, abs=1e-3)
 
 
 def test_overall_drift_below_estimator_error(summary):
     # Even pooling drifted panos, fresh depth agrees with the 2020 ground truth
     # to better than the deployed estimator's own 1.46 m median error.
     a = summary["part_a"]
-    assert a["labels_compared"] == 775
-    assert a["label_median_disagreement_m"] == pytest.approx(0.981, abs=1e-3)
+    assert a["labels_compared"] == 723
+    assert a["label_median_disagreement_m"] == pytest.approx(0.9881, abs=1e-3)
     assert a["label_median_disagreement_m"] < 1.46
 
 
 def test_lattice_threshold_sensitivity(summary):
     a = summary["part_a"]
-    assert a["consistent_frac_at_1p5_ulp"] == pytest.approx(0.3948, abs=1e-3)
-    assert a["consistent_frac_at_2_ulp"] == pytest.approx(0.5174, abs=1e-3)
-    assert a["consistent_frac_at_3_ulp"] == pytest.approx(0.6787, abs=1e-3)
+    assert a["consistent_frac_at_1p5_ulp"] == pytest.approx(0.397, abs=1e-3)
+    assert a["consistent_frac_at_2_ulp"] == pytest.approx(0.5201, abs=1e-3)
+    assert a["consistent_frac_at_3_ulp"] == pytest.approx(0.6833, abs=1e-3)
 
 
 def test_pano_reregistration(summary):

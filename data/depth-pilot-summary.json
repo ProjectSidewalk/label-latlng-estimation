@@ -10,21 +10,21 @@
     "absurd_reproduced": 2,
     "absurd_rows_checked": 8,
     "attempted": 576,
-    "consistent_frac_at_1p5_ulp": 0.3948,
-    "consistent_frac_at_2_ulp": 0.5174,
-    "consistent_frac_at_3_ulp": 0.6787,
+    "consistent_frac_at_1p5_ulp": 0.397,
+    "consistent_frac_at_2_ulp": 0.5201,
+    "consistent_frac_at_3_ulp": 0.6833,
     "depth_rate_among_resolved": 1.0,
-    "label_median_disagreement_m": 0.981,
-    "label_median_disagreement_m_unchanged_panos": 0.3403,
-    "label_p90_disagreement_m": 3.302,
-    "labels_compared": 775,
+    "label_median_disagreement_m": 0.9881,
+    "label_median_disagreement_m_unchanged_panos": 0.3577,
+    "label_p90_disagreement_m": 3.3124,
+    "labels_compared": 723,
     "lost_plane_labels": 1,
     "median_pano_shift_m": 0.767,
     "pano_class_counts": {
-      "changed": 123,
+      "changed": 120,
       "mostly_unchanged": 27,
-      "no_comparable_labels": 1,
-      "unchanged": 45
+      "no_comparable_labels": 2,
+      "unchanged": 47
     },
     "resolve_rate": 0.3403,
     "resolve_rate_by_city": {
@@ -36,7 +36,7 @@
       "seattle": 0.207,
       "spgg": 0.461
     },
-    "stored_on_f32_grid_frac": 0.6465
+    "stored_on_f32_grid_frac": 0.6501
   },
   "part_b": {
     "capture_years": {

@@ -65,18 +65,18 @@
     "tilt_pixel_share_vertical_ge80deg": 0.1373
   },
   "t3_label_hits": {
-    "frac_labels_within_1m_of_flat_earth": 0.8494,
+    "frac_labels_within_1m_of_flat_earth": 0.8485,
     "hit_class_counts": {
       "facade": 6,
-      "ground": 104,
+      "ground": 103,
       "oblique": 1,
       "sky": 1,
       "terrain": 54
     },
-    "labels": 166,
+    "labels": 165,
     "median_abs_flat_earth_excess_m": 0.0,
     "median_curb_bias_m": 0.4838,
-    "median_horizontal_m": 7.7449,
+    "median_horizontal_m": 7.7357,
     "occlusion_adjudication": {
       "occluded": 2,
       "panoramas_in_sample": 16,
