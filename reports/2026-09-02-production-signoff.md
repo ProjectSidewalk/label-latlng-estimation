@@ -522,19 +522,23 @@ the calibration, is what carries the accuracy.
 ### §5.2 How this sits against the lab's earlier work on the same problem
 
 The idea that a label's distance is a *linear* function of its pixel offset from the horizon is
-thirteen years old in this lab, and every method before `approximation3` inherited it:
+thirteen years old in this lab, and every production method before `approximation3` inherited it:
 
 - **2013, the Tohme-era cropper** (`sidewalk-panorama-tools`, `CropRunner.py`): crop size from
   `distance = 19.81 + 0.0152·(h/2 − pano_y)` in a 6656-px frame, fitted on 2,862 hand-drawn
   boxes. It is a distance regression on pixel offset and it still ships as that repo's v1
   sizing rule; the 2026-08-19 crop-sizing study there found it "leaned the wrong way for a
   decade" because it was never normalised for pano height.
-- **2016, `gsv-location-extraction-analysis`**: compared the regression against Google's
-  geometric `fromContainerPixelToLatLng` on 100 adjudicated curb ramps and chose the regression
-  ("users' labels would be misplaced ever so slightly that it would completely throw off the
-  GSV-method"). The [refit report](2026-08-07-distance-refit.md) §3 reran that comparison on
-  79,029 rows: geometry 0.94 m, regression 1.40 m. The 2016 result was an artifact of its era's
-  inputs, not of click noise.
+- **2025, `gsv-location-extraction-analysis`** (a one-day pilot, 2025-07-09, 100 Seattle curb
+  ramps adjudicated on aerial imagery): compared `approximation2` against a GSV-style geometric
+  marker drop and called it a near wash that leaned to the regression (42 regression, 37
+  geometry, 21 can't tell), with the note that "users' labels would be misplaced ever so
+  slightly that it would completely throw off the GSV-method." Its geometric arm hardcoded a
+  3.0 m camera height where the calibrated value is 2.34 m, which alone puts every geometric
+  answer ~28% too far. The [refit report](2026-08-07-distance-refit.md) §3 reran the comparison
+  on 79,029 rows with a 2.6 m anchor: geometry 0.94 m, regression 1.40 m, and its §5 bounded the
+  click-imprecision objection at under 5 cm of median degradation for 5 px of click noise. The
+  repo is archived as the record.
 - **2020, `approximation1`** and **2021, `approximation2`**: the 2021 analysis compared seven
   estimators (constant distance, per-type medians, multivariate and separate regressions, a
   mixed-effects model, per-zoom regressions) on the depth-era split and shipped the per-zoom
