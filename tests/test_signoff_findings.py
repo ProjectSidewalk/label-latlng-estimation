@@ -167,6 +167,21 @@ def test_era_shipped_edges_the_regression_with_the_predicted_bias(summary):
     assert by_ph["8192"] < 2.45 and by_ph["6656"] > 2.7 and by_ph["0"] > 2.7
 
 
+def test_modern_wins_every_city(summary):
+    for r in summary["modern_frame"]["by_city"]:
+        assert r["approx3"]["median_m"] < r["A_deployed"]["median_m"], r["city"]
+
+
+def test_era_slice_table_cells(summary):
+    """The SS4.3 slice table's era-calibrated column, which review found mis-transcribed once."""
+    by_ph = {r["pano_height_px"]: r for r in summary["era_frame"]["by_pano_height"]}
+    assert by_ph["0"]["n"] == 46543 and abs(by_ph["0"]["approx3_eraflat"]["median_m"] - 0.979) < 1e-3
+    assert abs(by_ph["6656"]["approx3_eraflat"]["median_m"] - 0.803) < 1e-3
+    assert abs(by_ph["8192"]["approx3_eraflat"]["median_m"] - 1.016) < 1e-3
+    assert abs(by_ph["6656"]["approx3"]["median_m"] - 1.629) < 1e-3
+    assert abs(by_ph["8192"]["approx3"]["median_m"] - 0.521) < 1e-3
+
+
 def test_era_equal_budget_wins_by_half_a_metre(summary):
     e = summary["era_frame"]
     assert 2.55 < e["era_flat_height_m"] < 2.75

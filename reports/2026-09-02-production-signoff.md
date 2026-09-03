@@ -8,7 +8,7 @@
 | **0.445 m [0.416, 0.470]** | the honest held-out number: re-calibrate the one height on a random half of the panoramas, score the other half, 200 times. It beats the regression in every split, and a height fitted on every *other* city beats the regression in every city |
 | **1.38 m vs 1.46 m** | on the regression's own 720×480-era held-out split (n=79,029) the shipped estimator still edges it (cluster-bootstrap CI on the median difference [−0.10, −0.06] m), carrying a −1.03 m bias that is the era truth's inflated scale, not the click geometry. With the same one-parameter budget *in that frame* it wins by 0.49 m (0.98 vs 1.46). `approximation1` scores 4.84 m there, the 2021 analysis's own number for it |
 | **R² = 0.045** | the rig-tilt check the 2020–2022 crop work asked for: how much of the label-implied camera height the panorama's pitch and roll explain, projected onto the label's bearing. A raster misaligned by the full rig tilt would move the height 0.17 m per degree; the fitted slopes are 0.02 (pitch) and 0.04 m/° (roll), and the same signature is what road slope produces in a rectified frame |
-| **≈ 2× the floor** | how far the shipped estimator sits above the ideal: one click at 0.3° noise can resolve 0.16 m at 10 m and 0.35 m at 15 m, and `approximation3` measures 0.32 and 0.53 m there. Past 15 m the gap opens, where the bounded tail meets a truth no single click can reach (§5.4, the dotted line and shaded band on fig 29) |
+| **1.5–2× the floor** | how far the shipped estimator sits above the ideal: one click at 0.3° noise can resolve 0.16 m at 10 m and 0.35 m at 15 m, and `approximation3` measures 0.32 and 0.53 m there. Past 15 m the gap opens, where the bounded tail meets a truth no single click can reach (§5.4, the dotted line and shaded band on fig 29) |
 | **≤ 11 cm** | the geodesy decision, quantified: the 6371 km sphere every implementation uses sits at most 10.7 cm from the WGS84 geodesic at the estimator's 23.85 m largest answer (2.2 cm at the median label), and the client's turf sphere is 0.03 mm from the server's. The sphere stays, and a 58-case fixture pins Scala, JS and SQL to it at 1e-9° |
 | **0 m / 6.2 m** | the frame contract Immersive Explore needs: a click projected through its *own* viewport frame reproduces the position to the bit at any size or aspect; a 1920×1080 click read through today's 720×480 constant misses by 6.2 m at p90 |
 
@@ -92,8 +92,9 @@ here; the fourth is the era truth.
 overwritten by evolution 98 two months later, so no `approximation1` row survives anywhere. It
 is included because the 2021 analysis scored it (as "estimate 1", 4.84 m) and because a
 comparison of approximation1, 2 and 3 should say so in the production vocabulary rather than
-this repo's (`est1`, `est7`/`A_deployed`, `approx3`). `approximation2` appears in two guises
-that are the same coefficients on different inputs: *as published* (fixed-frame `sv_image_y`,
+this repo's (`est1`, `est7`/`A_deployed`, `approx3`). (Evolution 98's one-time SQL backfill applied the zoom-2 triple to every legacy row; the
+per-zoom selection lived in the client and, for AI labels, in `PanoDataService`.)
+`approximation2` appears in two guises that are the same coefficients on different inputs: *as published* (fixed-frame `sv_image_y`,
 the era's own predictor) on the era split, and *as deployed until 2026-08* (real-raster pixels
 through the per-zoom coefficients, the apply path `PanoDataService` ran) on the modern set.
 Three reference rungs from the [distance refit](2026-08-07-distance-refit.md) travel alongside
@@ -233,7 +234,8 @@ signed median, p90, and paired win rate against `approximation2`:
 
 `approximation1`'s number is its distance half only: its bearing (the viewport heading rather
 than the label's) cannot be scored in this frame and adds several metres more on the era split
-(§4.3); it beats `approximation2` on 13% of labels, the ones that happen to sit near 10 m. The
+(§4.3); it beats `approximation2` on 13% of the representative stratum (12% pooled), the labels that happen to sit
+near 10 m. The
 cluster-bootstrap CI on the representative median difference between `approximation3` and
 `approximation2` is [−0.78, −0.60] m. Bearing for the other two is the exact POV inversion the
 [POV report](2026-08-06-pov-inversion.md) verified against production to ≤1 px.
@@ -248,8 +250,8 @@ By slice (fig 31, left column; medians in metres, `approximation2` → `approxim
 | **resolution** | 6656 px: 1.84 → 0.40 (193) | 8192 px: 1.15 → 0.45 (2,462) | |
 | **label type** | CurbRamp 1.18 → 0.45 · NoCurbRamp 0.99 → 0.29 · Obstacle 1.29 → 0.58 · SurfaceProblem 1.10 → 0.42 · NoSidewalk 1.09 → 0.42 · Crosswalk 1.50 → 0.42 · Signal 3.67 → 2.42 · Occlusion 1.81 → 0.89 · Other 1.00 → 0.27 | | |
 | **true distance** | 0–5 m: 2.94 → 0.18 · 5–10: 0.76 → 0.32 · 10–15: 0.62 → 0.53 · 15–20: 2.56 → 1.75 · 20–30: 6.53 → 4.53 · 30–50: 15.8 → 15.7 | | |
-| **capture year** | every year 2015–2026 favours the shipped estimator; the widest gap is 2018 (1.77 → 0.55) | | |
-| **city** (≥50 rows) | all 13: from cdmx 0.69 → 0.33 to taipei 2.85 → 0.59; the narrowest is paterson 1.90 → 1.48 | | |
+| **capture year** | every capture year in the data (2015, 2018–2026) favours the shipped estimator; the widest gap is 2018 (1.77 → 0.55) | | |
+| **city** (≥50 rows) | all 13: from cdmx 0.69 → 0.33 to taipei 2.85 → 0.59; the smallest ratio is paterson, 1.90 → 1.48 (1.3×) | | |
 
 Two things worth reading off the table. The regression's error is *not* uniform in distance:
 under 5 m it places labels 2–3 m too near (the near field of the linear compression), and its
@@ -331,9 +333,9 @@ the −1.03 m bias, and the interesting slices are the ones the shipped estimato
 | zoom 1 (n=57,612) | 1.387 | 1.287 | 0.918 |
 | zoom 2 (14,468) | 1.637 | 1.562 | 1.069 |
 | zoom 3 (6,949) | 1.982 | **2.247** | 1.421 |
-| DC, no pano metadata (46,543) | 1.109 | **1.687** | 0.978 |
-| 6656-px panos (7,460) | 1.177 | **1.629** | 1.006 |
-| 8192-px panos (24,964) | 2.251 | 0.521 | 0.990 |
+| no pano metadata, 99.3% DC (46,543) | 1.109 | **1.687** | 0.979 |
+| 6656-px panos (7,460) | 1.177 | **1.629** | 0.803 |
+| 8192-px panos (24,964) | 2.251 | 0.521 | 1.016 |
 | CurbRamp (37,924) | 1.253 | **1.448** | — |
 | SurfaceProblem (6,515) | 1.710 | 0.837 | — |
 | seattle (19,871) | 2.245 | 0.536 | 1.035 |
@@ -352,9 +354,9 @@ same position the client would have computed.
 
 ### §4.4 RQ4: does rig tilt reach the estimator?
 
-On the 2,488 gated modern rows at ≥5° (893 panoramas), with every panorama's fresh pitch and
-roll (|pitch| p50/p90 0.78°/3.04°, |roll| 0.88°/2.28°; the tilt projected onto the label's
-bearing has sd 1.53°):
+On the 2,488 gated modern rows at ≥5° (893 panoramas), using the fresh pitch and roll of the
+modern-truth fetch (over all 1,106 fetched panoramas: |pitch| p50/p90 0.78°/3.04°, |roll|
+0.88°/2.28°; the tilt projected onto each label's bearing has sd 1.53°):
 
 | response | slope on pitch term (m/°) | slope on roll term (m/°) | joint R² | expected slope if tilt entered in full |
 |---|---:|---:|---:|---:|
@@ -512,7 +514,8 @@ seattle. The modern-truth report traced this to the era payloads' pinned 2.50 m 
 the plane at 2.35 m, and the shipped constant is 2.34 m. So on the subpopulations whose era
 truth is on the modern scale (8192-px panos, seattle, cdmx, columbus, pittsburgh, spgg) the
 shipped estimator wins by a factor of two to four; on the ones whose truth carries the
-pinned-plane scale (DC, 6656-px, newberg) it reads ~13% too near and loses. **The two frames
+pinned-plane scale (DC, 6656-px, newberg) it reads 17–19% too near (median relative bias −17%
+on DC and on 6656-px panoramas, −19% on newberg) and loses. **The two frames
 cannot both be satisfied, and the modern one is the measured one**; that was the close-out's
 decision and this report does not reopen it. What the era frame adds is the equal-budget row:
 given the *same* one parameter fitted the same way on the era train split, the form beats the
@@ -527,8 +530,8 @@ thirteen years old in this lab, and every production method before `approximatio
 - **2013, the Tohme-era cropper** (`sidewalk-panorama-tools`, `CropRunner.py`): crop size from
   `distance = 19.81 + 0.0152·(h/2 − pano_y)` in a 6656-px frame, fitted on 2,862 hand-drawn
   boxes. It is a distance regression on pixel offset and it still ships as that repo's v1
-  sizing rule; the 2026-08-19 crop-sizing study there found it "leaned the wrong way for a
-  decade" because it was never normalised for pano height.
+  sizing rule; that repo's 2026-08-19 crop-sizing study found the window it produces leans the
+  wrong way with panorama height, and had for a decade, because it was never normalised for it.
 - **2025, `gsv-location-extraction-analysis`** (a one-day pilot, 2025-07-09, 100 Seattle curb
   ramps adjudicated on aerial imagery): compared `approximation2` against a GSV-style geometric
   marker drop and called it a near wash that leaned to the regression (42 regression, 37
@@ -540,8 +543,8 @@ thirteen years old in this lab, and every production method before `approximatio
   click-imprecision objection at under 5 cm of median degradation for 5 px of click noise. The
   repo is archived as the record.
 - **2020, `approximation1`** and **2021, `approximation2`**: the 2021 analysis compared seven
-  estimators (constant distance, per-type medians, multivariate and separate regressions, a
-  mixed-effects model, per-zoom regressions) on the depth-era split and shipped the per-zoom
+  estimators (a constant distance, an overall median, per-type medians, multivariate and
+  separate regressions, a mixed-effects model, per-zoom regressions) on the depth-era split and shipped the per-zoom
   fit at 1.47 m. It was the right answer to the question it asked; what it did not ask was
   whether a zero-parameter cotangent would beat all seven, which §4.3's anchor row answers
   (0.99 m).
@@ -559,8 +562,8 @@ thirteen years old in this lab, and every production method before `approximatio
 
 ### §5.3 The 2020–2022 undergraduate work: what it found, and what it could not see
 
-Between the winter of 2020–21 and February 2022 the CV team worked the *inverse* problem of the
-one here, placing a stored label's POV back onto the full panorama to centre a crop
+In a set of undated winter-break notes and then the February 2022 StackExchange question, the
+lab's CV team worked the *inverse* problem of the one here, placing a stored label's POV back onto the full panorama to centre a crop
 ("Translation from POV to GSV Image Coordinates", and the unanswered
 [gis.stackexchange 422656](https://gis.stackexchange.com/questions/422656)). Their findings,
 checked against what the 2026 investigation established:
@@ -571,8 +574,9 @@ checked against what the 2026 investigation established:
 2. **"The panorama is equirectangular, so degrees per pixel are constant; the linear map is
    right."** Right, and it is the map `approximation3` uses (`depression = 180·pano_y/h − 90`).
 3. **"If I invert the stored `sv_image_x/y` I get a different POV than the one stored. Bug or
-   intentional?"** A bug, and the one they were closest to. The 2020 client's
-   `calculatePointPov` ran `parseInt` on heading, pitch and zoom, and
+   intentional?"** A bug, and the one they were closest to. The client of the time (the code is
+   the same in every release from 6.13.0, December 2020, through v7.0.0, February 2022) ran
+   `parseInt` on heading, pitch and zoom in `calculatePointPov`, and
    `calculateImageCoordinateFromPointPov` added half a degree, so stored pixels were quantised
    to whole degrees (37 px at 13312 px) in both axes. Replaying placement *with* those quirks
    reproduces 99.83% of Seattle's stored `sv_image_x` within 1 px; without them, 8.0% (POV
@@ -595,7 +599,7 @@ checked against what the 2026 investigation established:
    was the second angle: the official API never exposed roll, the dead XML endpoint did
    (`tilt_yaw_deg`/`tilt_pitch_deg`), and `streetlevel` serves per-pano pitch and roll today
    (|pitch| p50 0.63°, |roll| p50 0.90° on 1,360 labelled panoramas in the panorama-tools
-   photometa census; 0.78° and 0.88° on this report's 1,106). Nobody answered the question
+   photometa census; 0.78° and 0.88° on this report's 1,106 fetched panoramas). Nobody answered the question
    because with the official metadata alone it has no answer.
 
    What the 2026 evidence adds is where the tilt *lands*. For the estimator, §4.4 finds a
@@ -634,7 +638,7 @@ line is its median (`0.6745 σ_d`) with the shipped 2.34 m height:
 | 20 m | 0.61 m | 1.02 m | 1.75 m (15–20 m) |
 | 30 m | 1.37 m | 2.28 m | 4.53 m (20–30 m) |
 
-So the shipped estimator sits within about 2× of what one click can resolve out to 15 m, and
+So the shipped estimator sits within 1.5–2× of what one click can resolve out to 15 m, and
 the gap opens beyond that, where the bounded tail and the far-field truth take over.
 
 **The truth's own noise.** Below the depth model's resolution nothing can be measured *on this

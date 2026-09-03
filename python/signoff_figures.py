@@ -190,7 +190,7 @@ def fig30(summary, era):
     ax = axes[2]
     rows = e["implied_height_by_pano_height"] + [{"pano_height_px": "all", "n": 0,
                                                   "implied_height_m": e["implied_height_overall_m"]}]
-    labels = {"0": "DC (no pano metadata)", "6656": "6656-px panos", "8192": "8192-px panos", "all": "all era rows"}
+    labels = {"0": "no pano metadata (99% DC)", "6656": "6656-px panos", "8192": "8192-px panos", "all": "all era rows"}
     ys = np.arange(len(rows))
     vals = [r["implied_height_m"] for r in rows]
     ax.barh(ys, vals, height=0.5, color="#9ec5f4")
@@ -241,7 +241,7 @@ def fig31(summary):
              lambda r: f"{r['label_type']}  (n={r['n']:,})", "By label type", "median |error| (m)", 4.0)
     dumbbell(axes[1, 1], e["by_label_type"], "label_type", "est7", "approx3",
              lambda r: f"{r['label_type']}  (n={r['n']:,})", "By label type", "median lat/lng error (m)", 4.0)
-    ph = {"0": "unknown (DC)", "6656": "6656 px", "8192": "8192 px"}
+    ph = {"0": "no metadata (99% DC)", "6656": "6656 px", "8192": "8192 px"}
     dumbbell(axes[2, 0], m["by_pano_height"], "pano_height_px", "A_deployed", "approx3",
              lambda r: f"{ph.get(r['pano_height_px'], r['pano_height_px'])}  (n={r['n']:,})",
              "By panorama resolution", "median |error| (m)", 2.6)

@@ -442,6 +442,10 @@ The sign-off of the geometric estimator as SidewalkWebpage ships it (`approximat
   or tests depends on these bytes; figures 35–38 replay them offline together with the
   examples' depth payloads, which are already in `modern-truth-payloads.jsonl.gz`. A re-`fetch`
   observes a different GSV state; regenerate by intent only.
+- `../reports/2026-09-02-production-signoff.html` — the report as a standalone page (figures 29–38 embedded,
+  ~6.4 MB), the same content as the markdown; kept so the rendered version survives the claude.ai artifact it
+  was published as. Regenerate by re-embedding `figures/fig29..38-signoff-*.png` into the page; the markdown is
+  the source of record.
 - `signoff-cache/` (gitignored) — the per-row scored era and modern frames `build` leaves
   for `python/signoff_figures.py`, so the figures do not repeat the 2.5-minute refit.
 
