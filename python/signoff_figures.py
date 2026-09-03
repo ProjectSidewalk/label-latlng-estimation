@@ -110,14 +110,27 @@ def fig29(summary, modern):
     ax = axes[1]
     bins = [0, 2.5, 5, 7.5, 10, 12.5, 15, 20, 30, 50]
     c, med, n = med_by_bin(modern, bins, "truth_m", ["err_A", "err_approx3"])
-    ax.plot(c, med["err_A"], "-o", color=C_REG, ms=5, label="2021 regression")
+    ax.plot(c, med["err_A"], "-o", color=C_REG, ms=5, label="approximation2 (2021 regression)")
     ax.plot(c, med["err_approx3"], "-o", color=C_SHIP, ms=5, label="approximation3")
+    # The two ideal lines: what one click can resolve, and what depth truth can measure.
+    ideal = summary["modern_frame"]["ideal"]
+    dd = np.geomspace(1.2, 45, 200)
+    ax.plot(dd, so.single_click_floor_m(dd, ideal["height_m"], ideal["click_noise_sigma_deg"]),
+            ":", color=C_TRUTH, lw=1.6,
+            label=f"single-click floor ({ideal['click_noise_sigma_deg']:g}° click noise)")
+    ax.axhspan(0.01, ideal["truth_band_m"][1], color=C_MUTED, alpha=0.15, lw=0,
+               label=f"truth's own noise (≤{ideal['truth_band_m'][1]:.2f} m)")
     ax.set_xscale("log")
+    ax.set_yscale("log")  # the floor spans 0.05-1.4 m; a linear axis hides the near field entirely
+    ax.set_ylim(0.03, 25)
+    ax.set_yticks([0.05, 0.1, 0.2, 0.5, 1, 2, 5, 10, 20])
+    ax.set_yticklabels(["0.05", "0.1", "0.2", "0.5", "1", "2", "5", "10", "20"])
+    ax.yaxis.set_minor_formatter(NullFormatter())
     ax.xaxis.set_minor_formatter(NullFormatter())
     ax.set_xticks([2, 5, 10, 20, 40])
     ax.set_xticklabels(["2", "5", "10", "20", "40"])
     ax.set_xlabel("true distance from the camera (m), log scale")
-    ax.set_ylabel("median absolute error (m)")
+    ax.set_ylabel("median absolute error (m), log scale")
     ax.set_title("By distance (pooled human, n=%d)" % len(modern))
     ax.legend(loc="upper left")
 

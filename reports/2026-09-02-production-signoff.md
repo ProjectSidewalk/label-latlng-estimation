@@ -8,6 +8,7 @@
 | **0.445 m [0.416, 0.470]** | the honest held-out number: re-calibrate the one height on a random half of the panoramas, score the other half, 200 times. It beats the regression in every split, and a height fitted on every *other* city beats the regression in every city |
 | **1.38 m vs 1.46 m** | on the regression's own 720×480-era held-out split (n=79,029) the shipped estimator still edges it (cluster-bootstrap CI on the median difference [−0.10, −0.06] m), carrying a −1.03 m bias that is the era truth's inflated scale, not the click geometry. With the same one-parameter budget *in that frame* it wins by 0.49 m (0.98 vs 1.46). `approximation1` scores 4.84 m there, the 2021 analysis's own number for it |
 | **R² = 0.045** | the rig-tilt check the 2020–2022 crop work asked for: how much of the label-implied camera height the panorama's pitch and roll explain, projected onto the label's bearing. A raster misaligned by the full rig tilt would move the height 0.17 m per degree; the fitted slopes are 0.02 (pitch) and 0.04 m/° (roll), and the same signature is what road slope produces in a rectified frame |
+| **≈ 2× the floor** | how far the shipped estimator sits above the ideal: one click at 0.3° noise can resolve 0.16 m at 10 m and 0.35 m at 15 m, and `approximation3` measures 0.32 and 0.53 m there. Past 15 m the gap opens, where the bounded tail meets a truth no single click can reach (§5.4, the dotted line and shaded band on fig 29) |
 | **≤ 11 cm** | the geodesy decision, quantified: the 6371 km sphere every implementation uses sits at most 10.7 cm from the WGS84 geodesic at the estimator's 23.85 m largest answer (2.2 cm at the median label), and the client's turf sphere is 0.03 mm from the server's. The sphere stays, and a 58-case fixture pins Scala, JS and SQL to it at 1e-9° |
 | **0 m / 6.2 m** | the frame contract Immersive Explore needs: a click projected through its *own* viewport frame reproduces the position to the bit at any size or aspect; a 1920×1080 click read through today's 720×480 constant misses by 6.2 m at p90 |
 
@@ -237,7 +238,7 @@ cluster-bootstrap CI on the representative median difference between `approximat
 `approximation2` is [−0.78, −0.60] m. Bearing for the other two is the exact POV inversion the
 [POV report](2026-08-06-pov-inversion.md) verified against production to ≤1 px.
 
-![Figure 29 — modern truth: the error CDF (0.40 vs 1.08 m medians, approximation1 in grey), median error by true distance, and the signed-error curve: the regression is 2–3 m too near below 5 m and bends past 12 m, the shipped estimator sits on zero to ~15 m.](../figures/fig29-signoff-modern-frame.png)
+![Figure 29 — modern truth: the error CDF (0.40 vs 1.08 m medians, approximation1 in grey); median error by true distance against the two ideal lines of §5.4, the dotted single-click floor and the shaded band of the truth's own noise; and the signed-error curve: the regression is 2–3 m too near below 5 m and bends past 12 m, the shipped estimator sits on zero to ~15 m.](../figures/fig29-signoff-modern-frame.png)
 
 By slice (fig 31, left column; medians in metres, `approximation2` → `approximation3`):
 
@@ -610,6 +611,61 @@ In short: they were right about the projection, right about the physics, one `pa
 from the bug that was actually degrading their crops, and blocked on metadata the official API
 does not provide. None of it bears on the estimator's sign-off, which is why §4.4 is a rider
 and not a caveat.
+
+### §5.4 The ideal, and what an `approximation4` would have to do
+
+"How good could this get?" has two answers, and figure 29's middle panel now draws both.
+
+**The single-click floor.** A label is one click, and the click has noise: the panorama-tools
+click-noise study measured ~0.3° per axis on ~13k co-located duplicate pairs (0.5°
+conservative). Distance is `h / tan(dep)`, so click noise alone gives a distance error of
+`σ_d = (d² + h²) / h · σ_click`, and no estimator that sees one click can beat it. The dotted
+line is its median (`0.6745 σ_d`) with the shipped 2.34 m height:
+
+| true distance | single-click floor, 0.3° | conservative, 0.5° | `approximation3`, measured |
+|---|---:|---:|---:|
+| 5 m | 0.05 m | 0.08 m | 0.18 m (0–5 m bin) |
+| 10 m | 0.16 m | 0.27 m | 0.32 m (5–10 m) |
+| 15 m | 0.35 m | 0.58 m | 0.53 m (10–15 m) |
+| 20 m | 0.61 m | 1.02 m | 1.75 m (15–20 m) |
+| 30 m | 1.37 m | 2.28 m | 4.53 m (20–30 m) |
+
+So the shipped estimator sits within about 2× of what one click can resolve out to 15 m, and
+the gap opens beyond that, where the bounded tail and the far-field truth take over.
+
+**The truth's own noise.** Below the depth model's resolution nothing can be measured *on this
+truth*: two captures of the same street agree on the ground to 0.12 m median
+([depth validation](2026-08-06-depth-validation.md) §5), and the shipped estimator's modern
+signed residual, −0.17 m, is the size of the systematics that report names (curb overshoot,
+terrain, occlusion). That is the shaded band; an improvement inside it needs an independent
+truth, bearing-only triangulation or a surveyed inventory, before it can be claimed.
+
+**What an `approximation4` would do**, in order of expected gain, with the honest caveat on each:
+
+1. *A per-panorama camera height.* The largest remaining term. Heights track rig and vintage
+   (1.11–2.50 m across the auto-labeler's four cities; the modern interquartile band here is
+   about ±4%, i.e. ±0.5 m at 12 m for a whole panorama's labels). The auto-labeler already reads
+   the height from the depth payload's dominant ground plane. The catch is circularity: on depth
+   truth a height read from the same payload scores near zero by construction, so this rung can
+   only be validated on the triangulation frame or survey data.
+2. *A per-panorama ground plane instead of flat earth.* The same payload gives the plane's
+   normal, which removes the slope term §4.4 bounded at a few percent.
+3. *An honest error bar per label.* Store σ next to `lat/lng`, from the floor formula plus the
+   height term; downstream clustering and street attachment can then weight labels instead of
+   treating a 3° click and a 25° click as equally certain. The auto-labeler's covariance model
+   (`GroundEstimate.cov_en`) is a ready template, and this rung needs no new truth at all
+   ([SidewalkWebpage#5140](https://github.com/ProjectSidewalk/SidewalkWebpage/issues/5140)).
+4. *Multi-view for the far field.* Beyond 15 m one click cannot do better than metres; two
+   panoramas can, which is what the auto-labeler's fusion already does for AI labels (world
+   recall 0.93–0.96). For human labels the equivalent is a street-geometry prior: a label 20 m
+   out is almost always on the sidewalk line of its street edge.
+
+Items 1 and 2 need depth at label time, and the JS depth API is gone. The workable route is
+server-side: fetch the payload once when a panorama is first ingested (the auto-labeler's
+harvester does this for 171k panoramas today, through an unofficial client) and store its
+height and ground-plane normal on the pano record, so the estimator reads two more columns.
+That is a product and dependency decision more than a research one, and it is the reason the
+population constant, not a per-pano height, is what ships.
 
 ## §6 · The sign-off, and what is deliberately not claimed
 

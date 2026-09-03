@@ -104,6 +104,25 @@ def test_approximation1_is_the_2020_stopgap_in_both_frames(summary):
     assert rep["approx1"]["win_rate_vs_A"] < 0.2
 
 
+def test_ideal_floor_brackets_the_shipped_estimator(summary):
+    """The single-click floor (0.3 deg click noise through d = h / tan dep) is what any one-click
+    estimator can resolve. approximation3 sits within ~2x of it out to 15 m and the gap opens past
+    that, where the bounded tail and the far-field truth take over."""
+    import signoff as so
+    ideal = summary["modern_frame"]["ideal"]
+    assert ideal["click_noise_sigma_deg"] == 0.3 and ideal["truth_band_m"] == [0.12, 0.17]
+    floor = {r["distance_m"]: r["click_floor_median_m"] for r in ideal["table"]}
+    assert abs(floor[10.0] - 0.159) < 2e-3 and abs(floor[15.0] - 0.348) < 2e-3
+    for r in ideal["table"]:
+        assert r["click_floor_median_m"] == pytest.approx(
+            float(so.single_click_floor_m(r["distance_m"], ideal["height_m"])), abs=1e-12)
+        assert r["click_floor_conservative_median_m"] > r["click_floor_median_m"]
+    by_dist = {r["dist_bin"]: r["approx3"]["median_m"] for r in summary["modern_frame"]["by_true_distance"]}
+    assert by_dist["5-10"] < 2.5 * floor[10.0] + ideal["truth_band_m"][1]
+    assert by_dist["10-15"] < 2.0 * floor[15.0] + ideal["truth_band_m"][1]
+    assert by_dist["20-30"] > 2.0 * floor[30.0]
+
+
 def test_rig_tilt_does_not_reach_the_estimator_beyond_a_few_percent(summary):
     """The RQ4 rider: a tilt-shaped term on the shipped estimator is bounded at a few percent of
     the variance and a fraction of the full-tilt sensitivity, and the implied height is flat to

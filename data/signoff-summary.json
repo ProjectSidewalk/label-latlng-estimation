@@ -2409,6 +2409,42 @@
     "rig_tilt_magnitude_median_deg": 1.4752725573246996,
     "pearson_r_ground_tilt_vs_rig_tilt": 0.28216072042359036
    }
+  },
+  "ideal": {
+   "click_noise_sigma_deg": 0.3,
+   "click_noise_sigma_conservative_deg": 0.5,
+   "height_m": 2.341219672825709,
+   "truth_band_m": [
+    0.12,
+    0.17
+   ],
+   "table": [
+    {
+     "distance_m": 5.0,
+     "click_floor_median_m": 0.04597962589645774,
+     "click_floor_conservative_median_m": 0.07663270982742958
+    },
+    {
+     "distance_m": 10.0,
+     "click_floor_median_m": 0.15911360840631739,
+     "click_floor_conservative_median_m": 0.26518934734386235
+    },
+    {
+     "distance_m": 15.0,
+     "click_floor_median_m": 0.3476702459227501,
+     "click_floor_conservative_median_m": 0.5794504098712502
+    },
+    {
+     "distance_m": 20.0,
+     "click_floor_median_m": 0.611649538445756,
+     "click_floor_conservative_median_m": 1.0194158974095933
+    },
+    {
+     "distance_m": 30.0,
+     "click_floor_median_m": 1.365876088511487,
+     "click_floor_conservative_median_m": 2.276460147519145
+    }
+   ]
   }
  },
  "era_frame": {

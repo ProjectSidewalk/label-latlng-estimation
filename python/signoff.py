@@ -587,8 +587,46 @@ def modern_frame(shipped: dict, data_dir: str = DATA) -> tuple[pd.DataFrame, dic
         "repeated_holdout": repeated_holdout(human, shipped),
         "leave_one_city_out": leave_one_city_out(human, shipped),
         "rig_tilt_rider": rig_tilt_rider(human),
+        "ideal": ideal_floors(shipped),
     }
     return human, summary
+
+
+# ---------------------------------------------------------------- the ideal lines
+
+# Click noise per axis, from sidewalk-panorama-tools' click-noise study
+# (reports/2026-08-09-click-noise.md: ~13k co-located duplicate label pairs; core sigma ~0.3 deg
+# per axis, 0.5 deg conservative). The floor below is what ONE click can resolve, whatever the
+# estimator does with it.
+CLICK_NOISE_SIGMA_DEG = 0.3
+CLICK_NOISE_SIGMA_CONSERVATIVE_DEG = 0.5
+GAUSSIAN_MEDIAN_ABS = 0.6744897501960817  # median |N(0, 1)|
+# The depth truth's own resolution: two captures of the same street agree on the ground surface
+# to 0.12 m median (depth-validation report SS5), and the shipped estimator's modern signed
+# residual (-0.17 m) is about the size of the systematics that report names (curb overshoot,
+# terrain). Nothing below this band can be measured on depth truth.
+TRUTH_BAND_M = [0.12, 0.17]
+IDEAL_TABLE_DISTANCES_M = [5.0, 10.0, 15.0, 20.0, 30.0]
+
+
+def single_click_floor_m(distance_m, height_m: float, sigma_deg: float = CLICK_NOISE_SIGMA_DEG) -> np.ndarray:
+    """Median absolute distance error from click noise alone: d = h / tan(dep), so
+    |dd/ddep| = h / sin^2(dep) = (d^2 + h^2) / h, and median|err| = 0.6745 sigma |dd/ddep|."""
+    d = np.asarray(distance_m, float)
+    return GAUSSIAN_MEDIAN_ABS * (d ** 2 + height_m ** 2) / height_m * np.radians(sigma_deg)
+
+
+def ideal_floors(shipped: dict) -> dict:
+    h = shipped["height_m"]
+    rows = []
+    for d in IDEAL_TABLE_DISTANCES_M:
+        rows.append({"distance_m": d,
+                     "click_floor_median_m": float(single_click_floor_m(d, h)),
+                     "click_floor_conservative_median_m": float(
+                         single_click_floor_m(d, h, CLICK_NOISE_SIGMA_CONSERVATIVE_DEG))})
+    return {"click_noise_sigma_deg": CLICK_NOISE_SIGMA_DEG,
+            "click_noise_sigma_conservative_deg": CLICK_NOISE_SIGMA_CONSERVATIVE_DEG,
+            "height_m": h, "truth_band_m": TRUTH_BAND_M, "table": rows}
 
 
 # --------------------------------------------------------------------------- geodesy
