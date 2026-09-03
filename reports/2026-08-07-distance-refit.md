@@ -124,7 +124,7 @@ Three consequences, each measured in `candidate_b` of the summary:
 
 ## §3 · The zero-parameter anchor
 
-The archived `gsv-location-extraction-analysis` repo (a one-day pilot, 2025-07-09; the geometric arm hardcoded a 3.0 m camera height) compared Project Sidewalk's
+The archived `gsv-location-extraction-analysis` repo (2016) compared Project Sidewalk's
 regression against Google's geometric `fromContainerPixelToLatLng` on 100 adjudicated curb ramps
 and called it for the regression — *"users' labels would be misplaced ever so slightly that it
 would completely throw off the GSV-method."* The anchor rung reruns that comparison on 79,029
@@ -132,7 +132,7 @@ test rows: `2.6 m / tan(exact depression)`, zero fitted parameters.
 
 Geometry wins outright: **0.94 m** median distance error vs est7's **1.40 m** (lat/lng: 0.99 vs
 1.46 m). On the 56 test labels whose panos carry a *served* camera height it improves further
-(0.80 m). The 2025 pilot's result was an artifact of its inputs (a 3.0 m height and 100 adjudicated rows), not of human click noise — §5
+(0.80 m). The 2016 result was an artifact of its era's inputs, not of human click noise — §5
 makes that quantitative.
 
 ## §4 · The matrix
@@ -223,7 +223,7 @@ click-noise degradation per rung.*
   millimetre, the p90 improves by 2 mm, and that bin's median error falls 16.25 → 13.90 m.)*
   The floor twin is tighter still — a hard 22.5 m everywhere — which is why it remains the
   conservative alternative despite losing the train selection by 2.3 mm.
-- **The click-noise sweep** makes the 2025 pilot's objection quantitative: perturb every click by
+- **The click-noise sweep** makes the 2016 objection quantitative: perturb every click by
   Gaussian pixel noise, re-derive every click-dependent input, re-score. At σ = 2 px every rung
   loses < 1 cm of median accuracy; at 5 px, < 5 cm; at 10 px the chosen form degrades 0.145 m
   vs the status quo's 0.122 m — same regime, and the isotonic form is actually the most robust

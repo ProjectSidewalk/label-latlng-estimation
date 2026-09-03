@@ -21,7 +21,7 @@ Headline findings (reports/2026-08-07-distance-refit.md):
   apply path currently survives on two errors cancelling.
 - Near the horizon every saturating form stays bounded by construction where the raw
   cotangent runs to the 50 m cap; at realistic click noise the geometry rungs degrade like
-  the linear status quo (the 2025 pilot's objection, dissolved).
+  the linear status quo (the 2016 objection, dissolved).
 """
 
 import json
@@ -136,7 +136,7 @@ def test_candidate_b_is_measured_on_the_two_gsv_heights_only(summary):
 
 def test_zero_param_anchor_beats_the_fitted_status_quo(summary):
     """Pure geometry with the ecosystem's 2.6 m camera height and no fitted parameters
-    beats all twelve fitted coefficients — the 2025 pilot's comparison, rerun on 79k test rows."""
+    beats all twelve fitted coefficients — the 2016 comparison, rerun on 79k test rows."""
     m = summary["matrix"]
     assert m["anchor"]["dist_median_m"] == pytest.approx(0.9394, abs=0.005)
     assert m["anchor"]["latlng_median_m"] == pytest.approx(0.9910, abs=0.005)
