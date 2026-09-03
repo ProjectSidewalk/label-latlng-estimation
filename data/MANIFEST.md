@@ -418,3 +418,31 @@ dependency than trusting their depth planes, but not none.
 
 Regenerating: `python python/run_triangulation.py build --write` (~12 min, offline). A
 re-`fetch` observes a different GSV state and will drift; regenerate by intent only.
+
+# Production sign-off artifacts (SidewalkWebpage#5084)
+
+The sign-off of the geometric estimator as SidewalkWebpage ships it (`approximation3`, PR
+#4819 + evolution 352), scored in both truth frames this repo holds — see
+`reports/2026-09-02-production-signoff.md`.
+
+- `signoff-summary.json` — the machine-readable results: both frames' head-to-head with the
+  2021 regression (overall, by zoom, label type, city, panorama resolution, true distance and
+  depression), the repeated pano-half hold-out and leave-one-city-out calibration checks, the
+  geodesy displacement table per deployed city, the viewport frame-contract sweep, the parity
+  fixture's size/tolerance, and the four worked examples' records. Regenerates deterministically
+  from the committed CSVs, the R-fixture split, `modern-truth-labels.csv.gz` and the two
+  refit/modern-truth summaries: `python python/run_signoff.py build --write` (~2.5 min, offline;
+  the era split reloads and refits the 2021 pipeline). `tests/test_signoff_findings.py` locks it.
+- `signoff-tiles.jsonl.gz` — verbatim GSV imagery tiles for the four worked examples
+  (128 tiles, 4 panoramas, zoom 3 = 4096×2048, ~4 MB, fetched 2026-09-02 by
+  `python python/run_signoff.py fetch`). Context for human eyes only: no number in the report
+  or tests depends on these bytes; figures 35–38 replay them offline together with the
+  examples' depth payloads, which are already in `modern-truth-payloads.jsonl.gz`. A re-`fetch`
+  observes a different GSV state; regenerate by intent only.
+- `signoff-cache/` (gitignored) — the per-row scored era and modern frames `build` leaves
+  for `python/signoff_figures.py`, so the figures do not repeat the 2.5-minute refit.
+
+The cross-implementation parity fixture the report describes is *consumed* by SidewalkWebpage
+(`test/fixtures/latLngEstimationParity.json`, written by `python python/run_signoff.py fixture
+<path>`), where a Scala spec, a Jest test and the SQL backfill formula are each held to it; it is
+regenerated from `final_coefficients` rather than committed here.

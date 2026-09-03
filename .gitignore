@@ -39,3 +39,7 @@ data/triangulation-viz-cache/
 # The overlay gallery is generated from the committed tiles by `run_depth_validation.py
 # gallery`; 8 MB of regenerable HTML does not belong in history.
 figures/depth-overlay-gallery.html
+
+# The #5084 sign-off per-row cache (era + modern scored frames) the figures script reads; run_signoff.py build
+# regenerates it in ~2.5 minutes, and data/signoff-summary.json holds everything the report and tests need.
+data/signoff-cache/
