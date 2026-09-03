@@ -66,12 +66,18 @@ def test_modern_headline(summary):
 
 
 def test_modern_holdout_is_honest_and_stable(summary):
+    """The hold-out runs on the pooled gated rows, so the number it must be read against is the
+    pooled in-sample median, not the representative stratum's: re-fitting the height out of
+    sample costs a tenth of a millimetre."""
     h = summary["modern_frame"]["repeated_holdout"]
     assert h["n_rep"] == 200
     assert 0.40 < h["approx3_median_m"]["mean"] < 0.50
     assert h["approx3_median_m"]["p95"] - h["approx3_median_m"]["p5"] < 0.1
     assert h["shipped_beats_deployed_in_every_split"]
     assert abs(h["fitted_height_m"]["mean"] - summary["meta"]["shipped"]["height_m"]) < 0.01
+    pooled = summary["modern_frame"]["pooled"]
+    assert abs(h["approx3_median_m"]["mean"] - pooled["approx3"]["median_m"]) < 0.005
+    assert abs(h["A_deployed_median_m"]["mean"] - pooled["A_deployed"]["median_m"]) < 0.005
 
 
 def test_one_height_transfers_across_cities(summary):
@@ -106,8 +112,11 @@ def test_approximation1_is_the_2020_stopgap_in_both_frames(summary):
 
 def test_ideal_floor_brackets_the_shipped_estimator(summary):
     """The single-click floor (0.3 deg click noise through d = h / tan dep) is what any one-click
-    estimator can resolve. approximation3 sits within ~2x of it out to 15 m and the gap opens past
-    that, where the bounded tail and the far-field truth take over."""
+    estimator can resolve. Read at each distance bin's OWN median true distance rather than at the
+    bin's upper edge where the floor is largest, approximation3 sits between 2x and 6x it across
+    the working range, tightest at 2.3x in the 10-15 m bin, with the gap widening in the near
+    field (where the truth's own 0.12-0.17 m band dominates) and past 20 m (where the bounded
+    tail binds)."""
     import signoff as so
     ideal = summary["modern_frame"]["ideal"]
     assert ideal["click_noise_sigma_deg"] == 0.3 and ideal["truth_band_m"] == [0.12, 0.17]
@@ -117,10 +126,24 @@ def test_ideal_floor_brackets_the_shipped_estimator(summary):
         assert r["click_floor_median_m"] == pytest.approx(
             float(so.single_click_floor_m(r["distance_m"], ideal["height_m"])), abs=1e-12)
         assert r["click_floor_conservative_median_m"] > r["click_floor_median_m"]
-    by_dist = {r["dist_bin"]: r["approx3"]["median_m"] for r in summary["modern_frame"]["by_true_distance"]}
-    assert by_dist["5-10"] < 2.5 * floor[10.0] + ideal["truth_band_m"][1]
-    assert by_dist["10-15"] < 2.0 * floor[15.0] + ideal["truth_band_m"][1]
-    assert by_dist["20-30"] > 2.0 * floor[30.0]
+
+    bins = {r["dist_bin"]: r for r in ideal["vs_measured_by_bin"]}
+    measured = {r["dist_bin"]: r["approx3"]["median_m"] for r in summary["modern_frame"]["by_true_distance"]}
+    for key, row in bins.items():
+        lo, hi = (float(v) for v in key.split("-"))
+        assert lo <= row["median_true_distance_m"] < hi, key
+        assert row["click_floor_at_bin_median_m"] == pytest.approx(
+            float(so.single_click_floor_m(row["median_true_distance_m"], ideal["height_m"])), abs=1e-12)
+        assert row["ratio_to_floor"] == pytest.approx(
+            row["approx3_median_error_m"] / row["click_floor_at_bin_median_m"], rel=1e-12)
+        assert row["approx3_median_error_m"] == pytest.approx(measured[key], abs=1e-9)
+    ratios = {k: r["ratio_to_floor"] for k, r in bins.items()}
+    working = {k: v for k, v in ratios.items() if k != "30-50"}
+    assert 2.0 < min(working.values()) and max(working.values()) < 6.0
+    assert min(working, key=working.get) == "10-15" and ratios["10-15"] < 2.5
+    # the near field is where the truth's own band, not the estimator, sets the scale
+    assert bins["0-5"]["approx3_median_error_m"] < 2.0 * ideal["truth_band_m"][1]
+    assert ratios["20-30"] > 5.0 and ratios["30-50"] > ratios["20-30"]
 
 
 def test_rig_tilt_does_not_reach_the_estimator_beyond_a_few_percent(summary):
@@ -182,6 +205,28 @@ def test_era_slice_table_cells(summary):
     assert abs(by_ph["8192"]["approx3"]["median_m"] - 0.521) < 1e-3
 
 
+def test_era_relative_bias_tracks_the_implied_scale(summary):
+    """SS5.1's "reads 17-19% too near": the median relative distance bias of the shipped
+    estimator against the era truth, per subpopulation, on the same >=5 deg rows the implied
+    heights use. Where the era truth's implied height is the modern 2.35 m the bias vanishes;
+    where it carries the pinned-plane scale it is the report's -17% to -19%."""
+    e = summary["era_frame"]
+    by_city = {r["city"]: r for r in e["implied_height_by_city"]}
+    by_ph = {r["pano_height_px"]: r for r in e["implied_height_by_pano_height"]}
+    assert by_city["dc"]["approx3_median_relative_bias"] == pytest.approx(-0.172, abs=0.005)
+    assert by_city["newberg"]["approx3_median_relative_bias"] == pytest.approx(-0.187, abs=0.005)
+    assert by_ph["6656"]["approx3_median_relative_bias"] == pytest.approx(-0.166, abs=0.005)
+    for key in ("8192",):
+        assert abs(by_ph[key]["approx3_median_relative_bias"]) < 0.03
+    assert abs(by_city["seattle"]["approx3_median_relative_bias"]) < 0.03
+    # the bias is the truth's scale: it tracks how far each subpopulation's implied height sits
+    # from the shipped constant
+    shipped_h = summary["meta"]["shipped"]["height_m"]
+    for r in e["implied_height_by_city"] + e["implied_height_by_pano_height"]:
+        assert r["approx3_median_relative_bias"] == pytest.approx(
+            shipped_h / r["implied_height_m"] - 1.0, abs=0.03), r
+
+
 def test_era_equal_budget_wins_by_half_a_metre(summary):
     e = summary["era_frame"]
     assert 2.55 < e["era_flat_height_m"] < 2.75
@@ -210,6 +255,22 @@ def test_geodesy_is_centimetres(summary):
             assert r["ellipsoid_vs_production_max_m"] < 0.0046 * r["distance_m"] + 1e-6
 
 
+def test_geodesy_at_the_median_label_and_the_equator_ceiling(summary):
+    """The report quotes the displacement where labels actually sit (the pooled median true
+    distance) rather than at a round number, and the bound grows as |latitude| falls, so the
+    closed-form equator case is the ceiling for any deployment the sweep's 19-52 deg does not
+    cover."""
+    g = summary["geodesy"]
+    assert g["median_label_distance_m"] == pytest.approx(9.254, abs=0.01)
+    assert g["worst_ellipsoid_vs_production_at_median_label_m"] == pytest.approx(0.0414, abs=5e-4)
+    eq = g["equator_worst_case"]
+    assert eq["north_south_scale_error"] == pytest.approx(0.00561, abs=1e-5)
+    assert eq["ellipsoid_vs_production_at_max_answer_m"] == pytest.approx(0.133, abs=1e-3)
+    assert eq["ellipsoid_vs_production_at_max_answer_m"] > g["worst_ellipsoid_vs_production_at_max_answer_m"]
+    lats = [abs(c["latitude"]) for c in g["per_city"]]
+    assert 19.0 < min(lats) and max(lats) < 53.0
+
+
 # ------------------------------------------------------------------------ frame contract
 
 def test_frame_contract(summary):
@@ -233,7 +294,11 @@ def test_parity_fixture_is_deterministic_and_matches_the_port():
     a = so.parity_fixture(shipped)
     b = so.parity_fixture(shipped)
     assert a == b
-    assert len(a["cases"]) == 58
+    assert len(a["cases"]) == 59
+    # the bearing that lands on the wrap must come back as 0, not 360 or -0
+    wrap = next(x for x in a["cases"] if x["name"] == "bearing wrap: 0/360")
+    assert wrap["expected"]["heading_deg"] == 0.0
+    assert str(wrap["expected"]["heading_deg"]) == "0.0"
     c = a["cases"][0]
     lat, lng, dist, heading, pitch = so.production_to_latlng(
         c["pano_lat"], c["pano_lng"], c["pano_x"], c["pano_y"], c["pano_width"], c["pano_height"],

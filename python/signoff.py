@@ -318,16 +318,25 @@ def era_frame(shipped: dict, data_dir: str = DATA,
     # each subpopulation's truth implies, median(truth x tan(dep)) at dep >= 5 deg. Where this
     # sits far from the shipped 2.34 m, the era truth -- not the click geometry -- is what the
     # shipped estimator disagrees with (modern-truth report SS7).
+    # Its companion, on the same rows: how far the shipped distance lands from the era truth as
+    # a fraction of it, which is the "reads N% too near" the report quotes per subpopulation.
     steep = out[out["depression_deg"] >= 5.0].copy()
     steep["implied"] = (steep["pano_dist"].to_numpy(float)
                         * np.tan(np.radians(steep["depression_deg"].to_numpy(float))))
+    # A handful of era rows carry a zero truth distance (the label sits on the camera), which
+    # has no relative bias; they are dropped from that statistic and kept in every other.
+    truth_era = steep["pano_dist"].to_numpy(float)
+    with np.errstate(divide="ignore", invalid="ignore"):
+        rel = steep["dist_approx3"].to_numpy(float) / truth_era - 1.0
+    steep["rel_bias"] = np.where(truth_era > 0, rel, np.nan)
 
     def implied_by(col: str) -> list[dict]:
         rows = []
         for value, g in steep.groupby(col, sort=True, observed=True):
             if len(g) >= 100:
                 rows.append({col: str(value), "n": int(len(g)),
-                             "implied_height_m": float(np.median(g["implied"]))})
+                             "implied_height_m": float(np.median(g["implied"])),
+                             "approx3_median_relative_bias": float(np.nanmedian(g["rel_bias"]))})
         return rows
 
     summary = {
@@ -336,6 +345,7 @@ def era_frame(shipped: dict, data_dir: str = DATA,
         "shipped": shipped,
         "overall": overall,
         "implied_height_overall_m": float(np.median(steep["implied"])),
+        "approx3_median_relative_bias_overall": float(np.nanmedian(steep["rel_bias"])),
         "implied_height_by_city": implied_by("city"),
         "implied_height_by_pano_height": implied_by("pano_height_px"),
         "implied_height_by_zoom": implied_by("zoom"),
@@ -587,7 +597,7 @@ def modern_frame(shipped: dict, data_dir: str = DATA) -> tuple[pd.DataFrame, dic
         "repeated_holdout": repeated_holdout(human, shipped),
         "leave_one_city_out": leave_one_city_out(human, shipped),
         "rig_tilt_rider": rig_tilt_rider(human),
-        "ideal": ideal_floors(shipped),
+        "ideal": ideal_floors(shipped, human),
     }
     return human, summary
 
@@ -616,7 +626,27 @@ def single_click_floor_m(distance_m, height_m: float, sigma_deg: float = CLICK_N
     return GAUSSIAN_MEDIAN_ABS * (d ** 2 + height_m ** 2) / height_m * np.radians(sigma_deg)
 
 
-def ideal_floors(shipped: dict) -> dict:
+def floor_vs_measured_by_bin(human: pd.DataFrame, shipped: dict) -> list[dict]:
+    """The measured error against the floor read at each distance bin's OWN median true
+    distance, with the ratio archived so the report cannot quote a mis-aligned one.
+
+    The floor grows as ``d^2`` while a bin's mass sits well below its top edge, so reading it
+    at the bin's upper edge understates the gap by up to a factor of two."""
+    h = shipped["height_m"]
+    rows = []
+    for value, g in human.groupby("dist_bin", sort=True, observed=True):
+        d = float(np.median(g["truth_m"].to_numpy(float)))
+        err = float(np.median(g["err_approx3"].to_numpy(float)))
+        floor = float(single_click_floor_m(d, h))
+        rows.append({"dist_bin": str(value), "n": int(len(g)), "median_true_distance_m": d,
+                     "approx3_median_error_m": err, "click_floor_at_bin_median_m": floor,
+                     "click_floor_conservative_at_bin_median_m": float(
+                         single_click_floor_m(d, h, CLICK_NOISE_SIGMA_CONSERVATIVE_DEG)),
+                     "ratio_to_floor": err / floor})
+    return rows
+
+
+def ideal_floors(shipped: dict, human: pd.DataFrame) -> dict:
     h = shipped["height_m"]
     rows = []
     for d in IDEAL_TABLE_DISTANCES_M:
@@ -626,7 +656,8 @@ def ideal_floors(shipped: dict) -> dict:
                          single_click_floor_m(d, h, CLICK_NOISE_SIGMA_CONSERVATIVE_DEG))})
     return {"click_noise_sigma_deg": CLICK_NOISE_SIGMA_DEG,
             "click_noise_sigma_conservative_deg": CLICK_NOISE_SIGMA_CONSERVATIVE_DEG,
-            "height_m": h, "truth_band_m": TRUTH_BAND_M, "table": rows}
+            "height_m": h, "truth_band_m": TRUTH_BAND_M, "table": rows,
+            "vs_measured_by_bin": floor_vs_measured_by_bin(human, shipped)}
 
 
 # --------------------------------------------------------------------------- geodesy
@@ -636,36 +667,41 @@ GEODESY_DISTANCES_M = [1.0, 2.0, 5.0, 10.0, 11.770106120938644, 15.0, 20.0,
 MAX_ANSWER_M = 23.848261259830384
 
 
-def geodesy_displacements(latitudes: dict[str, float], distances=GEODESY_DISTANCES_M,
-                          bearing_step_deg: float = 5.0) -> dict:
+def geodesy_displacements(latitudes: dict[str, float], median_label_distance_m: float,
+                          distances=GEODESY_DISTANCES_M, bearing_step_deg: float = 5.0) -> dict:
     """How far the production sphere's destination point sits from the alternatives.
 
     For every city latitude, distance and bearing: the WGS84 geodesic destination (pyproj) vs
     the 6371 km sphere the Scala/SQL paths use; the client's turf sphere (6371.0088 km) vs
     that; and the harness's geosphere sphere (6378.137 km) vs that. Separations are measured
-    as geodesic distances between the two destination points, in meters."""
+    as geodesic distances between the two destination points, in meters.
+
+    ``median_label_distance_m`` -- the pooled modern truth's median true distance -- is swept
+    alongside the fixed grid so the report can quote the displacement at a distance labels
+    actually sit at rather than at a round number."""
     from pyproj import Geod
     geod = Geod(ellps="WGS84")
     bearings = np.arange(0.0, 360.0, bearing_step_deg)
     lng0 = 0.0
-    per_city = []
-    for city, lat0 in sorted(latitudes.items(), key=lambda kv: kv[1]):
-        rows = []
-        for d in distances:
-            lat_p, lng_p = destination(lat0, lng0, d, bearings, R_PRODUCTION_M)
-            lng_g, lat_g, _ = geod.fwd(np.full_like(bearings, lng0), np.full_like(bearings, lat0),
-                                       bearings, np.full_like(bearings, d))
-            lat_t, lng_t = destination(lat0, lng0, d, bearings, R_TURF_M)
-            lat_h, lng_h = destination(lat0, lng0, d, bearings, R_HARNESS_M)
-            _, _, sep_g = geod.inv(lng_p, lat_p, lng_g, lat_g)
-            _, _, sep_t = geod.inv(lng_p, lat_p, lng_t, lat_t)
-            _, _, sep_h = geod.inv(lng_p, lat_p, lng_h, lat_h)
-            rows.append({"distance_m": d,
-                         "ellipsoid_vs_production_max_m": float(np.max(sep_g)),
-                         "ellipsoid_vs_production_bearing_of_max": float(bearings[int(np.argmax(sep_g))]),
-                         "turf_vs_production_max_m": float(np.max(sep_t)),
-                         "harness_vs_production_max_m": float(np.max(sep_h))})
-        per_city.append({"city": city, "latitude": lat0, "rows": rows})
+    distances = sorted(set(list(distances) + [float(median_label_distance_m)]))
+
+    def row(lat0: float, d: float) -> dict:
+        lat_p, lng_p = destination(lat0, lng0, d, bearings, R_PRODUCTION_M)
+        lng_g, lat_g, _ = geod.fwd(np.full_like(bearings, lng0), np.full_like(bearings, lat0),
+                                   bearings, np.full_like(bearings, d))
+        lat_t, lng_t = destination(lat0, lng0, d, bearings, R_TURF_M)
+        lat_h, lng_h = destination(lat0, lng0, d, bearings, R_HARNESS_M)
+        _, _, sep_g = geod.inv(lng_p, lat_p, lng_g, lat_g)
+        _, _, sep_t = geod.inv(lng_p, lat_p, lng_t, lat_t)
+        _, _, sep_h = geod.inv(lng_p, lat_p, lng_h, lat_h)
+        return {"distance_m": d,
+                "ellipsoid_vs_production_max_m": float(np.max(sep_g)),
+                "ellipsoid_vs_production_bearing_of_max": float(bearings[int(np.argmax(sep_g))]),
+                "turf_vs_production_max_m": float(np.max(sep_t)),
+                "harness_vs_production_max_m": float(np.max(sep_h))}
+
+    per_city = [{"city": city, "latitude": lat0, "rows": [row(lat0, d) for d in distances]}
+                for city, lat0 in sorted(latitudes.items(), key=lambda kv: kv[1])]
     # Closed-form reading: the sphere's radius error against the local radii of curvature.
     a, f = 6378137.0, 1 / 298.257223563
     e2 = f * (2 - f)
@@ -678,12 +714,24 @@ def geodesy_displacements(latitudes: dict[str, float], distances=GEODESY_DISTANC
                           "prime_vertical_radius_m": float(n),
                           "north_south_scale_error": float(R_PRODUCTION_M / m - 1),
                           "east_west_scale_error": float(R_PRODUCTION_M / n - 1)})
-    worst = max(r["ellipsoid_vs_production_max_m"] for c in per_city for r in c["rows"]
-                if abs(r["distance_m"] - MAX_ANSWER_M) < 1e-9)
+
+    def worst_at(distance_m: float) -> float:
+        return max(r["ellipsoid_vs_production_max_m"] for c in per_city for r in c["rows"]
+                   if abs(r["distance_m"] - distance_m) < 1e-9)
+
+    # The displacement grows monotonically as |latitude| falls, so the equator is the ceiling
+    # for any deployment this sweep's two datasets do not cover.
+    equator = row(0.0, MAX_ANSWER_M)
     return {"radii_m": {"production_scala_sql": R_PRODUCTION_M, "client_turf": R_TURF_M,
                         "harness_geosphere": R_HARNESS_M},
             "per_city": per_city, "curvature": curvature,
-            "worst_ellipsoid_vs_production_at_max_answer_m": float(worst)}
+            "median_label_distance_m": float(median_label_distance_m),
+            "worst_ellipsoid_vs_production_at_median_label_m": worst_at(float(median_label_distance_m)),
+            "worst_ellipsoid_vs_production_at_max_answer_m": worst_at(MAX_ANSWER_M),
+            "equator_worst_case": {
+                "latitude": 0.0,
+                "north_south_scale_error": float(R_PRODUCTION_M / (a * (1 - e2)) - 1),
+                "ellipsoid_vs_production_at_max_answer_m": equator["ellipsoid_vs_production_max_m"]}}
 
 
 # --------------------------------------------------------------- viewport frame contract
@@ -767,8 +815,9 @@ def parity_fixture(shipped: dict, n_random: int = 48, seed: int = 5084) -> dict:
     """Inputs and reference outputs for the Scala, JS and SQL implementations to reproduce.
 
     Reference values come from the Python port above on the production sphere. Edge cases
-    are listed explicitly: the seam (pano_x = 0 and width - 1), a negative unwrapped heading,
-    a click exactly at the blend angle, above-horizon clicks (the bounded tail), the nadir."""
+    are listed explicitly: the seam (pano_x = 0 and width - 1), a bearing landing exactly on
+    the 0/360 wrap, a negative unwrapped heading, a click exactly at the blend angle,
+    above-horizon clicks (the bounded tail), the nadir."""
     rng = np.random.default_rng(seed)
     sizes = [(16384, 8192), (13312, 6656), (5760, 2880), (8192, 4096)]
     cities = [(47.6553, -122.3035), (38.9072, -77.0369), (19.4326, -99.1332), (-23.5505, -46.6333),
@@ -786,6 +835,9 @@ def parity_fixture(shipped: dict, n_random: int = 48, seed: int = 5084) -> dict:
     add("center column, 22.5 deg down", 47.6553, -122.3035, 6656, 4160, 13312, 6656, 90.0)
     add("seam: pano_x = 0", 47.6553, -122.3035, 0, 5000, 16384, 8192, 10.0)
     add("seam: pano_x = width - 1", 47.6553, -122.3035, 16383, 5000, 16384, 8192, 10.0)
+    # Column zero of a pano shot due south bears due north: the one input whose answer sits on
+    # the wrap, where an implementation that normalises differently would return 360 or -0.
+    add("bearing wrap: 0/360", 47.6553, -122.3035, 0, 4779, 16384, 8192, 180.0)
     add("negative unwrapped heading", 47.6553, -122.3035, 1664, 4160, 13312, 6656, 10.0)
     add("exactly the blend angle", 38.9072, -77.0369, 8192, 4608, 16384, 8192, 200.0)
     add("just below the blend angle", 38.9072, -77.0369, 8192, 4607, 16384, 8192, 200.0)

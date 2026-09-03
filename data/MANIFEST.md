@@ -430,9 +430,18 @@ The sign-off of the geometric estimator as SidewalkWebpage ships it (`approximat
   shipped `approximation3`; overall, by zoom, label type, city, panorama resolution, true
   distance and depression), the repeated pano-half hold-out and leave-one-city-out calibration
   checks, the rig-tilt rider (`modern_frame.rig_tilt_rider`, from the fresh per-pano pitch/roll
-  in `modern-truth-panos.csv.gz`), the geodesy displacement table per deployed city, the
-  viewport frame-contract sweep, the parity fixture's size/tolerance, and the four worked
-  examples' records. Regenerates deterministically
+  in `modern-truth-panos.csv.gz`), the geodesy displacement table for every city latitude in the
+  two datasets, the viewport frame-contract sweep, the parity fixture's size/tolerance, and the
+  four worked examples' records. Four blocks carry comparisons the report's headlines rest on and
+  that a mis-aligned reading would flatter: `modern_frame.ideal.vs_measured_by_bin` (each
+  distance bin's own median true distance, the single-click floor read *there* rather than at the
+  bin's upper edge, and the ratio); `geodesy.median_label_distance_m` with
+  `worst_ellipsoid_vs_production_at_median_label_m` (the sphere-vs-ellipsoid displacement at the
+  distance labels actually sit at); `geodesy.equator_worst_case` (the closed-form ceiling, since
+  the displacement grows as |latitude| falls, for deployments the two datasets do not cover); and
+  `era_frame.approx3_median_relative_bias_overall` plus the per-subpopulation
+  `approx3_median_relative_bias` inside each `implied_height_by_*` row (the era frame's "reads
+  17–19% too near"). Regenerates deterministically
   from the committed CSVs, the R-fixture split, `modern-truth-labels.csv.gz`, `modern-truth-panos.csv.gz` and the two
   refit/modern-truth summaries: `python python/run_signoff.py build --write` (~2.5 min, offline;
   the era split reloads and refits the 2021 pipeline). `tests/test_signoff_findings.py` locks it.
@@ -443,9 +452,11 @@ The sign-off of the geometric estimator as SidewalkWebpage ships it (`approximat
   examples' depth payloads, which are already in `modern-truth-payloads.jsonl.gz`. A re-`fetch`
   observes a different GSV state; regenerate by intent only.
 - `../reports/2026-09-02-production-signoff.html` — the report as a standalone page (figures 29–38 embedded,
-  ~6.4 MB), the same content as the markdown; kept so the rendered version survives the claude.ai artifact it
-  was published as. Regenerate by re-embedding `figures/fig29..38-signoff-*.png` into the page; the markdown is
-  the source of record.
+  ~6.4 MB); kept so the rendered version survives the claude.ai artifact it was published as. It is a
+  hand-written condensation of the markdown, not a render of it, so nothing propagates between them
+  automatically: an edit to a number or a sentence in one has to be made in the other by hand, and a
+  regenerated figure has to be re-embedded as base64 into its `<figure>` line. The markdown is the source
+  of record.
 - `signoff-cache/` (gitignored) — the per-row scored era and modern frames `build` leaves
   for `python/signoff_figures.py`, so the figures do not repeat the 2.5-minute refit.
 

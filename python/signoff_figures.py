@@ -83,11 +83,12 @@ def cdf(ax, err, color, label, xmax=6.0):
 
 
 def med_by_bin(frame, bins, dist_col, err_cols):
-    b = pd.cut(frame[dist_col], bins, right=False)
-    out = frame.groupby(b, observed=True)[err_cols].median()
-    n = frame.groupby(b, observed=True).size()
-    centers = [(iv.left + iv.right) / 2 for iv in out.index]
-    return np.asarray(centers), out, n
+    """Per-bin medians, plotted at each bin's own median distance rather than its centre: a
+    continuous curve read against them (fig 29's single-click floor, which grows as d^2) is
+    then compared at the distance the bin's mass actually sits at."""
+    grouped = frame.groupby(pd.cut(frame[dist_col], bins, right=False), observed=True)
+    return (grouped[dist_col].median().to_numpy(float), grouped[err_cols].median(),
+            grouped.size())
 
 
 # ------------------------------------------------------------------- fig 29 modern frame
@@ -331,14 +332,14 @@ def fig33(summary):
     ax.text(d[-1] + 0.6, harness[-1], "research sphere\n(6378.137 km)", fontsize=8, va="center", color=C_MUTED)
     ax.plot(d, turf, color=C_MUTED, lw=1.4)
     ax.text(d[-1] + 0.6, turf[-1] + 1.2, "client turf sphere\n(6371.0088 km): 0.007 cm", fontsize=8, va="center", color=C_MUTED)
-    for x, lab in ((5.65, "median\nlabel"), (so.MAX_ANSWER_M, "largest\nanswer")):
+    for x, lab in ((g["median_label_distance_m"], "median\nlabel"), (so.MAX_ANSWER_M, "largest\nanswer")):
         ax.axvline(x, color="#c3c2b7", lw=0.8)
         ax.text(x + 0.4, 21.5, lab, fontsize=8, color=C_MUTED, va="top")
     ax.set_xlim(0, 62)
     ax.set_ylim(0, 23)
     ax.set_xlabel("estimated distance from the camera (m)")
     ax.set_ylabel("worst-bearing displacement vs the production sphere (cm)")
-    ax.set_title("WGS84 geodesic vs the 6371 km sphere, per deployed city (blue = |latitude|)")
+    ax.set_title("WGS84 geodesic vs the 6371 km sphere, per city in the two datasets (blue = |latitude|)")
 
     ax = axes[1]
     cur = sorted(g["curvature"], key=lambda r: r["latitude"])
@@ -352,7 +353,7 @@ def fig33(summary):
     ax.set_yticklabels([f"{r['city']} ({r['latitude']:.0f}°)" for r in cur])
     ax.set_xlabel("sphere scale error, % (+ = the sphere places the label too near)")
     ax.set_title("Where it comes from: 6371 km vs the local radii of curvature")
-    ax.legend(loc="lower right")
+    ax.legend(loc="upper right")  # the lower-right quadrant holds the two largest bars
     ax.grid(axis="y", visible=False)
     fig.suptitle("Figure 33 - geodesy at label distances: centimeters, bounded, and shared by every implementation",
                  x=0.01, ha="left", fontsize=10.5, color="#52514e")
@@ -382,8 +383,6 @@ def fig34(summary):
     ax = axes[0]
     im = ax.imshow(err, extent=(0, w, h, 0), cmap=matplotlib.colors.LinearSegmentedColormap.from_list("seq", SEQ),
                    vmin=0, vmax=12, aspect="equal", interpolation="nearest")
-    ax.add_patch(plt.Rectangle((0, 0), 720 / k, 480 / k, fill=False, ec=C_TRUTH, lw=1.2))
-    ax.text(720 / k + 15, 480 / k - 20, "720x480 scaled\nby width", fontsize=8, color=C_TRUTH, va="top")
     cb = fig.colorbar(im, ax=ax, fraction=0.03, pad=0.02)
     cb.set_label("position error (m)")
     cb.outline.set_visible(False)
@@ -443,7 +442,7 @@ def load_tiles():
     return out
 
 
-def example_figure(i, ex, payload, image, shipped):
+def example_figure(i, ex, payload, image):
     img, iw, ih = image
     fig = plt.figure(figsize=(13, 7.2))
     gs = fig.add_gridspec(2, 3, height_ratios=[1.0, 1.35], width_ratios=[1.6, 1.0, 1.0])
@@ -516,7 +515,7 @@ def examples(summary):
     payloads = load_payloads({e["pano_id"] for e in exs})
     images = load_tiles()
     for i, ex in enumerate(exs):
-        example_figure(i, ex, payloads[ex["pano_id"]], images[ex["pano_id"]], summary["meta"]["shipped"])
+        example_figure(i, ex, payloads[ex["pano_id"]], images[ex["pano_id"]])
 
 
 def main():

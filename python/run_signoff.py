@@ -83,8 +83,10 @@ def cmd_build(args):
                "spgg": 25.6570, "cdmx": 19.4326, "pittsburgh": 40.4406}
     for k, v in list(lats.items()):
         if v is None:
+            if era_lat.get(k) is None:
+                raise KeyError(f"no latitude for era city {k!r}: add it to era_lat in run_signoff.py")
             lats[k] = era_lat[k]
-    geodesy = so.geodesy_displacements(lats)
+    geodesy = so.geodesy_displacements(lats, float(human["truth_m"].median()))
     step("viewport frame contract...")
     frames = so.viewport_frame_contract(shipped)
     step("parity fixture...")
@@ -126,7 +128,9 @@ def cmd_build(args):
           f"rig-tilt r={t['pano_level']['pearson_r_ground_tilt_vs_rig_tilt']:+.3f}")
     g = summary["geodesy"]
     print(f"geodesy: sphere vs WGS84 at the {so.MAX_ANSWER_M:.1f} m maximum answer, worst city: "
-          f"{g['worst_ellipsoid_vs_production_at_max_answer_m']*100:.1f} cm")
+          f"{g['worst_ellipsoid_vs_production_at_max_answer_m']*100:.1f} cm; at the "
+          f"{g['median_label_distance_m']:.2f} m median label: "
+          f"{g['worst_ellipsoid_vs_production_at_median_label_m']*100:.1f} cm")
     for f in summary["viewport_frame_contract"]["frames"]:
         print(f"frame {f['frame']:18s} own {f['own_frame_max_error_m']:.1e} m | axis-scaled p90 "
               f"{f['axis_scaled_to_720x480']['p90_m']:.2f} m | width-scaled p90 "

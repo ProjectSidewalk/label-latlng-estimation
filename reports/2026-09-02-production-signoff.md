@@ -4,12 +4,12 @@
 
 | | |
 |---|---|
-| **0.40 m vs 1.08 m** | median distance error of `approximation3` vs `approximation2` (the 2021 per-zoom regression) against fresh-depth truth, representative human stratum (n=1,484); pooled 0.44 vs 1.23 m. `approximation1`, the 2020 stopgap, scores 3.57 m on the same rows. `approximation3` wins at every zoom, every label type, both panorama resolutions, every capture year, and all 13 scoreable cities |
-| **0.445 m [0.416, 0.470]** | the honest held-out number: re-calibrate the one height on a random half of the panoramas, score the other half, 200 times. It beats the regression in every split, and a height fitted on every *other* city beats the regression in every city |
+| **0.40 m vs 1.08 m** | median distance error of `approximation3` vs `approximation2` (the 2021 per-zoom regression) against fresh-depth truth, representative human stratum (n=1,484); pooled 0.44 vs 1.23 m. `approximation1`, the 2020 stopgap, scores 3.57 m on the same rows. On the pooled human set (n=2,655) `approximation3` wins at every zoom, every label type, both panorama resolutions, every capture year, and all 13 scoreable cities |
+| **0.445 m** (5–95% 0.416–0.470 across 200 splits) | the honest held-out number, on the pooled 2,655 rows the constant was fitted on: re-calibrate the one height on a random half of the panoramas, score the other half, 200 times. The pooled in-sample median is 0.444 m, so re-fitting out of sample costs a tenth of a millimetre. It beats the regression in every split, and a height fitted on every *other* city beats the regression in every city |
 | **1.38 m vs 1.46 m** | on the regression's own 720×480-era held-out split (n=79,029) the shipped estimator still edges it (cluster-bootstrap CI on the median difference [−0.10, −0.06] m), carrying a −1.03 m bias that is the era truth's inflated scale, not the click geometry. With the same one-parameter budget *in that frame* it wins by 0.49 m (0.98 vs 1.46). `approximation1` scores 4.84 m there, the 2021 analysis's own number for it |
 | **R² = 0.045** | the rig-tilt check the 2020–2022 crop work asked for: how much of the label-implied camera height the panorama's pitch and roll explain, projected onto the label's bearing. A raster misaligned by the full rig tilt would move the height 0.17 m per degree; the fitted slopes are 0.02 (pitch) and 0.04 m/° (roll), and the same signature is what road slope produces in a rectified frame |
-| **1.5–2× the floor** | how far the shipped estimator sits above the ideal: one click at 0.3° noise can resolve 0.16 m at 10 m and 0.35 m at 15 m, and `approximation3` measures 0.32 and 0.53 m there. Past 15 m the gap opens, where the bounded tail meets a truth no single click can reach (§5.4, the dotted line and shaded band on fig 29) |
-| **≤ 11 cm** | the geodesy decision, quantified: the 6371 km sphere every implementation uses sits at most 10.7 cm from the WGS84 geodesic at the estimator's 23.85 m largest answer (2.2 cm at the median label), and the client's turf sphere is 0.03 mm from the server's. The sphere stays, and a 58-case fixture pins Scala, JS and SQL to it at 1e-9° |
+| **2–6× the floor** | how far the shipped estimator sits above the ideal, each distance bin measured against what one click at 0.3° noise can resolve *at that bin's own median distance*: tightest at 2.3× in the 10–15 m bin (0.53 m against a 0.23 m floor), 3.5× at 5–10 m, and 5.7× under 5 m, where the truth's own 0.12–0.17 m band dominates. Past 20 m it opens to 6×, where the bounded tail meets a truth no single click can reach (§5.4, the dotted line and shaded band on fig 29) |
+| **≤ 11 cm** | the geodesy decision, quantified: the 6371 km sphere every implementation uses sits at most 10.7 cm from the WGS84 geodesic at the estimator's 23.85 m largest answer (4.1 cm at the 9.25 m median label, 2.2 cm at 5 m) across the 16 city latitudes scored here, and 13.3 cm at the equator, which is the ceiling anywhere; the client's turf sphere is 0.03 mm from the server's. The sphere stays, and a 59-case fixture pins Scala, JS and SQL to it at 1e-9° |
 | **0 m / 6.2 m** | the frame contract Immersive Explore needs: a click projected through its *own* viewport frame reproduces the position to the bit at any size or aspect; a 1920×1080 click read through today's 720×480 constant misses by 6.2 m at p90 |
 
 > Reproduce every number here (offline, from the committed artifacts):
@@ -184,7 +184,11 @@ no metadata and no modern truth; it is reported, not interpreted.
   (200 splits, height refitted on one half, scored on the other) and a leave-one-city-out
   transfer, and (b) on the era frame it is scored both as shipped and with the same single
   parameter refitted on the era *train* split, so the form and the calibration are judged
-  separately.
+  separately. Of `approximation3`'s two parameters only the height is re-fitted in either
+  check: the 11.25° blend angle is a design constant (90/8, the point where the cotangent is
+  handed to a matched-slope tail), chosen rather than swept, so the hold-out bounds the
+  height's contribution and nothing else. Both hold-outs run on the **pooled** gated set, the
+  same rows the constant was fitted on, so they are read against the pooled in-sample median.
 - **The truth's scale.** Wherever a frame disagrees with the estimator, the camera height the
   truth *implies* (median of `truth × tan(depression)` at ≥5°) is reported per subpopulation,
   because a truth whose implied height is not constant along an axis cannot be satisfied by
@@ -203,13 +207,16 @@ no metadata and no modern truth; it is reported, not interpreted.
   `camera_roll` is empty for every GSV row.
 - **Geodesy (RQ5).** Destination points on the production sphere (6371.000 km), turf's
   (6371.0088 km), the harness's (6378.137 km) and the WGS84 geodesic (Vincenty), over every
-  deployed city's latitude, all bearings in 5° steps, and every distance the estimator can
-  return; the worst-bearing displacement is reported.
-- **Parity (RQ6).** A 58-case fixture with reference outputs from a Python port of the
+  city latitude in this report's two datasets (16 distinct, 19°–52°), all bearings in 5° steps,
+  every distance the estimator can return and the modern truth's own median label distance; the
+  worst-bearing displacement is reported, with the closed-form equator case as the ceiling.
+- **Parity (RQ6).** A 59-case fixture with reference outputs from a Python port of the
   production formula; Scala, JS (with the vendored turf) and evolution 352's SQL are run on it.
 - **Frame contract (RQ7).** 387 label directions projected onto five viewport frames from 4:3
   to 21:9 and inverted three ways (own frame; scaled axis-by-axis into 720×480; scaled by width
-  and read as 720×480).
+  and read as 720×480). One viewport, heading 40° and pitch −8° at **zoom 1**, which is the
+  worst case: the wrong-frame error scales as the inverse focal length, so a higher zoom shrinks
+  it in proportion (§4.7).
 - **Examples (RQ8).** Four labels picked by rule (2022+ captures, `approximation2` error > 1 m,
   `approximation3` error < 0.5 m where such a row exists), one per regime.
 
@@ -217,8 +224,9 @@ no metadata and no modern truth; it is reported, not interpreted.
 
 `python/signoff.py` holds the analysis, `run_signoff.py build` regenerates
 `data/signoff-summary.json` offline in ~2.5 minutes, `tests/test_signoff_findings.py` asserts
-every headline below against that JSON and re-derives the modern frame in-process, and
-`signoff_figures.py` draws figures 29–38 from the build's per-row cache and the committed tiles.
+the summary box's numbers and every headline §4 and §5 state against that JSON and re-derives
+the modern frame in-process, and `signoff_figures.py` draws figures 29–38 from the build's
+per-row cache and the committed tiles. Every table cell below is transcribed from that JSON.
 
 ## §4 · Findings
 
@@ -242,13 +250,14 @@ cluster-bootstrap CI on the representative median difference between `approximat
 
 ![Figure 29 — modern truth: the error CDF (0.40 vs 1.08 m medians, approximation1 in grey); median error by true distance against the two ideal lines of §5.4, the dotted single-click floor and the shaded band of the truth's own noise; and the signed-error curve: the regression is 2–3 m too near below 5 m and bends past 12 m, the shipped estimator sits on zero to ~15 m.](../figures/fig29-signoff-modern-frame.png)
 
-By slice (fig 31, left column; medians in metres, `approximation2` → `approximation3`):
+By slice (fig 31, left column; the **pooled** human set, n=2,655, not the representative
+stratum of the headline row; medians in metres, `approximation2` → `approximation3`):
 
 | slice | | | |
 |---|---|---|---|
 | **zoom** | 1: 1.12 → 0.39 (n=1,702) | 2: 1.35 → 0.54 (636) | 3: 1.68 → 0.78 (317) |
 | **resolution** | 6656 px: 1.84 → 0.40 (193) | 8192 px: 1.15 → 0.45 (2,462) | |
-| **label type** | CurbRamp 1.18 → 0.45 · NoCurbRamp 0.99 → 0.29 · Obstacle 1.29 → 0.58 · SurfaceProblem 1.10 → 0.42 · NoSidewalk 1.09 → 0.42 · Crosswalk 1.50 → 0.42 · Signal 3.67 → 2.42 · Occlusion 1.81 → 0.89 · Other 1.00 → 0.27 | | |
+| **label type** | CurbRamp 1.18 → 0.45 · NoCurbRamp 0.99 → 0.29 · Obstacle 1.29 → 0.58 · SurfaceProblem 1.10 → 0.42 · NoSidewalk 1.09 → 0.42 · Crosswalk 1.50 → 0.42 · Signal 3.68 → 2.42 · Occlusion 1.81 → 0.89 · Other 1.00 → 0.27 | | |
 | **true distance** | 0–5 m: 2.94 → 0.18 · 5–10: 0.76 → 0.32 · 10–15: 0.62 → 0.53 · 15–20: 2.56 → 1.75 · 20–30: 6.53 → 4.53 · 30–50: 15.8 → 15.7 | | |
 | **capture year** | every capture year in the data (2015, 2018–2026) favours the shipped estimator; the widest gap is 2018 (1.77 → 0.55) | | |
 | **city** (≥50 rows) | all 13: from cdmx 0.69 → 0.33 to taipei 2.85 → 0.59; the smallest ratio is paterson, 1.90 → 1.48 (1.3×) | | |
@@ -267,13 +276,18 @@ tail's `max_answer_m` of 23.85 m is doing what it was designed to do.
 ### §4.2 RQ2: is the modern number honest, and does one constant travel?
 
 The shipped height is the median implied height over all 2,488 gated human rows at ≥5°, so
-§4.1's in-sample 0.40 m is optimistic by construction. Two checks:
+every modern number here is in-sample by construction. Two checks:
 
 **Repeated hold-out.** Split the 922 panoramas in half at random, fit the height on one half
-(the shipped recipe), score the other; 200 splits. The held-out median is **0.445 m** (5–95%
-band 0.416–0.470), p90 4.06 m; the regression on the same held-out halves is 1.228 m
-(1.141–1.335), and the shipped estimator is ahead in **all 200 splits**. The re-fitted height is
-2.3405 m (2.331–2.349); the shipped 2.3412 sits in the middle of it.
+(the shipped recipe), score the other; 200 splits. This runs on the **pooled** gated set — the
+rows the constant was fitted on — so its comparison is the pooled in-sample median, 0.4444 m.
+The held-out median is **0.4445 m** (5–95% band 0.416–0.470), p90 4.06 m: re-fitting the height
+out of sample costs a tenth of a millimetre, which is the strongest form of the claim. The
+regression on the same held-out halves is 1.228 m (1.141–1.335), matching its pooled in-sample
+1.228 m, and the shipped estimator is ahead in **all 200 splits**. The re-fitted height is
+2.3405 m (2.331–2.349); the shipped 2.3412 sits in the middle of it. (The representative
+stratum's 0.40 m in §4.1 is a different population, not a different fit; the 4.5 cm between it
+and 0.445 m is the stratum, not the cost of honesty.)
 
 **Leave one city out.** Calibrate on every other city, score the held-out one (13 cities with
 ≥50 rows). The height fitted elsewhere is within 2 cm of the shipped one in every case (2.328 m
@@ -394,14 +408,20 @@ Three sphere radii are in play and the repo's notes flagged sphere-vs-ellipsoid 
 | this repo's `spherical_dest` / `haversine_m` (every report's scoring) | sphere | 6378.137 km |
 | `geosphere::destPoint` (the 2021 R analysis) | WGS84 ellipsoid | — |
 
-Measured over every deployed city's latitude (19° to 52°), every bearing, and every distance
-the estimator can return (fig 33):
+Measured over every city latitude in this report's two datasets (16 distinct, 19° to 52°),
+every bearing, and every distance the estimator can return (fig 33):
 
-- **Sphere vs WGS84 geodesic**, worst bearing: 2.2 cm at 5 m, **10.7 cm at the 23.85 m largest
-  answer** (cdmx, the lowest-latitude city; 7.7 cm at amsterdam), 22 cm at the 50 m cap that
-  cannot bind. The mechanism is the closed form in fig 33's right panel: 6371 km vs the local
-  meridional radius (−0.07% at amsterdam to +0.45% at cdmx north–south) and prime-vertical
-  radius (−0.15% to −0.32% east–west).
+- **Sphere vs WGS84 geodesic**, worst bearing: 2.2 cm at 5 m, 4.1 cm at the 9.25 m median
+  label distance, 5.3 cm at the 11.77 m blend distance, **10.7 cm at the 23.85 m largest
+  answer** (cdmx, the lowest-latitude city here; 7.7 cm at amsterdam), 22 cm at the 50 m cap
+  that cannot bind. The mechanism is the closed form in fig 33's right panel: 6371 km vs the
+  local meridional radius (−0.07% at amsterdam to +0.45% at cdmx north–south) and
+  prime-vertical radius (−0.15% to −0.32% east–west).
+- **The bound is latitude-monotone**, so those 16 cities do not bound the deployment list:
+  the displacement grows as |latitude| falls. The closed form at the equator is the ceiling —
+  a +0.56% north–south scale error, 13.3 cm at the largest answer — and the deployment nearest
+  it is Cuenca, Ecuador (2.9° S, private), where the bound is that same 13 cm. So the honest
+  headline is "≤ 11 cm across the cities scored here, ≤ 14 cm anywhere on Earth".
 - **turf vs the production sphere**: 1.4 ppm of radius → **0.03 mm** at the largest answer.
 - **This repo's scoring sphere vs production**: 0.11% → 2.7 cm at the largest answer, 5.6 cm at
   50 m. It affects how a *reported* error converts to metres by ~0.1%, i.e. 0.4 mm on a 0.4 m
@@ -412,8 +432,8 @@ estimator can incur is an order of magnitude under its own 0.4 m median error an
 near-horizon tail it lives with, and a geodesic destination would buy that back only by making
 three implementations carry an ellipsoid (turf's geodesic variants, a Scala port, and Vincenty
 in SQL) for a change no consumer could see: `label_point.lat/lng` are consumed by PostGIS
-geography operations that are themselves ellipsoidal, and a 10 cm placement offset at 24 m is
-well inside the street attachment and clustering tolerances. It is pinned two ways in
+geography operations that are themselves ellipsoidal, and a 10–13 cm placement offset at 24 m
+is well inside the street attachment and clustering tolerances. It is pinned two ways in
 SidewalkWebpage: the parity fixture (§4.6) is generated on 6371 km and every implementation
 must reproduce it, and `LatLngEstimationParitySpec` asserts `EARTH_RADIUS_KM == 6371.0` with
 the reasoning attached.
@@ -422,17 +442,17 @@ the reasoning attached.
 
 ### §4.6 RQ6: three implementations, one fixture
 
-`python/run_signoff.py fixture` writes 58 cases (the seam at `pano_x = 0` and `width − 1`, a
-negative unwrapped heading, the blend angle from both sides, the horizon and a click above it
-(the bounded tail, 23.848261259830384 m), the nadir, both hemispheres and the antimeridian side,
-plus 48 random clicks over four panorama resolutions and eight city locations) with reference
-outputs from the Python port of the production formula on the 6371 km sphere. Against it, on
-2026-09-02:
+`python/run_signoff.py fixture` writes 59 cases (the seam at `pano_x = 0` and `width − 1`, a
+bearing landing exactly on the 0/360 wrap, a negative unwrapped heading, the blend angle from
+both sides, the horizon and a click above it (the bounded tail, 23.848261259830384 m), the
+nadir, both hemispheres and the antimeridian side, plus 48 random clicks over four panorama
+resolutions and eight city locations) with reference outputs from the Python port of the
+production formula on the 6371 km sphere. Against it, on 2026-09-02:
 
 | implementation | held to | result |
 |---|---|---|
-| Scala `PanoDataService.calculatePovFromPanoXY` → `estimateDistanceFromPanoM` → `toLatLng` | 1e-9° / 1e-9 m | `LatLngEstimationParitySpec`, 3 tests, all 58 cases pass |
-| JS `Label#toLatLng` with the real vendored turf 7.3.4 | 1e-8° (the turf radius gap is 3e-10°) | `latLngEstimationParity.test.js`, 58/58 pass |
+| Scala `PanoDataService.calculatePovFromPanoXY` → `estimateDistanceFromPanoM` → `toLatLng` | 1e-9° / 1e-9 m | `LatLngEstimationParitySpec`, 3 tests, all 59 cases pass |
+| JS `Label#toLatLng` with the real vendored turf 7.3.4 | 1e-8° (the turf radius gap is 3e-10°) | `latLngEstimationParity.test.js`, 59/59 pass |
 | SQL: 352.sql's `angles`/`distances`/`new_latitudes`/`new_positions` CTEs on the fixture | measured | max |Δlat| = 1.4e-14°, max |Δlng| = 1.4e-14°, max |Δdist| = 8.9e-15 m |
 
 The fixture is regenerated from `final_coefficients` rather than committed here; the Scala spec
@@ -450,7 +470,8 @@ takes the frame as parameters; today every caller passes the 720×480 constants
 workstream B replaces with a per-label `canvas_width/canvas_height`.
 
 The sweep (fig 34): 387 label directions at placeable depressions, projected onto five frames
-from 4:3 to 21:9, then inverted three ways.
+from 4:3 to 21:9, then inverted three ways. One viewport — heading 40°, pitch −8°, **zoom 1** —
+which is where the wrong-frame error is largest; the numbers below are that worst case.
 
 | frame | own frame | scaled axis-by-axis into 720×480 (p50 / p90) | scaled by width, read as 720×480 (p50 / p90) |
 |---|---:|---:|---:|
@@ -467,9 +488,13 @@ axis-by-axis convention keeps the horizontal field right (GSV pins horizontal FO
 [#5083](https://github.com/ProjectSidewalk/SidewalkWebpage/issues/5083)) but stretches the
 vertical one, so pitch is wrong by the aspect ratio's worth and the label moves 0.5–2 m. And
 the **height-mismatch convention is catastrophic**: a width-scaled 16:9 click has 405 rows of
-frame but is read against a 480-row one, a 37.5 px vertical offset at f = 360 px is 5.9° of
-pitch, and at a 10° depression that is metres. Storing the frame per label and threading it
-through every consumer, exactly as the issue plans, reduces all of this to the zero column.
+frame but is read against a 480-row one, a 37.5 px vertical offset at f = 362 px is 5.9° of
+pitch, and at a 10° depression that is metres. That focal length is zoom 1's; the error scales
+as 1/f, so the same offset is 2.97° at zoom 2 (f = 722 px) and 1.47° at zoom 3 (f = 1,461 px),
+roughly a quarter of the metres. The table is therefore the ceiling, not an average, and the
+contract it argues for — own frame, always — is zoom-independent. Storing the frame per label
+and threading it through every consumer, exactly as the issue plans, reduces all of this to
+the zero column.
 (The clamp regime #5083 characterised, portrait shapes and beyond 21:9 at zoom 3, changes the
 effective horizontal FOV rather than the frame math, and is that report's three-line model to
 apply before the projection; it does not touch anything here.)
@@ -483,6 +508,9 @@ still served, `approximation2` error > 1 m, `approximation3` error < 0.5 m where
 exists): a close curb ramp, a mid-range surface problem, a far near-horizon label, and a zoom-3
 label. Each figure shows the stored click on the panorama, a crop, the depth raster the truth
 was read from, and a plan view along the label's bearing.
+
+Every column but the first three is a **distance from the camera in metres**, not an error, so
+the bolded `approximation3` cell is the one closest to the truth column beside it:
 
 | # | label | zoom | depression | truth | `approximation2` | `approximation3` | stored (pre-352) |
 |---|---|---:|---:|---:|---:|---:|---:|
@@ -513,9 +541,10 @@ seattle. The modern-truth report traced this to the era payloads' pinned 2.50 m 
 (68% of 2017–2020 payloads) plus the terrain model's curb overshoot; modern payloads measure
 the plane at 2.35 m, and the shipped constant is 2.34 m. So on the subpopulations whose era
 truth is on the modern scale (8192-px panos, seattle, cdmx, columbus, pittsburgh, spgg) the
-shipped estimator wins by a factor of two to four; on the ones whose truth carries the
-pinned-plane scale (DC, 6656-px, newberg) it reads 17–19% too near (median relative bias −17%
-on DC and on 6656-px panoramas, −19% on newberg) and loses. **The two frames
+shipped estimator wins by a factor of two to four and a half; on the ones whose truth carries
+the pinned-plane scale (DC, 6656-px, newberg) it reads 17–19% too near (median relative
+distance bias, on the same ≥5° rows: −17.2% on DC, −16.6% on 6656-px panoramas, −18.7% on
+newberg, against −1.3% on 8192-px panos and on seattle) and loses. **The two frames
 cannot both be satisfied, and the modern one is the measured one**; that was the close-out's
 decision and this report does not reopen it. What the era frame adds is the equal-budget row:
 given the *same* one parameter fitted the same way on the era train split, the form beats the
@@ -627,19 +656,27 @@ and not a caveat.
 **The single-click floor.** A label is one click, and the click has noise: the panorama-tools
 click-noise study measured ~0.3° per axis on ~13k co-located duplicate pairs (0.5°
 conservative). Distance is `h / tan(dep)`, so click noise alone gives a distance error of
-`σ_d = (d² + h²) / h · σ_click`, and no estimator that sees one click can beat it. The dotted
-line is its median (`0.6745 σ_d`) with the shipped 2.34 m height:
+`σ_d = (d² + h²) / h · σ_click`, and no estimator that sees one click can beat it. Figure 29's
+dotted line is its median (`0.6745 σ_d`) with the shipped 2.34 m height.
 
-| true distance | single-click floor, 0.3° | conservative, 0.5° | `approximation3`, measured |
-|---|---:|---:|---:|
-| 5 m | 0.05 m | 0.08 m | 0.18 m (0–5 m bin) |
-| 10 m | 0.16 m | 0.27 m | 0.32 m (5–10 m) |
-| 15 m | 0.35 m | 0.58 m | 0.53 m (10–15 m) |
-| 20 m | 0.61 m | 1.02 m | 1.75 m (15–20 m) |
-| 30 m | 1.37 m | 2.28 m | 4.53 m (20–30 m) |
+The comparison has to be made at a distance the measurement is actually at. Each bin's median
+error is scored against the floor evaluated at *that bin's own median true distance*, not at
+its upper edge, where the floor — which grows as `d²` — is largest:
 
-So the shipped estimator sits within 1.5–2× of what one click can resolve out to 15 m, and
-the gap opens beyond that, where the bounded tail and the far-field truth take over.
+| distance bin | n | bin median distance | single-click floor there, 0.3° | conservative, 0.5° | `approximation3`, measured | ratio |
+|---|---:|---:|---:|---:|---:|---:|
+| 0–5 m | 335 | 4.01 m | 0.033 m | 0.054 m | 0.184 m | 5.7× |
+| 5–10 m | 1,125 | 7.41 m | 0.091 m | 0.152 m | 0.322 m | 3.5× |
+| 10–15 m | 652 | 12.18 m | 0.232 m | 0.387 m | 0.528 m | **2.3×** |
+| 15–20 m | 247 | 17.60 m | 0.475 m | 0.792 m | 1.746 m | 3.7× |
+| 20–30 m | 179 | 22.30 m | 0.759 m | 1.264 m | 4.532 m | 6.0× |
+
+So the shipped estimator sits at 2–6× what one click can resolve, tightest at 2.3× in the
+10–15 m bin where most labels are. The gap widens at both ends for different reasons: in the
+near field the floor falls to centimetres while the truth's own 0.12–0.17 m band does not, so
+the 0–5 m row's 0.18 m is a measurement of the truth as much as of the estimator; past 20 m
+the bounded tail and the far-field truth take over. Against the conservative 0.5° click noise
+the same ratios are 3.4×, 2.1×, 1.4×, 2.2× and 3.6×.
 
 **The truth's own noise.** Below the depth model's resolution nothing can be measured *on this
 truth*: two captures of the same street agree on the ground to 0.12 m median
@@ -720,5 +757,7 @@ python python/run_signoff.py fixture <path>  # the parity fixture SidewalkWebpag
 ---
 
 *Report generated with [Claude Code](https://claude.com/claude-code), Fable 5.1, claude-fable-5-1;
-every headline number is asserted by `tests/test_signoff_findings.py` against
-`data/signoff-summary.json`, which regenerates deterministically from the committed data.*
+review fixes by Opus 5 (1M context), claude-opus-5[1m]. The summary box's numbers and every
+headline §4 and §5 state are asserted by `tests/test_signoff_findings.py` against
+`data/signoff-summary.json`, from which every table cell is transcribed and which regenerates
+deterministically from the committed data.*
