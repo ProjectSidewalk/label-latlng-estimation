@@ -425,12 +425,15 @@ The sign-off of the geometric estimator as SidewalkWebpage ships it (`approximat
 #4819 + evolution 352), scored in both truth frames this repo holds — see
 `reports/2026-09-02-production-signoff.md`.
 
-- `signoff-summary.json` — the machine-readable results: both frames' head-to-head with the
-  2021 regression (overall, by zoom, label type, city, panorama resolution, true distance and
-  depression), the repeated pano-half hold-out and leave-one-city-out calibration checks, the
-  geodesy displacement table per deployed city, the viewport frame-contract sweep, the parity
-  fixture's size/tolerance, and the four worked examples' records. Regenerates deterministically
-  from the committed CSVs, the R-fixture split, `modern-truth-labels.csv.gz` and the two
+- `signoff-summary.json` — the machine-readable results: both frames' head-to-head between
+  every production method (`approximation1`, the 2021 regression `approximation2`, and the
+  shipped `approximation3`; overall, by zoom, label type, city, panorama resolution, true
+  distance and depression), the repeated pano-half hold-out and leave-one-city-out calibration
+  checks, the rig-tilt rider (`modern_frame.rig_tilt_rider`, from the fresh per-pano pitch/roll
+  in `modern-truth-panos.csv.gz`), the geodesy displacement table per deployed city, the
+  viewport frame-contract sweep, the parity fixture's size/tolerance, and the four worked
+  examples' records. Regenerates deterministically
+  from the committed CSVs, the R-fixture split, `modern-truth-labels.csv.gz`, `modern-truth-panos.csv.gz` and the two
   refit/modern-truth summaries: `python python/run_signoff.py build --write` (~2.5 min, offline;
   the era split reloads and refits the 2021 pipeline). `tests/test_signoff_findings.py` locks it.
 - `signoff-tiles.jsonl.gz` — verbatim GSV imagery tiles for the four worked examples

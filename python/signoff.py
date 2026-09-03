@@ -185,7 +185,27 @@ def cluster_bootstrap_median_diff(err_a: np.ndarray, err_b: np.ndarray, cluster:
 
 # ------------------------------------------------------------------------ era frame
 
+# The three production methods, in production vocabulary (label_point.computation_method):
+#   'depth'          -- 2017-2020, read from Google's depth map at label time: the era TRUTH, not a candidate;
+#   'approximation1' -- evolution 93 (2020-11-13): a fixed 10 m along the viewport heading, flat-earth offsets.
+#                       The 2021 analysis's est1 (4.84 m). Retired by evolution 98 two months later;
+#   'approximation2' -- evolution 98 (2021-01-12): the 2021 per-zoom regression (est7 / A_deployed below);
+#   'approximation3' -- evolution 349/352 (2026-08): the shipped geometric estimator (approx3 below).
+APPROX1_DISTANCE_M = 10.0
+APPROX1_M_PER_DEG = 111111.0  # evolution 93's flat-earth metres per degree
+
+
+def approximation1_latlng(pano_lat, pano_lng, viewport_heading_deg):
+    """Evolution 93 verbatim: lat/lng 10 m along the viewport heading on a flat-earth grid."""
+    lat = np.asarray(pano_lat, float)
+    lng = np.asarray(pano_lng, float)
+    h = np.radians(np.asarray(viewport_heading_deg, float))
+    return (lat + APPROX1_DISTANCE_M * np.cos(h) / APPROX1_M_PER_DEG,
+            lng + APPROX1_DISTANCE_M * np.sin(h) / (APPROX1_M_PER_DEG * np.cos(np.radians(lat))))
+
+
 ERA_MODELS = {
+    "approx1": "err_approx1",                  # approximation1: 10 m along the viewport heading (evolution 93)
     "est7": "err_est7",                        # the 2021 pipeline as published (own heading, legacy geodesy)
     "est7_sph": "err_est7_sph",                # same distances, the shared spherical/era-cal heading
     "approx3": "err_approx3",                  # SHIPPED: modern height, exact heading, no era constant
@@ -255,6 +275,13 @@ def era_frame(shipped: dict, data_dir: str = DATA,
                 "approx3_eracal": heading_eracal, "approx3_eraflat": heading_eracal,
                 "blend_type_era": heading_eracal, "anchor": heading_eracal}
     out["err_est7"] = latlng_error_m(test, dist7, head7, crude=False)
+    # approximation1 (evolution 93): no pitch input at all, and the viewport heading rather than
+    # the label's, so both halves of the position are wrong by construction. Scored as written.
+    lat_1, lng_1 = approximation1_latlng(test["pano_lat"], test["pano_lng"], test["heading"])
+    out["dist_approx1"] = np.full(len(test), APPROX1_DISTANCE_M)
+    out["derr_approx1"] = np.abs(APPROX1_DISTANCE_M - truth)
+    out["sderr_approx1"] = APPROX1_DISTANCE_M - truth
+    out["err_approx1"] = haversine_m(test["lng"], test["lat"], lng_1, lat_1)
     for key, d in dists.items():
         out[f"dist_{key}"] = d
         out[f"derr_{key}"] = np.abs(d - truth)
@@ -337,10 +364,10 @@ def era_frame(shipped: dict, data_dir: str = DATA,
 
 # --------------------------------------------------------------------- modern frame
 
-MODERN_MODELS = {"A_deployed": "err_A", "approx3": "err_approx3", "C_anchor": "err_C",
-                 "D_blend_era": "err_D"}
-MODERN_SIGNED = {"A_deployed": "sderr_A", "approx3": "sderr_approx3", "C_anchor": "sderr_C",
-                 "D_blend_era": "sderr_D"}
+MODERN_MODELS = {"approx1": "err_approx1", "A_deployed": "err_A", "approx3": "err_approx3",
+                 "C_anchor": "err_C", "D_blend_era": "err_D"}
+MODERN_SIGNED = {"approx1": "sderr_approx1", "A_deployed": "sderr_A", "approx3": "sderr_approx3",
+                 "C_anchor": "sderr_C", "D_blend_era": "sderr_D"}
 
 
 def load_modern(data_dir: str = DATA) -> pd.DataFrame:
@@ -356,8 +383,11 @@ def modern_predictions(human: pd.DataFrame, shipped: dict) -> pd.DataFrame:
     truth = out["truth_m"].to_numpy(float)
     dep = out["depression_deg"].to_numpy(float)
     out["dist_approx3"] = _predict_blend(shipped, dep)
-    for key, col in (("A", "A_deployed"), ("approx3", "dist_approx3"), ("C", "C_anchor"),
-                     ("D", "D_blend")):
+    # approximation1's distance half; its bearing half (the viewport heading) cannot be scored
+    # in this frame, whose truth is a range along the label's own ray.
+    out["dist_approx1"] = np.full(len(out), APPROX1_DISTANCE_M)
+    for key, col in (("approx1", "dist_approx1"), ("A", "A_deployed"), ("approx3", "dist_approx3"),
+                     ("C", "C_anchor"), ("D", "D_blend")):
         out[f"sderr_{key}"] = out[col].to_numpy(float) - truth
         out[f"err_{key}"] = np.abs(out[f"sderr_{key}"])
     out["dist_bin"] = pd.cut(out["truth_m"], DIST_BINS, labels=_bin_labels(DIST_BINS), right=False)
@@ -426,6 +456,97 @@ def leave_one_city_out(human: pd.DataFrame, shipped: dict, min_n: int = 50) -> l
     return rows
 
 
+def _wrap_deg(x):
+    return (np.asarray(x, float) + 180.0) % 360.0 - 180.0
+
+
+def rig_tilt_rider(human: pd.DataFrame, data_dir: str = DATA) -> dict:
+    """Does the rig's tilt reach the shipped estimator?
+
+    The 2020-2022 undergraduate crop work saw curved horizon lines on hilly panoramas and
+    blamed photographer pitch, then roll (gis.stackexchange 422656); SidewalkWebpage#4784
+    diagnoses the same thing as a tilt term missing from the POV -> pano_y projection. The
+    stored pano_y treats the panorama as level, so if the depth raster (and the imagery) were
+    rig-aligned rather than gravity-rectified, the depression angle read from pano_y would be
+    off by the rig's tilt projected onto the label's bearing,
+    ``T = pitch * cos(bearing - heading) + roll * sin(bearing - heading)``, and the camera
+    height each label implies (``truth * tan(depression)``) would track T with a slope near
+    ``dh/dT = truth * sec^2(depression) * pi/180``. Both pose components come from the modern
+    truth's fresh metadata fetch (``modern-truth-panos.csv.gz``: ``fresh_pitch_deg``,
+    ``fresh_roll_deg``, the latter served unwrapped in [0, 360)); the database's own
+    ``camera_roll`` is empty for every GSV row. Google's sign conventions for the two angles
+    are undocumented, so the rider fits both projections jointly (a sign flip only flips a
+    coefficient's sign) and reports the joint R^2 alongside each slope.
+
+    A second, pano-level check needs no labels at all: the depth payload's ground-plane
+    normal is tilted (``ground_tilt_deg``) by road camber and slope in a rectified frame, but
+    by the rig's whole tilt in a rig-aligned one, so its correlation with the rig tilt
+    magnitude says which frame the raster is in."""
+    panos = pd.read_csv(os.path.join(data_dir, "modern-truth-panos.csv.gz"), dtype={"pano_id": str})
+    panos = panos[panos["fresh_pitch_deg"].notna()].copy()
+    panos["roll_wrapped_deg"] = _wrap_deg(panos["fresh_roll_deg"])
+    panos["tilt_mag_deg"] = np.hypot(panos["fresh_pitch_deg"], panos["roll_wrapped_deg"])
+    cols = ["pano_id", "fresh_pitch_deg", "roll_wrapped_deg", "fresh_heading_deg", "tilt_mag_deg",
+            "ground_tilt_deg"]
+    j = human.merge(panos[cols], on="pano_id", how="inner")
+    j = j[j["depression_deg"] >= 5.0].copy()
+    bearing, _ = pov_from_pano_xy(j["pano_x"], j["pano_y"], j["pano_width"], j["pano_height"],
+                                  j["camera_heading"])
+    rel = np.radians(_wrap_deg(bearing - j["fresh_heading_deg"].to_numpy(float)))
+    t_pitch = j["fresh_pitch_deg"].to_numpy(float) * np.cos(rel)
+    t_roll = j["roll_wrapped_deg"].to_numpy(float) * np.sin(rel)
+    dep = j["depression_deg"].to_numpy(float)
+    truth = j["truth_m"].to_numpy(float)
+    implied = truth * np.tan(np.radians(dep))
+    sderr = j["sderr_approx3"].to_numpy(float)
+    expected_dh_dT = truth / np.cos(np.radians(dep)) ** 2 * (np.pi / 180.0)  # m per degree of tilt
+    # ... and the matching sensitivity of the DISTANCE: d(h / tan dep)/d(dep) = -h / sin^2(dep).
+    h_ship = float(np.median(implied))
+    expected_dd_dT = h_ship * (np.pi / 180.0) / np.sin(np.radians(dep)) ** 2
+
+    def joint(y: np.ndarray) -> dict:
+        X = np.column_stack([np.ones_like(t_pitch), t_pitch, t_roll])
+        beta, *_ = np.linalg.lstsq(X, y, rcond=None)
+        resid = y - X @ beta
+        r2 = 1.0 - float(np.sum(resid ** 2)) / float(np.sum((y - y.mean()) ** 2))
+        return {"slope_pitch_m_per_deg": float(beta[1]), "slope_roll_m_per_deg": float(beta[2]),
+                "r2": r2,
+                "pearson_r_pitch_term": float(np.corrcoef(t_pitch, y)[0, 1]),
+                "pearson_r_roll_term": float(np.corrcoef(t_roll, y)[0, 1])}
+
+    # Bin by the projected tilt magnitude so a sign-symmetric effect cannot hide in a slope.
+    t_mag = np.abs(t_pitch + t_roll)
+    bins = [0.0, 0.5, 1.0, 2.0, 4.0, 90.0]
+    cut = pd.cut(t_mag, bins, right=False)
+    by_abs = []
+    for iv, g in pd.DataFrame({"implied": implied, "sderr": sderr}).groupby(cut, observed=True):
+        by_abs.append({"abs_projected_tilt_deg": f"{iv.left:g}-{iv.right:g}", "n": int(len(g)),
+                       "implied_height_median_m": float(np.median(g["implied"])),
+                       "approx3_signed_median_m": float(np.median(g["sderr"]))})
+    pl = panos[panos["ground_tilt_deg"].notna()]
+    return {
+        "n_labels": int(len(j)), "n_panos": int(j["pano_id"].nunique()),
+        "db_camera_roll_available": bool(human["camera_roll"].notna().any()),
+        "abs_pitch_p50_p90_deg": [float(np.percentile(np.abs(panos["fresh_pitch_deg"]), 50)),
+                                  float(np.percentile(np.abs(panos["fresh_pitch_deg"]), 90))],
+        "abs_roll_p50_p90_deg": [float(np.percentile(np.abs(panos["roll_wrapped_deg"]), 50)),
+                                 float(np.percentile(np.abs(panos["roll_wrapped_deg"]), 90))],
+        "projected_tilt_sd_deg": float(np.std(t_pitch + t_roll)),
+        "expected_slope_if_tilt_entered_m_per_deg": float(np.median(expected_dh_dT)),
+        "expected_signed_error_slope_if_tilt_entered_m_per_deg": float(np.median(expected_dd_dT)),
+        "implied_height": joint(implied),
+        "approx3_signed_error": joint(sderr),
+        "by_abs_projected_tilt": by_abs,
+        "pano_level": {
+            "n": int(len(pl)),
+            "ground_tilt_median_deg": float(np.median(pl["ground_tilt_deg"])),
+            "rig_tilt_magnitude_median_deg": float(np.median(pl["tilt_mag_deg"])),
+            "pearson_r_ground_tilt_vs_rig_tilt": float(
+                np.corrcoef(pl["ground_tilt_deg"], pl["tilt_mag_deg"])[0, 1]),
+        },
+    }
+
+
 def modern_frame(shipped: dict, data_dir: str = DATA) -> tuple[pd.DataFrame, dict]:
     human = modern_predictions(load_modern(data_dir), shipped)
     head = human[human["stratum"] == "representative"]
@@ -465,6 +586,7 @@ def modern_frame(shipped: dict, data_dir: str = DATA) -> tuple[pd.DataFrame, dic
                                      reference="A_deployed"),
         "repeated_holdout": repeated_holdout(human, shipped),
         "leave_one_city_out": leave_one_city_out(human, shipped),
+        "rig_tilt_rider": rig_tilt_rider(human),
     }
     return human, summary
 

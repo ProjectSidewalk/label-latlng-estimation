@@ -37,6 +37,7 @@ CACHE = os.path.join(DATA, "signoff-cache")
 C_SHIP = "#2a78d6"    # approximation3 as shipped
 C_REG = "#eb6834"     # the 2021 per-zoom regression (est7 / A_deployed)
 C_ERA = "#1baf7a"     # the same form with the era-calibrated height (equal budget)
+C_APX1 = "#a39f94"    # approximation1, the 2020 stopgap (10 m along the viewport heading)
 C_TRUTH = "#0b0b0b"
 C_MUTED = "#898781"
 C_GRID = "#e1e0d9"
@@ -95,7 +96,8 @@ def fig29(summary, modern):
     rep = modern[modern["stratum"] == "representative"]
     fig, axes = plt.subplots(1, 3, figsize=(13, 4))
     ax = axes[0]
-    m_a = cdf(ax, rep["err_A"].to_numpy(float), C_REG, "2021 regression (deployed until 2026-08)")
+    cdf(ax, rep["err_approx1"].to_numpy(float), C_APX1, "approximation1 (2020 stopgap, distance half)")
+    m_a = cdf(ax, rep["err_A"].to_numpy(float), C_REG, "approximation2: 2021 regression (deployed until 2026-08)")
     m_s = cdf(ax, rep["err_approx3"].to_numpy(float), C_SHIP, "approximation3 as shipped")
     ax.set_xlabel("absolute distance error (m), representative human stratum")
     ax.set_ylabel("share of labels")
@@ -144,7 +146,8 @@ def fig30(summary, era):
     e = summary["era_frame"]
     fig, axes = plt.subplots(1, 3, figsize=(13, 4))
     ax = axes[0]
-    m7 = cdf(ax, era["err_est7"].to_numpy(float), C_REG, "2021 regression (as published)")
+    cdf(ax, era["err_approx1"].to_numpy(float), C_APX1, "approximation1 (2020 stopgap)")
+    m7 = cdf(ax, era["err_est7"].to_numpy(float), C_REG, "approximation2: 2021 regression (as published)")
     ms = cdf(ax, era["err_approx3"].to_numpy(float), C_SHIP, "approximation3 as shipped")
     me = cdf(ax, era["err_approx3_eraflat"].to_numpy(float), C_ERA, "same form, height fitted on era truth")
     ax.set_xlabel("lat/lng error vs the 2017-2020 depth positions (m)")

@@ -106,7 +106,7 @@ def cmd_build(args):
     m, e = summary["modern_frame"], summary["era_frame"]
     print()
     print("modern frame, representative human stratum (n=%d):" % m["n_representative"])
-    for k in ("A_deployed", "approx3"):
+    for k in ("approx1", "A_deployed", "approx3"):
         s = m["representative"][k]
         print(f"  {k:12s} median {s['median_m']:.3f} m  p90 {s['p90_m']:.2f}  signed {s['signed_median_m']:+.2f}")
     h = m["repeated_holdout"]
@@ -114,10 +114,16 @@ def cmd_build(args):
           f"[{h['approx3_median_m']['p5']:.3f}, {h['approx3_median_m']['p95']:.3f}] vs "
           f"deployed {h['A_deployed_median_m']['mean']:.3f}")
     print("era frame, published test split (n=%d):" % e["n_test"])
-    for k in ("est7", "approx3", "approx3_eracal", "approx3_eraflat", "blend_type_era"):
+    for k in ("approx1", "est7", "approx3", "approx3_eracal", "approx3_eraflat", "blend_type_era"):
         s = e["overall"][k]
         print(f"  {k:16s} median {s['median_m']:.4f} m  p90 {s['p90_m']:.3f}  signed {s['signed_median_m']:+.2f}")
     print(f"  era truth implies {e['implied_height_overall_m']:.3f} m; shipped height {shipped['height_m']:.3f}")
+    t = m["rig_tilt_rider"]
+    ih = t["implied_height"]
+    print(f"rig tilt rider (n={t['n_labels']}, {t['n_panos']} panos): implied height on pitch/roll terms "
+          f"{ih['slope_pitch_m_per_deg']:+.4f} / {ih['slope_roll_m_per_deg']:+.4f} m/deg, R2 {ih['r2']:.4f}; "
+          f"expected if tilt entered {t['expected_slope_if_tilt_entered_m_per_deg']:.3f} m/deg; ground-tilt vs "
+          f"rig-tilt r={t['pano_level']['pearson_r_ground_tilt_vs_rig_tilt']:+.3f}")
     g = summary["geodesy"]
     print(f"geodesy: sphere vs WGS84 at the {so.MAX_ANSWER_M:.1f} m maximum answer, worst city: "
           f"{g['worst_ellipsoid_vs_production_at_max_answer_m']*100:.1f} cm")

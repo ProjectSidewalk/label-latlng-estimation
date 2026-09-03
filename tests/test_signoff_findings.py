@@ -89,6 +89,45 @@ def test_modern_wins_every_zoom_type_and_resolution(summary):
             assert r["approx3"]["median_m"] < r["A_deployed"]["median_m"], (key, r)
 
 
+def test_approximation1_is_the_2020_stopgap_in_both_frames(summary):
+    """approximation1 (evolution 93: 10 m along the viewport heading) scored in production
+    vocabulary. On the era split it must land on the 2021 analysis's own 'estimate 1' (4.8439 m,
+    tests/fixtures/r-baseline); on modern truth its distance half alone is several times the
+    regression's error and nowhere near the shipped estimator's."""
+    era = summary["era_frame"]["overall"]["approx1"]
+    assert abs(era["median_m"] - 4.8439) < 5e-4
+    assert era["dist"]["median_m"] < era["median_m"]  # the viewport heading costs the other metres
+    assert era["win_rate_vs_est7"] < 0.25
+    rep = summary["modern_frame"]["representative"]
+    assert 3.0 < rep["approx1"]["median_m"] < 4.5
+    assert rep["approx1"]["median_m"] > 2.5 * rep["A_deployed"]["median_m"]
+    assert rep["approx1"]["win_rate_vs_A"] < 0.2
+
+
+def test_rig_tilt_does_not_reach_the_estimator_beyond_a_few_percent(summary):
+    """The RQ4 rider: a tilt-shaped term on the shipped estimator is bounded at a few percent of
+    the variance and a fraction of the full-tilt sensitivity, and the implied height is flat to
+    a couple of centimetres across the tilt bins that hold nearly every label."""
+    t = summary["modern_frame"]["rig_tilt_rider"]
+    assert t["n_labels"] > 2000 and t["n_panos"] > 800
+    assert not t["db_camera_roll_available"]  # the DB never had roll; the fresh fetch supplies it
+    ih, se = t["implied_height"], t["approx3_signed_error"]
+    assert ih["r2"] < 0.08 and se["r2"] < 0.08
+    exp_h = t["expected_slope_if_tilt_entered_m_per_deg"]
+    exp_d = t["expected_signed_error_slope_if_tilt_entered_m_per_deg"]
+    for k in ("slope_pitch_m_per_deg", "slope_roll_m_per_deg"):
+        assert abs(ih[k]) < 0.5 * exp_h
+        assert abs(se[k]) < 0.5 * exp_d
+    # sign coherence: a steeper-read ray raises the implied height and lowers the signed error
+    assert np.sign(ih["slope_roll_m_per_deg"]) == -np.sign(se["slope_roll_m_per_deg"])
+    bins = t["by_abs_projected_tilt"]
+    heavy = [b for b in bins if b["n"] >= 250]
+    assert sum(b["n"] for b in heavy) > 0.95 * t["n_labels"]
+    spread = max(b["implied_height_median_m"] for b in heavy) - min(b["implied_height_median_m"] for b in heavy)
+    assert spread < 0.05
+    assert 0.0 < t["pano_level"]["pearson_r_ground_tilt_vs_rig_tilt"] < 0.6
+
+
 # --------------------------------------------------------------------------- era frame
 
 def test_era_continuity_row(summary):
