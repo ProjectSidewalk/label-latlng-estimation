@@ -29,7 +29,7 @@ def main() -> None:
     print(json.dumps(summary, indent=2))
     if args.write:
         out = os.path.join(args.data_dir, "html4-era-summary.json")
-        with open(out, "w") as f:
+        with open(out, "w", encoding="utf-8", newline="\n") as f:
             json.dump(summary, f, indent=2)
             f.write("\n")
         print(f"wrote {out}")
