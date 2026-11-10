@@ -1,0 +1,229 @@
+{
+  "first_perspective_label_id": 66003,
+  "html4_rows_raw": 65815,
+  "html4_rows_cleaned": 56347,
+  "later_rows_cleaned": 173986,
+  "html4_share_of_cleaned_dc": 0.24463277081442955,
+  "html4": {
+    "rows": 56347,
+    "stored_formula_counts": {
+      "linear": 56093,
+      "era": 0,
+      "both": 250,
+      "neither": 4
+    },
+    "stored_sv_image_x_within_1px_of_linear": 0.9999290113049497,
+    "stored_sv_image_x_within_1px_of_era_replica": 0.004436793440644578,
+    "model_gap_deg": {
+      "bearing": {
+        "p50": 3.159496059867763,
+        "p90": 5.100283286649682,
+        "p99": 8.708310052289237,
+        "p100": 18.479442811702718
+      },
+      "altitude": {
+        "p50": 1.8769642397938888,
+        "p90": 3.8528767140988784,
+        "p99": 5.891166124092848,
+        "p100": 11.831197545931666
+      }
+    },
+    "bearing_abs_residual_median_deg": {
+      "perspective": 3.0824803426757654,
+      "linear": 0.9388681522206781
+    },
+    "bearing_signed_residual_median_deg": {
+      "perspective": 1.0197382367172168,
+      "linear": 0.6041263092271265
+    },
+    "bearing_signed_residual_vs_perspective_by_canvas_x_zoom1": [
+      {
+        "bin": "[0, 90]",
+        "n": 1817,
+        "median_deg": 3.7416137114159227
+      },
+      {
+        "bin": "[90, 180]",
+        "n": 5861,
+        "median_deg": 5.011566008937379
+      },
+      {
+        "bin": "[180, 270]",
+        "n": 9173,
+        "median_deg": 4.5031522005727425
+      },
+      {
+        "bin": "[270, 360]",
+        "n": 10207,
+        "median_deg": 2.193693748065229
+      },
+      {
+        "bin": "[360, 450]",
+        "n": 9867,
+        "median_deg": -0.9024229776095751
+      },
+      {
+        "bin": "[450, 540]",
+        "n": 7954,
+        "median_deg": -3.236789556963135
+      },
+      {
+        "bin": "[540, 630]",
+        "n": 4905,
+        "median_deg": -3.6782298779770155
+      },
+      {
+        "bin": "[630, 720]",
+        "n": 1431,
+        "median_deg": -2.401739979590957
+      }
+    ],
+    "altitude_linear_minus_perspective_by_canvas_y_zoom1": [
+      {
+        "bin": "[0, 80]",
+        "n": 604,
+        "median_deg": -3.9669405942250107
+      },
+      {
+        "bin": "[80, 160]",
+        "n": 9795,
+        "median_deg": -3.4583669527881016
+      },
+      {
+        "bin": "[160, 240]",
+        "n": 22640,
+        "median_deg": -1.998856842811139
+      },
+      {
+        "bin": "[240, 320]",
+        "n": 14777,
+        "median_deg": -0.10921762228198428
+      },
+      {
+        "bin": "[320, 400]",
+        "n": 3173,
+        "median_deg": 1.3009029012970643
+      },
+      {
+        "bin": "[400, 480]",
+        "n": 226,
+        "median_deg": 2.6315357556925694
+      }
+    ],
+    "implied_camera_height_m_median": {
+      "perspective": 2.445241325476541,
+      "linear": 2.767968633908128
+    }
+  },
+  "later": {
+    "rows": 173986,
+    "stored_formula_counts": {
+      "linear": 51,
+      "era": 172843,
+      "both": 824,
+      "neither": 268
+    },
+    "stored_sv_image_x_within_1px_of_linear": 0.005029140275654363,
+    "stored_sv_image_x_within_1px_of_era_replica": 0.9981665191452186,
+    "model_gap_deg": {
+      "bearing": {
+        "p50": 3.2053489599022953,
+        "p90": 5.900719563488799,
+        "p99": 10.57644245485782,
+        "p100": 24.684969267254402
+      },
+      "altitude": {
+        "p50": 1.7728760784671103,
+        "p90": 4.617810917915274,
+        "p99": 7.735139990384327,
+        "p100": 15.730651376000402
+      }
+    },
+    "bearing_abs_residual_median_deg": {
+      "perspective": 1.1036098920052844,
+      "linear": 3.0422778200331493
+    },
+    "bearing_signed_residual_median_deg": {
+      "perspective": 0.7441489473388785,
+      "linear": 0.5096720226130103
+    },
+    "bearing_signed_residual_vs_perspective_by_canvas_x_zoom1": [
+      {
+        "bin": "[0, 90]",
+        "n": 5339,
+        "median_deg": 0.8350994904573525
+      },
+      {
+        "bin": "[90, 180]",
+        "n": 15788,
+        "median_deg": 0.8270769990991127
+      },
+      {
+        "bin": "[180, 270]",
+        "n": 21706,
+        "median_deg": 0.8028966389705623
+      },
+      {
+        "bin": "[270, 360]",
+        "n": 22815,
+        "median_deg": 0.7546561709350073
+      },
+      {
+        "bin": "[360, 450]",
+        "n": 22129,
+        "median_deg": 0.7501275793770219
+      },
+      {
+        "bin": "[450, 540]",
+        "n": 19853,
+        "median_deg": 0.7003119029450602
+      },
+      {
+        "bin": "[540, 630]",
+        "n": 13969,
+        "median_deg": 0.7451826061496902
+      },
+      {
+        "bin": "[630, 720]",
+        "n": 5042,
+        "median_deg": 0.7165827789462966
+      }
+    ],
+    "altitude_linear_minus_perspective_by_canvas_y_zoom1": [
+      {
+        "bin": "[0, 80]",
+        "n": 1409,
+        "median_deg": -4.0806802209868955
+      },
+      {
+        "bin": "[80, 160]",
+        "n": 25455,
+        "median_deg": -3.744136982210513
+      },
+      {
+        "bin": "[160, 240]",
+        "n": 53069,
+        "median_deg": -2.3309944175770028
+      },
+      {
+        "bin": "[240, 320]",
+        "n": 37209,
+        "median_deg": -0.37878337540846374
+      },
+      {
+        "bin": "[320, 400]",
+        "n": 9002,
+        "median_deg": 0.7500201571120613
+      },
+      {
+        "bin": "[400, 480]",
+        "n": 497,
+        "median_deg": 1.002977450929798
+      }
+    ],
+    "implied_camera_height_m_median": {
+      "perspective": 2.8480666921395934,
+      "linear": 3.1424735194033278
+    }
+  }
+}

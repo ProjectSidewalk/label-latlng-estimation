@@ -54,6 +54,11 @@ Columns 23–27 are extras that did not exist in the 2021 CSVs, appended so both
   for cross-checking against the original `sv_image_x/y` (NULL for DC: evolution 179 never ran
   on the legacy database)
 
+`sv_image_x/y` do not mean one thing across the DC file: for `label_id < 66003` the client wrote
+them with a linear formula on the flat `html4` renderer, for every later row with the perspective
+inversion (`reports/2026-11-05-html4-era-dc-rows.md`; `python/html4_era.py` has both forward models
+and a per-row classifier).
+
 ## Caveats
 
 1. **The `time_created < 2021-01-01` cutoff matters for faithfulness.** Evolution 93 stamped
@@ -464,3 +469,12 @@ The cross-implementation parity fixture the report describes is *consumed* by Si
 (`test/fixtures/latLngEstimationParity.json`, written by `python python/run_signoff.py fixture
 <path>`), where a Scala spec, a Jest test and the SQL backfill formula are each held to it; it is
 regenerated from `final_coefficients` rather than committed here.
+
+# html4-era summary (SidewalkWebpage#5920)
+
+`html4-era-summary.json` is the committed evidence of the 2026-11-05 measurement of the
+html4-era DC rows (report: `reports/2026-11-05-html4-era-dc-rows.md`), asserted by
+`tests/test_html4_era_findings.py`. It needs no fetch: it derives entirely from
+`labels-dc-latlng.csv.gz`, so `python python/run_html4_era.py --write` regenerates it
+deterministically on any machine, and one findings test re-derives the whole file in-process
+from the same code.
